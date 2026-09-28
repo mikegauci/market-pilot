@@ -35,7 +35,12 @@ from models.types import (
 from risk.manager import RiskManager
 from strategy.confirmation import ConfirmationTracker
 from strategy.filters import check_correlation_cap, check_entry_filters
-from strategy.signals import is_sell_exit_eligible, is_trade_eligible, signal_tier
+from strategy.signals import (
+    is_sell_exit_eligible,
+    is_trade_eligible,
+    signal_tier,
+    trade_skip_reason_from_tier,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -604,9 +609,14 @@ def run() -> int:
                             )
 
                     trade_created = False
+                    trade_skip_reason: Optional[str] = None
                     eligible = is_trade_eligible(tier)
-                    if eligible and not confirmation_tracker.record(symbol, True):
+                    if not eligible:
+                        confirmation_tracker.record(symbol, False)
+                        trade_skip_reason = trade_skip_reason_from_tier(tier)
+                    elif not confirmation_tracker.record(symbol, True):
                         current, required = confirmation_tracker.progress(symbol)
+                        trade_skip_reason = f"awaiting_confirmation ({current}/{required})"
                         logger.info(
                             "Filter: awaiting confirmation for %s (%s/%s cycles)",
                             symbol,
@@ -614,12 +624,11 @@ def run() -> int:
                             required,
                         )
                         eligible = False
-                    elif not eligible:
-                        confirmation_tracker.record(symbol, False)
 
                     if eligible and risk_manager and db:
                         entry_filter = check_entry_filters(state, strategy_config)
                         if not entry_filter.passed:
+                            trade_skip_reason = entry_filter.reason
                             logger.info(
                                 "Filter: rejected %s — %s",
                                 symbol,
@@ -632,6 +641,7 @@ def run() -> int:
                             risk_manager.open_trades, symbol, strategy_config
                         )
                         if eligible and not corr_filter.passed:
+                            trade_skip_reason = corr_filter.reason
                             logger.info(
                                 "Filter: rejected %s — %s",
                                 symbol,
@@ -651,19 +661,18 @@ def run() -> int:
                                 and ibkr.is_connected()
                             ):
                                 try:
-                                    skip_reason: Optional[str] = None
+                                    ibkr_skip_reason: Optional[str] = None
                                     now_mono = time.monotonic()
                                     cooldown_until = _ibkr_entry_cooldown_until.get(
                                         trade.symbol, 0.0
                                     )
                                     if now_mono < cooldown_until:
                                         remaining = cooldown_until - now_mono
-                                        skip_reason = (
-                                            f"cooldown after recent failure "
-                                            f"({remaining:.0f}s left)"
+                                        ibkr_skip_reason = (
+                                            f"ibkr_cooldown ({remaining:.0f}s left)"
                                         )
                                     elif ibkr.has_pending_entry_order(trade.symbol):
-                                        skip_reason = "unfilled BUY order already open"
+                                        ibkr_skip_reason = "ibkr_pending_entry_order"
                                     else:
                                         try:
                                             account = ibkr.get_account_summary()
@@ -671,7 +680,7 @@ def run() -> int:
                                                 trade.position_value
                                                 > account.buying_power
                                             ):
-                                                skip_reason = (
+                                                ibkr_skip_reason = (
                                                     "ibkr_insufficient_buying_power "
                                                     f"(need ${trade.position_value:.0f}, "
                                                     f"have ${account.buying_power:.0f})"
@@ -684,11 +693,12 @@ def run() -> int:
                                                 exc,
                                             )
 
-                                    if skip_reason:
+                                    if ibkr_skip_reason:
+                                        trade_skip_reason = ibkr_skip_reason
                                         logger.info(
                                             "Skipping %s IBKR entry — %s",
                                             trade.symbol,
-                                            skip_reason,
+                                            ibkr_skip_reason,
                                         )
                                     else:
                                         bracket = ibkr.place_bracket_buy(
@@ -725,6 +735,7 @@ def run() -> int:
                                             trade.take_profit,
                                         )
                                 except Exception as exc:
+                                    trade_skip_reason = f"ibkr_order_failed ({exc})"
                                     _ibkr_entry_cooldown_until[symbol] = (
                                         time.monotonic()
                                         + settings.ibkr_entry_cooldown_sec
@@ -741,6 +752,7 @@ def run() -> int:
                                             "(Global Config → Presets → Confirmations)."
                                         )
                             elif execution_mode == ExecutionMode.IBKR:
+                                trade_skip_reason = "ibkr_not_connected"
                                 logger.warning(
                                     "Execution mode ibkr but IBKR not connected — skipping %s",
                                     symbol,
@@ -761,10 +773,16 @@ def run() -> int:
                                     trade.take_profit,
                                 )
                         elif not decision.approved:
+                            trade_skip_reason = decision.reason
                             logger.info("Risk: rejected %s — %s", symbol, decision.reason)
 
                     if db:
-                        db.insert_prediction(state, prediction, trade_created=trade_created)
+                        db.insert_prediction(
+                            state,
+                            prediction,
+                            trade_created=trade_created,
+                            trade_skip_reason=trade_skip_reason,
+                        )
                         logger.info("Prediction stored")
 
                 except Exception as exc:

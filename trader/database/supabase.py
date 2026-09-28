@@ -493,6 +493,7 @@ class SupabaseRepository:
         state: MarketState,
         prediction: JevPrediction,
         trade_created: bool = False,
+        trade_skip_reason: Optional[str] = None,
     ) -> None:
         payload = {
             "symbol": prediction.symbol,
@@ -503,6 +504,7 @@ class SupabaseRepository:
             "sell_probability": prediction.sell,
             "market_snapshot": state.to_dict(),
             "trade_created": trade_created,
+            "trade_skip_reason": None if trade_created else trade_skip_reason,
         }
         self.client.table("predictions").insert(payload).execute()
 

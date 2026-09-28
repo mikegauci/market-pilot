@@ -50,6 +50,67 @@ function sentimentClass(sentiment: number): string {
   return "bg-zinc-800 text-zinc-300";
 }
 
+const SKIP_REASON_LABELS: Record<string, string> = {
+  below_trade_threshold: "Below confidence threshold",
+  buy_hold_margin: "BUY–HOLD margin too narrow",
+  hold_dominant: "HOLD dominant",
+  sell_dominant: "SELL dominant",
+  signal_not_eligible: "Signal not eligible",
+  bot_disabled: "Auto-trading off",
+  already_open: "Position already open",
+  max_open_positions: "Max positions reached",
+  insufficient_capital: "Insufficient capital",
+  max_daily_loss: "Daily loss limit hit",
+  position_too_small: "Position too small",
+  invalid_price: "Invalid price",
+  ibkr_not_connected: "Broker not connected",
+  ibkr_pending_entry_order: "Pending BUY order open",
+  price_below_ema20: "Price below EMA-20",
+};
+
+function formatSkipReason(reason: string | null | undefined): string | null {
+  if (!reason) return null;
+  if (reason.startsWith("awaiting_confirmation")) {
+    const match = reason.match(/awaiting_confirmation \((\d+)\/(\d+)\)/);
+    if (match) {
+      return `Awaiting confirmation (${match[1]}/${match[2]})`;
+    }
+    return "Awaiting confirmation";
+  }
+  if (reason.startsWith("rsi_overbought")) return "RSI overbought";
+  if (reason.startsWith("spread_too_wide")) return "Spread too wide";
+  if (reason.startsWith("spy_headwind")) return "SPY headwind";
+  if (reason.startsWith("news_sentiment_bearish")) return "Bearish news";
+  if (reason.startsWith("news_block_tag")) return "Blocked news tag";
+  if (reason.startsWith("news_earnings_window")) return "Earnings window";
+  if (reason.startsWith("correlation_cap")) return "Correlation cap";
+  if (reason.startsWith("ibkr_cooldown")) return "Broker cooldown";
+  if (reason.startsWith("ibkr_insufficient_buying_power")) return "Insufficient buying power";
+  if (reason.startsWith("ibkr_order_failed")) return "Broker order failed";
+  return SKIP_REASON_LABELS[reason] ?? reason.replaceAll("_", " ");
+}
+
+function TradeCell({ prediction }: { prediction: Prediction }) {
+  if (prediction.trade_created) {
+    return <Badge className="bg-emerald-900 text-emerald-300">opened</Badge>;
+  }
+
+  const label = formatSkipReason(prediction.trade_skip_reason);
+  if (!label) {
+    return <span className="text-zinc-600">—</span>;
+  }
+
+  const isWaiting = label.startsWith("Awaiting confirmation");
+  return (
+    <span
+      className={`text-xs leading-snug ${isWaiting ? "text-amber-400" : "text-zinc-500"}`}
+      title={prediction.trade_skip_reason ?? undefined}
+    >
+      {label}
+    </span>
+  );
+}
+
 function NewsCell({ snapshot }: { snapshot?: MarketSnapshot | null }) {
   if (
     snapshot?.news_sentiment == null &&
@@ -60,23 +121,34 @@ function NewsCell({ snapshot }: { snapshot?: MarketSnapshot | null }) {
   }
 
   const sentiment = snapshot?.news_sentiment ?? 0;
+  const hasSentimentSignal = Math.abs(sentiment) > 0.1;
+  const tags = snapshot?.news_tags ?? [];
 
   return (
-    <div className="space-y-1">
-      {snapshot?.news_sentiment != null && (
-        <Badge className={sentimentClass(sentiment)}>
-          {sentimentLabel(sentiment)} ({sentiment.toFixed(2)})
-        </Badge>
-      )}
+    <div className="max-w-sm space-y-1">
       {snapshot?.news_top_headline && (
-        <p className="max-w-xs truncate text-xs text-zinc-400" title={snapshot.news_top_headline}>
+        <p
+          className="line-clamp-2 text-xs leading-snug text-zinc-300"
+          title={snapshot.news_top_headline}
+        >
           {snapshot.news_top_headline}
         </p>
       )}
-      {snapshot?.news_tags && snapshot.news_tags.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {snapshot.news_tags.map((tag) => (
-            <Badge key={tag} className="border border-zinc-700 bg-transparent text-[10px] text-zinc-400">
+      {(hasSentimentSignal || tags.length > 0) && (
+        <div className="flex flex-wrap items-center gap-1">
+          {hasSentimentSignal && snapshot?.news_sentiment != null && (
+            <Badge
+              className={sentimentClass(sentiment)}
+              title="Rule-based score from recent headlines (−1 bearish to +1 bullish)"
+            >
+              {sentimentLabel(sentiment)} {sentiment.toFixed(2)}
+            </Badge>
+          )}
+          {tags.map((tag) => (
+            <Badge
+              key={tag}
+              className="border border-zinc-700 bg-transparent px-1.5 py-0 text-[10px] text-zinc-500"
+            >
               {tag}
             </Badge>
           ))}
@@ -156,7 +228,7 @@ export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) 
                     ["HOLD", "hold_probability"],
                     ["SELL", "sell_probability"],
                     ["News", null],
-                    ["Trade", "trade_created"],
+                    ["Outcome", "trade_created"],
                   ] as const
                 ).map(([label, key], i, arr) => (
                   <th key={label} className={`pb-2 ${i < arr.length - 1 ? "pr-3" : ""}`}>
@@ -221,12 +293,8 @@ export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) 
                       <td className="py-2 pr-3">
                         <NewsCell snapshot={snapshot} />
                       </td>
-                      <td className="py-2">
-                        {p.trade_created ? (
-                          <Badge className="bg-emerald-900 text-emerald-300">opened</Badge>
-                        ) : (
-                          <span className="text-zinc-600">—</span>
-                        )}
+                      <td className="py-2 max-w-[10rem]">
+                        <TradeCell prediction={p} />
                       </td>
                     </tr>
                     {isExpanded && hasNewsDetail && (
@@ -235,6 +303,26 @@ export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) 
                         <td colSpan={8} className="py-3 pr-3">
                           <div className="space-y-2 text-xs text-zinc-400">
                             <p className="text-sm text-zinc-300">{snapshot?.news_top_headline}</p>
+                            {snapshot?.news_sentiment != null && (
+                              <p>
+                                Sentiment:{" "}
+                                <span
+                                  className={
+                                    Math.abs(snapshot.news_sentiment) > 0.1
+                                      ? snapshot.news_sentiment > 0
+                                        ? "text-emerald-400"
+                                        : "text-red-400"
+                                      : "text-zinc-500"
+                                  }
+                                >
+                                  {sentimentLabel(snapshot.news_sentiment)}{" "}
+                                  ({snapshot.news_sentiment.toFixed(2)})
+                                </span>
+                                {" — "}
+                                keyword scan of recent headlines; used to block buys on bearish
+                                news
+                              </p>
+                            )}
                             {snapshot?.news_headline_count != null && (
                               <p>
                                 {snapshot.news_headline_count} headline

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import type { PortfolioSnapshot, Position, Trade } from "@/lib/types/database";
+import type { PortfolioSnapshot, Position, Prediction, Trade } from "@/lib/types/database";
 
 function logFetchError(table: string, message: string) {
   if (process.env.NODE_ENV !== "production") {
@@ -15,6 +15,21 @@ export async function fetchPositions(): Promise<Position[]> {
     return [];
   }
   return (data ?? []) as Position[];
+}
+
+export async function fetchTradedPredictions(limit = 10): Promise<Prediction[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("predictions")
+    .select("*")
+    .eq("trade_created", true)
+    .order("timestamp", { ascending: false })
+    .limit(limit);
+  if (error) {
+    logFetchError("predictions", error.message);
+    return [];
+  }
+  return (data ?? []) as Prediction[];
 }
 
 export async function fetchRecentTrades(limit = 10): Promise<Trade[]> {

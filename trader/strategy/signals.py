@@ -33,6 +33,19 @@ def is_trade_eligible(tier: str) -> bool:
     return "ELIGIBLE" in tier
 
 
+def trade_skip_reason_from_tier(tier: str) -> str:
+    """Short code explaining why a signal tier did not qualify for entry."""
+    if "IGNORE (margin)" in tier:
+        return "buy_hold_margin"
+    if "RECORD" in tier:
+        return "below_trade_threshold"
+    if tier.startswith("HOLD"):
+        return "hold_dominant"
+    if tier.startswith("SELL"):
+        return "sell_dominant"
+    return "signal_not_eligible"
+
+
 def is_sell_exit_eligible(prediction: JevPrediction, threshold: float) -> bool:
     """True when SELL is dominant and meets the exit confidence threshold."""
     dominant = max(

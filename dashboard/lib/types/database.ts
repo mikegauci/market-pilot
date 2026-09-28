@@ -12,7 +12,6 @@ export type BotStatus = {
 
 export type Settings = {
   id: number;
-  bot_enabled: boolean;
   trading_mode: "paper" | "live";
   minimum_jev_confidence: number;
   signal_record_threshold: number;
@@ -63,6 +62,7 @@ export type Prediction = {
   hold_probability: number;
   sell_probability: number;
   trade_created: boolean;
+  trade_skip_reason?: string | null;
   market_snapshot?: MarketSnapshot | null;
   created_at: string;
 };

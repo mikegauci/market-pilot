@@ -3,6 +3,7 @@ import { OverviewStatusSection } from "@/components/overview-status-section";
 import { PortfolioChart } from "@/components/portfolio-chart";
 import { PositionsTable } from "@/components/positions-table";
 import { SettingsSummary } from "@/components/settings-summary";
+import { TradedPredictionsTable } from "@/components/traded-predictions-table";
 import { TradesTable } from "@/components/trades-table";
 import {
   getBotStatus,
@@ -11,18 +12,21 @@ import {
   getPositions,
   getRecentTrades,
   getSettings,
+  getTradedPredictions,
 } from "@/lib/queries";
 import { resolveBaselineEquity } from "@/lib/risk-recommendations";
 
 export default async function OverviewPage() {
-  const [botStatus, portfolio, history, positions, trades, settings] = await Promise.all([
-    getBotStatus(),
-    getLatestPortfolio(),
-    getPortfolioHistory(24),
-    getPositions(),
-    getRecentTrades(10),
-    getSettings(),
-  ]);
+  const [botStatus, portfolio, history, positions, trades, tradedPredictions, settings] =
+    await Promise.all([
+      getBotStatus(),
+      getLatestPortfolio(),
+      getPortfolioHistory(24),
+      getPositions(),
+      getRecentTrades(10),
+      getTradedPredictions(10),
+      getSettings(),
+    ]);
 
   const currency = portfolio?.currency ?? "USD";
   const currentEquity = portfolio?.equity ?? settings?.account_capital ?? 0;
@@ -56,6 +60,7 @@ export default async function OverviewPage() {
       </div>
 
       <PositionsTable positions={positions} />
+      <TradedPredictionsTable predictions={tradedPredictions} trades={trades} />
       <TradesTable trades={trades} title="Recent Trades" />
     </div>
   );

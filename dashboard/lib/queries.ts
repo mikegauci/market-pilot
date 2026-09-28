@@ -81,3 +81,14 @@ export async function getPredictions(limit = 50, symbol?: string): Promise<Predi
   const { data } = await query;
   return (data ?? []) as Prediction[];
 }
+
+export async function getTradedPredictions(limit = 10): Promise<Prediction[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("predictions")
+    .select("*")
+    .eq("trade_created", true)
+    .order("timestamp", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as Prediction[];
+}

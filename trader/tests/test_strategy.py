@@ -8,7 +8,12 @@ from risk.manager import RiskManager
 from strategy.config import StrategyConfig
 from strategy.confirmation import ConfirmationTracker
 from strategy.filters import check_correlation_cap, check_entry_filters
-from strategy.signals import is_sell_exit_eligible, is_trade_eligible, signal_tier
+from strategy.signals import (
+    is_sell_exit_eligible,
+    is_trade_eligible,
+    signal_tier,
+    trade_skip_reason_from_tier,
+)
 
 
 def _state(**overrides: object) -> MarketState:
@@ -53,6 +58,12 @@ class TestSignals(unittest.TestCase):
         tier = signal_tier(_prediction(), 0.75, 0.85, 0.15)
         self.assertIn("ELIGIBLE", tier)
         self.assertTrue(is_trade_eligible(tier))
+
+    def test_skip_reason_from_tier(self) -> None:
+        record = signal_tier(_prediction(buy=0.76, hold=0.20, sell=0.04), 0.75, 0.85, 0.15)
+        self.assertEqual(trade_skip_reason_from_tier(record), "below_trade_threshold")
+        margin = signal_tier(_prediction(buy=0.86, hold=0.80, sell=0.34), 0.75, 0.85, 0.15)
+        self.assertEqual(trade_skip_reason_from_tier(margin), "buy_hold_margin")
 
     def test_sell_exit(self) -> None:
         prediction = _prediction(buy=0.10, hold=0.10, sell=0.80)
