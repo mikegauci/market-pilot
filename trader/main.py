@@ -8,6 +8,7 @@ from typing import Dict, Optional, Set
 
 from broker.execution import sync_ibkr_exits
 from broker.ibkr import IBKRClient
+from broker.reconcile import reconcile_orphan_ibkr_positions
 from config import Settings, load_settings
 from instance_lock import acquire_trader_lock
 from database.supabase import SupabaseRepository
@@ -248,6 +249,21 @@ def run() -> int:
             len(risk_manager.open_trades),
             risk_manager.effective_capital,
         )
+
+        if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
+            reconciled = reconcile_orphan_ibkr_positions(
+                ibkr,
+                risk_manager,
+                db,
+                trading_mode,
+                risk_settings,
+                watchlist=watchlist,
+            )
+            if reconciled:
+                logger.info(
+                    "Startup reconciliation complete — %s orphan IBKR position(s) adopted",
+                    reconciled,
+                )
 
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)

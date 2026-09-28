@@ -158,7 +158,11 @@ class RiskManager:
         remaining: List[TradeRecord] = []
 
         for trade in self.open_trades:
-            if trade.execution_mode == "ibkr":
+            if (
+                trade.execution_mode == "ibkr"
+                and trade.ibkr_sl_order_id
+                and trade.ibkr_tp_order_id
+            ):
                 remaining.append(trade)
                 continue
 

@@ -23,7 +23,7 @@ def acquire_trader_lock() -> None:
             "Another market-pilot trader holds the process lock.\n"
             "Stop it before starting a new one:\n"
             "  pgrep -fl main.py\n"
-            "  pkill -f \"python.*main.py\"\n",
+            "  pkill -f main.py\n",
             file=sys.stderr,
         )
         sys.exit(1)

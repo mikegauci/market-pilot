@@ -154,6 +154,17 @@ class BracketOrderResult:
 
 
 @dataclass
+class BracketLegs:
+    """Active stop-loss and take-profit child orders for an open long position."""
+
+    parent_order_id: Optional[int]
+    sl_order_id: int
+    tp_order_id: int
+    stop_loss: float
+    take_profit: float
+
+
+@dataclass
 class TradeDecision:
     approved: bool
     reason: str

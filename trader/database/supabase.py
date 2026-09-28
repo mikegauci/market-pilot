@@ -330,6 +330,18 @@ class SupabaseRepository:
         self.client.table("trades").insert(payload).execute()
         return trade.id
 
+    def update_trade_ibkr_bracket(self, trade: TradeRecord) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        payload = {
+            "stop_loss": trade.stop_loss,
+            "take_profit": trade.take_profit,
+            "ibkr_parent_order_id": trade.ibkr_parent_order_id,
+            "ibkr_sl_order_id": trade.ibkr_sl_order_id,
+            "ibkr_tp_order_id": trade.ibkr_tp_order_id,
+            "updated_at": now,
+        }
+        self.client.table("trades").update(payload).eq("id", trade.id).execute()
+
     def close_trade(
         self,
         trade_id: str,

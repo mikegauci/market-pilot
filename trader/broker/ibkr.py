@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ib_insync import IB, LimitOrder, MarketOrder, Stock, StopOrder, Trade
 
-from models.types import AccountSummary, BracketOrderResult, Position, Quote
+from models.types import AccountSummary, BracketLegs, BracketOrderResult, Position, Quote
 
 logger = logging.getLogger(__name__)
 
@@ -321,18 +321,21 @@ class IBKRClient:
         parent.account = account
         parent.orderId = self.ib.client.getReqId()
         parent.transmit = False
+        parent.tif = "DAY"
 
         take_profit_order = LimitOrder("SELL", qty, round(take_profit, 2))
         take_profit_order.account = account
         take_profit_order.orderId = self.ib.client.getReqId()
         take_profit_order.parentId = parent.orderId
         take_profit_order.transmit = False
+        take_profit_order.tif = "DAY"
 
         stop_loss_order = StopOrder("SELL", qty, round(stop_loss, 2))
         stop_loss_order.account = account
         stop_loss_order.orderId = self.ib.client.getReqId()
         stop_loss_order.parentId = parent.orderId
         stop_loss_order.transmit = True
+        stop_loss_order.tif = "DAY"
 
         parent_trade = self.ib.placeOrder(contract, parent)
         tp_trade = self.ib.placeOrder(contract, take_profit_order)
@@ -340,10 +343,17 @@ class IBKRClient:
 
         fill = self._wait_for_fill(parent_trade, fill_timeout_sec)
         if fill is None:
+            status = parent_trade.orderStatus.status
             self._cancel_trade(parent_trade)
             self._cancel_trade(tp_trade)
             self._cancel_trade(sl_trade)
-            raise RuntimeError(f"Parent order for {symbol} did not fill within {fill_timeout_sec}s")
+            if status in {"Cancelled", "Inactive", "ApiCancelled"}:
+                raise RuntimeError(
+                    f"Parent order for {symbol} was {status.lower()} before fill"
+                )
+            raise RuntimeError(
+                f"Parent order for {symbol} did not fill within {fill_timeout_sec}s"
+            )
 
         fill_price, filled_qty = fill
         logger.info(
@@ -398,6 +408,53 @@ class IBKRClient:
             if trade.order.orderId == order_id:
                 return trade
         return None
+
+    def find_open_bracket_legs(self, symbol: str) -> Optional[BracketLegs]:
+        """Find active bracket stop-loss and take-profit orders for a long position."""
+        if not self.is_connected():
+            return None
+
+        self.ib.reqOpenOrders()
+        self.ib.sleep(0.3)
+
+        stop_trade: Optional[Trade] = None
+        limit_trade: Optional[Trade] = None
+
+        for trade in self.ib.openTrades():
+            contract = trade.contract
+            if getattr(contract, "symbol", None) != symbol:
+                continue
+            order = trade.order
+            if order.action != "SELL":
+                continue
+
+            order_type = (order.orderType or "").upper()
+            if order_type in {"STP", "STOP"} or isinstance(order, StopOrder):
+                stop_trade = trade
+            elif order_type in {"LMT", "LIMIT"} or isinstance(order, LimitOrder):
+                if getattr(order, "parentId", 0):
+                    limit_trade = trade
+
+        if stop_trade is None or limit_trade is None:
+            return None
+
+        stop_order = stop_trade.order
+        limit_order = limit_trade.order
+        stop_price = _safe_float(
+            getattr(stop_order, "auxPrice", None) or getattr(stop_order, "stopPrice", None)
+        )
+        tp_price = _safe_float(getattr(limit_order, "lmtPrice", None))
+        if stop_price is None or tp_price is None:
+            return None
+
+        parent_id = getattr(stop_order, "parentId", None) or getattr(limit_order, "parentId", None)
+        return BracketLegs(
+            parent_order_id=parent_id if parent_id else None,
+            sl_order_id=stop_order.orderId,
+            tp_order_id=limit_order.orderId,
+            stop_loss=stop_price,
+            take_profit=tp_price,
+        )
 
     def get_bracket_exit_status(
         self,
