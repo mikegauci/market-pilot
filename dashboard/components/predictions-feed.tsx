@@ -1,12 +1,12 @@
 "use client";
 
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
+import { fetchPredictions } from "@/lib/data-client";
+import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import type { MarketSnapshot, Prediction } from "@/lib/types/database";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { formatCurrency, formatDateTime, formatPercent } from "@/lib/utils";
 
 type SortKey =
@@ -159,18 +159,18 @@ function NewsCell({ snapshot }: { snapshot?: MarketSnapshot | null }) {
 }
 
 export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) {
-  const router = useRouter();
   const [symbolFilter, setSymbolFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("timestamp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const refresh = useCallback(() => router.refresh(), [router]);
-  useRealtimeRefresh(["predictions"], refresh);
 
-  const symbols = [...new Set(predictions.map((p) => p.symbol))].sort();
+  const loadPredictions = useCallback(() => fetchPredictions(50), []);
+  const livePredictions = useLiveQuery(predictions, loadPredictions, ["predictions"]);
+
+  const symbols = [...new Set(livePredictions.map((p) => p.symbol))].sort();
   const filtered = symbolFilter
-    ? predictions.filter((p) => p.symbol === symbolFilter)
-    : predictions;
+    ? livePredictions.filter((p) => p.symbol === symbolFilter)
+    : livePredictions;
 
   const sorted = useMemo(() => {
     const list = [...filtered];

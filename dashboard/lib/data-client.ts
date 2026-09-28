@@ -17,6 +17,24 @@ export async function fetchPositions(): Promise<Position[]> {
   return (data ?? []) as Position[];
 }
 
+export async function fetchPredictions(limit = 50, symbol?: string): Promise<Prediction[]> {
+  const supabase = createClient();
+  let query = supabase
+    .from("predictions")
+    .select("*")
+    .order("timestamp", { ascending: false })
+    .limit(limit);
+  if (symbol) {
+    query = query.eq("symbol", symbol);
+  }
+  const { data, error } = await query;
+  if (error) {
+    logFetchError("predictions", error.message);
+    return [];
+  }
+  return (data ?? []) as Prediction[];
+}
+
 export async function fetchTradedPredictions(limit = 10): Promise<Prediction[]> {
   const supabase = createClient();
   const { data, error } = await supabase
