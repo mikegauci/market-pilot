@@ -2,6 +2,7 @@ import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { OverviewStatusSection } from "@/components/overview-status-section";
 import { PortfolioChart } from "@/components/portfolio-chart";
 import { PositionsTable } from "@/components/positions-table";
+import { SettingsSummary } from "@/components/settings-summary";
 import { TradesTable } from "@/components/trades-table";
 import {
   getBotStatus,
@@ -9,16 +10,18 @@ import {
   getPortfolioHistory,
   getPositions,
   getRecentTrades,
+  getSettings,
 } from "@/lib/queries";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function OverviewPage() {
-  const [botStatus, portfolio, history, positions, trades] = await Promise.all([
+  const [botStatus, portfolio, history, positions, trades, settings] = await Promise.all([
     getBotStatus(),
     getLatestPortfolio(),
     getPortfolioHistory(24),
     getPositions(),
     getRecentTrades(10),
+    getSettings(),
   ]);
 
   const currency = portfolio?.currency ?? "USD";
@@ -63,6 +66,7 @@ export default async function OverviewPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <PortfolioChart data={history} currency={currency} />
+        {settings && <SettingsSummary settings={settings} />}
       </div>
 
       <PositionsTable positions={positions} />
