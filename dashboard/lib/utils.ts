@@ -21,11 +21,12 @@ export function formatPercent(value: number | null | undefined) {
 
 export function formatDateTime(value: string | null | undefined) {
   if (!value) return "—";
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("en-GB", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    hour12: false,
   }).format(new Date(value));
 }

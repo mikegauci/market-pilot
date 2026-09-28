@@ -27,9 +27,10 @@ export function PortfolioChart({ data, currency = "USD" }: Props) {
   useRealtimeRefresh(["portfolio_history"], refresh);
 
   const chartData = data.map((row) => ({
-    time: new Date(row.timestamp).toLocaleTimeString("en-US", {
+    time: new Date(row.timestamp).toLocaleTimeString("en-GB", {
       hour: "2-digit",
       minute: "2-digit",
+      hour12: false,
     }),
     equity: Number(row.equity),
   }));
