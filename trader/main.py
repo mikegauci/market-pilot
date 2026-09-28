@@ -9,6 +9,7 @@ from typing import Dict, Optional, Set
 from broker.execution import sync_ibkr_exits
 from broker.ibkr import IBKRClient
 from config import Settings, load_settings
+from instance_lock import acquire_trader_lock
 from database.supabase import SupabaseRepository
 from jev.client import JevClient
 from market.history import HistoryStore
@@ -144,6 +145,7 @@ def _log_jev_prediction(prediction, tier: str) -> None:
 
 
 def run() -> int:
+    acquire_trader_lock()
     settings = load_settings()
     _configure_logging(settings.log_level)
 
@@ -440,6 +442,13 @@ def run() -> int:
             else settings.closed_market_eval_interval_sec
         )
         sleep_for = max(0.0, interval - elapsed)
+        # Keep heartbeats frequent even when the eval loop is slow (market closed).
+        if db:
+            next_heartbeat_in = settings.heartbeat_interval_sec - (
+                time.monotonic() - last_heartbeat
+            )
+            if next_heartbeat_in > 0:
+                sleep_for = min(sleep_for, next_heartbeat_in)
         if sleep_for > 0 and not _shutdown_requested:
             _interruptible_sleep(sleep_for)
 

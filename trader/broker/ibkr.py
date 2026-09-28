@@ -64,11 +64,89 @@ class IBKRClient:
     def is_connected(self) -> bool:
         return self.ib.isConnected()
 
-    def connect(self, timeout: float = 10.0) -> None:
+    def _is_client_id_conflict(self, exc: BaseException) -> bool:
+        message = str(exc).lower()
+        return "client id" in message or "326" in message
+
+    def _connect_once(self, client_id: int, timeout: float) -> None:
+        if self.is_connected():
+            self.ib.disconnect()
+        self.client_id = client_id
+        logger.info(
+            "Connecting to IBKR at %s:%s (clientId=%s)",
+            self.host,
+            self.port,
+            self.client_id,
+        )
+        self.ib.connect(self.host, self.port, clientId=self.client_id, timeout=timeout)
+        # Error 326 can arrive right after connect; wait briefly and verify.
+        self.ib.sleep(0.5)
+        if not self.is_connected():
+            raise RuntimeError(
+                f"IBKR disconnected immediately (clientId={self.client_id} may be in use)"
+            )
+
+    def connect(
+        self,
+        timeout: float = 10.0,
+        same_id_retries: int = 3,
+        same_id_retry_delay_sec: float = 2.0,
+        fallback_client_ids: int = 2,
+    ) -> None:
         if self.is_connected():
             return
-        logger.info("Connecting to IBKR at %s:%s (clientId=%s)", self.host, self.port, self.client_id)
-        self.ib.connect(self.host, self.port, clientId=self.client_id, timeout=timeout)
+
+        base_client_id = self.client_id
+        last_exc: Optional[BaseException] = None
+
+        for attempt in range(1, same_id_retries + 1):
+            try:
+                self._connect_once(base_client_id, timeout)
+                break
+            except Exception as exc:
+                last_exc = exc
+                if self.is_connected():
+                    self.ib.disconnect()
+                if attempt < same_id_retries and self._is_client_id_conflict(exc):
+                    logger.warning(
+                        "Client ID %s busy (attempt %s/%s) — retrying in %.0fs "
+                        "(IB Gateway may still be releasing a stale session)",
+                        base_client_id,
+                        attempt,
+                        same_id_retries,
+                        same_id_retry_delay_sec,
+                    )
+                    self.ib.sleep(same_id_retry_delay_sec)
+                    continue
+                if not self._is_client_id_conflict(exc):
+                    raise
+        else:
+            for offset in range(1, fallback_client_ids + 1):
+                candidate_id = base_client_id + offset
+                logger.warning(
+                    "Client ID %s still unavailable — trying fallback clientId=%s "
+                    "(another IBKR API client may be connected)",
+                    base_client_id,
+                    candidate_id,
+                )
+                try:
+                    self._connect_once(candidate_id, timeout)
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    if self.is_connected():
+                        self.ib.disconnect()
+                    if offset == fallback_client_ids or not self._is_client_id_conflict(exc):
+                        raise RuntimeError(
+                            f"Could not connect to IBKR — client ID {base_client_id} is busy and "
+                            f"fallback IDs {base_client_id + 1}–{candidate_id} also failed. "
+                            "Restart IB Gateway or stop other API clients."
+                        ) from exc
+            else:
+                raise RuntimeError(
+                    f"Could not connect to IBKR on client ID {base_client_id}."
+                ) from last_exc
+
         # 1=live, 2=frozen, 3=delayed, 4=delayed frozen — paper accounts use delayed.
         self.ib.reqMarketDataType(self.market_data_type)
         logger.info("IBKR market data type: %s", self.market_data_type)

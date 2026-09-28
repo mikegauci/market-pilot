@@ -37,6 +37,7 @@ next-env.d.ts
 
 # python
 trader/.venv/
+trader/.trader.lock
 __pycache__/
 *.py[cod]
 *.egg-info/
