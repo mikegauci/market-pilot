@@ -57,6 +57,7 @@ class BotStatusUpdate:
     trading_mode: TradingMode
     ibkr_connected: bool
     jev_connected: bool = False
+    execution_mode: ExecutionMode = ExecutionMode.SIMULATED
     last_error: Optional[str] = None
 
 

@@ -173,6 +173,13 @@ def run() -> int:
     if db:
         trading_mode = db.get_trading_mode()
         risk_manager = _init_risk_manager(db, ibkr, trading_mode)
+        db_execution = db.get_execution_mode(settings.execution_mode)
+        if db_execution != settings.execution_mode:
+            logger.info(
+                "Execution mode from dashboard: %s (env default: %s)",
+                db_execution.value,
+                settings.execution_mode.value,
+            )
         logger.info(
             "Risk engine loaded — %s open simulated trades, capital $%.2f",
             len(risk_manager.open_trades),
@@ -184,6 +191,7 @@ def run() -> int:
 
     bot_enabled = False
     jev_connected = False
+    execution_mode = settings.execution_mode
     last_heartbeat = 0.0
     data_source_label = "ibkr" if ibkr.is_connected() else "mock"
 
@@ -196,6 +204,7 @@ def run() -> int:
             if db:
                 bot_enabled = db.get_bot_enabled()
                 trading_mode = db.get_trading_mode()
+                execution_mode = db.get_execution_mode(settings.execution_mode)
                 strategy_settings = db.get_settings()
                 watchlist = strategy_settings.watchlist or settings.watchlist_symbols
                 if risk_manager:
@@ -225,7 +234,7 @@ def run() -> int:
                 if closed:
                     risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
 
-                if settings.execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
+                if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
                     sync_ibkr_exits(ibkr, risk_manager, db)
 
             spy_history = history.get("SPY")
@@ -281,7 +290,7 @@ def run() -> int:
                         if decision.approved and decision.trade:
                             trade = decision.trade
                             if (
-                                settings.execution_mode == ExecutionMode.IBKR
+                                execution_mode == ExecutionMode.IBKR
                                 and ibkr.is_connected()
                             ):
                                 try:
@@ -315,9 +324,9 @@ def run() -> int:
                                     logger.error(
                                         "IBKR order failed for %s: %s", symbol, exc
                                     )
-                            elif settings.execution_mode == ExecutionMode.IBKR:
+                            elif execution_mode == ExecutionMode.IBKR:
                                 logger.warning(
-                                    "EXECUTION_MODE=ibkr but IBKR not connected — skipping %s",
+                                    "Execution mode ibkr but IBKR not connected — skipping %s",
                                     symbol,
                                 )
                             else:
@@ -349,7 +358,7 @@ def run() -> int:
 
             now = time.monotonic()
             if db and (now - last_heartbeat) >= settings.heartbeat_interval_sec:
-                if settings.execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
+                if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
                     try:
                         account = ibkr.get_account_summary()
                         positions = ibkr.get_positions()
@@ -369,6 +378,7 @@ def run() -> int:
                         trading_mode=trading_mode,
                         ibkr_connected=ibkr.is_connected(),
                         jev_connected=jev_connected_this_cycle or jev_connected,
+                        execution_mode=execution_mode,
                         last_error=None,
                     )
                 )
@@ -378,7 +388,12 @@ def run() -> int:
         except Exception as exc:
             logger.exception("Eval cycle failed: %s", exc)
             if db:
-                db.record_error(str(exc), enabled=bot_enabled, trading_mode=trading_mode)
+                db.record_error(
+                    str(exc),
+                    enabled=bot_enabled,
+                    trading_mode=trading_mode,
+                    execution_mode=execution_mode,
+                )
 
         elapsed = time.monotonic() - loop_start
         interval = (
@@ -390,6 +405,12 @@ def run() -> int:
         if sleep_for > 0 and not _shutdown_requested:
             time.sleep(sleep_for)
 
+    if db:
+        try:
+            db.mark_trader_offline(bot_enabled, trading_mode, execution_mode)
+            logger.info("Marked trader offline in Supabase")
+        except Exception as exc:
+            logger.warning("Could not mark trader offline: %s", exc)
     if ibkr.is_connected():
         ibkr.disconnect()
     logger.info("Trading engine stopped.")

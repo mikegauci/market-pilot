@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" fill="none">
+  <rect width="180" height="180" rx="40" fill="#09090b"/>
+  <path
+    d="M34 130h112"
+    stroke="#27272a"
+    stroke-width="8"
+    stroke-linecap="round"
+  />
+  <path
+    d="M39 122 70 82 95 100 140 45"
+    stroke="url(#apple-gradient)"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle cx="140" cy="45" r="16" fill="#34d399"/>
+  <path
+    d="M123 28 140 45l17-17"
+    stroke="#09090b"
+    stroke-width="7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <defs>
+    <linearGradient id="apple-gradient" x1="39" y1="122" x2="140" y2="45" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6ee7b7"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+  </defs>
+</svg>

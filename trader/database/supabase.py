@@ -9,6 +9,7 @@ from supabase import Client, create_client
 from models.types import (
     AccountSummary,
     BotStatusUpdate,
+    ExecutionMode,
     JevPrediction,
     MarketState,
     Position,
@@ -68,6 +69,7 @@ class SupabaseRepository:
         payload = {
             "enabled": status.enabled,
             "trading_mode": status.trading_mode.value,
+            "execution_mode": status.execution_mode.value,
             "ibkr_connected": status.ibkr_connected,
             "jev_connected": status.jev_connected,
             "last_heartbeat": datetime.now(timezone.utc).isoformat(),
@@ -149,6 +151,40 @@ class SupabaseRepository:
         )
         mode = result.data.get("trading_mode", "paper")
         return TradingMode(mode)
+
+    def mark_trader_offline(
+        self,
+        enabled: bool,
+        trading_mode: TradingMode,
+        execution_mode: ExecutionMode,
+    ) -> None:
+        """Clear connection flags and heartbeat when the trader process exits."""
+        payload = {
+            "enabled": enabled,
+            "trading_mode": trading_mode.value,
+            "execution_mode": execution_mode.value,
+            "ibkr_connected": False,
+            "jev_connected": False,
+            "last_heartbeat": None,
+            "last_error": None,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.client.table("bot_status").update(payload).eq("id", 1).execute()
+
+    def get_execution_mode(self, fallback: ExecutionMode = ExecutionMode.SIMULATED) -> ExecutionMode:
+        try:
+            result = (
+                self.client.table("bot_status")
+                .select("execution_mode")
+                .eq("id", 1)
+                .single()
+                .execute()
+            )
+            mode = result.data.get("execution_mode", fallback.value)
+            return ExecutionMode(mode)
+        except Exception as exc:
+            logger.warning("Could not read execution_mode from bot_status: %s", exc)
+            return fallback
 
     def get_settings(self) -> StrategySettings:
         risk = self.get_risk_settings()
@@ -333,13 +369,21 @@ class SupabaseRepository:
         }
         self.client.table("predictions").insert(payload).execute()
 
-    def record_error(self, message: str, enabled: bool, trading_mode: TradingMode) -> None:
+    def record_error(
+        self,
+        message: str,
+        enabled: bool,
+        trading_mode: TradingMode,
+        execution_mode: ExecutionMode = ExecutionMode.SIMULATED,
+    ) -> None:
         try:
             self.update_bot_status(
                 BotStatusUpdate(
                     enabled=enabled,
                     trading_mode=trading_mode,
                     ibkr_connected=False,
+                    jev_connected=False,
+                    execution_mode=execution_mode,
                     last_error=message,
                 )
             )

@@ -34,9 +34,14 @@ Open [http://localhost:3000](http://localhost:3000) and sign in.
 | `/trades` | Full trade history (open / closed) |
 | `/settings` | Risk and strategy settings |
 
-## Bot toggle
+## Trading controls (Overview)
 
-Flipping the bot switch updates `bot_status.enabled` in Supabase. The Python trader reads this every eval cycle (~30s).
+| Control | Supabase field | Effect |
+|---------|----------------|--------|
+| Trading bot ON/OFF | `bot_status.enabled` | Allow or block new entries |
+| IBKR paper orders | `bot_status.execution_mode` | `simulated` or `ibkr` |
+
+The Python trader reads both every eval cycle (~30s). Status badges treat heartbeats older than 30s as **Trader offline** and hide stale IBKR/Jev connection flags.
 
 ## Deploy to Vercel
 

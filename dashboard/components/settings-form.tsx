@@ -15,8 +15,10 @@ export function SettingsForm({ settings }: { settings: Settings }) {
     <Card>
       <CardTitle>Risk & Strategy Settings</CardTitle>
       <p className="mt-1 text-xs text-zinc-500">
-        Trading mode: <span className="text-zinc-300">{settings.trading_mode}</span> (live mode
-        requires server <code className="text-zinc-400">.env</code> change)
+        Bot ON/OFF and simulated vs IBKR orders are on the{" "}
+        <span className="text-zinc-300">Overview</span> page. Trading mode:{" "}
+        <span className="text-zinc-300">{settings.trading_mode}</span> (live requires server{" "}
+        <code className="text-zinc-400">.env</code> change).
       </p>
       <form
         className="mt-6 grid gap-4 sm:grid-cols-2"

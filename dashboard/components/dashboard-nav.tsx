@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Activity, LineChart, Settings, TrendingUp, LogOut } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { MarketClock } from "@/components/market-clock";
 import { signOut } from "@/lib/actions";
 import { cn } from "@/lib/utils";
@@ -21,8 +22,8 @@ export function DashboardNav() {
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900/50 p-4">
       <div className="mb-8">
-        <h1 className="text-lg font-semibold text-emerald-400">Market Pilot</h1>
-        <p className="text-xs text-zinc-500">Paper trading</p>
+        <Logo size="md" />
+        <p className="mt-2 text-xs text-zinc-500">Paper trading</p>
         <MarketClock />
       </div>
       <nav className="flex flex-1 flex-col gap-1">

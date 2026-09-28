@@ -1,5 +1,5 @@
-import { BotToggle } from "@/components/bot-toggle";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
+import { TradingControls } from "@/components/trading-controls";
 import { PortfolioChart } from "@/components/portfolio-chart";
 import { PositionsTable } from "@/components/positions-table";
 import { LiveStatus } from "@/components/live-status";
@@ -35,10 +35,7 @@ export default async function OverviewPage() {
             </div>
           )}
         </div>
-        <div className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3">
-          <span className="text-sm text-zinc-400">Trading bot</span>
-          <BotToggle enabled={botStatus?.enabled ?? false} />
-        </div>
+        {botStatus && <TradingControls status={botStatus} />}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

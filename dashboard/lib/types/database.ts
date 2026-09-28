@@ -2,6 +2,7 @@ export type BotStatus = {
   id: number;
   enabled: boolean;
   trading_mode: "paper" | "live";
+  execution_mode: "simulated" | "ibkr";
   ibkr_connected: boolean;
   jev_connected: boolean;
   last_heartbeat: string | null;

@@ -265,7 +265,7 @@ To test without waiting for 80% BUY, temporarily lower `minimum_jev_confidence` 
 
 ## Running Phase 4 (IBKR Paper Orders)
 
-Phase 4 places **real bracket orders** on IBKR paper when `EXECUTION_MODE=ibkr`. Default `EXECUTION_MODE=simulated` keeps Phase 3 behavior unchanged.
+Phase 4 places **real bracket orders** on IBKR paper when execution mode is **IBKR paper** (dashboard Overview toggle or `EXECUTION_MODE=ibkr` in env as fallback default).
 
 ### Prerequisites
 
@@ -275,12 +275,16 @@ Phase 4 places **real bracket orders** on IBKR paper when `EXECUTION_MODE=ibkr`.
 
 ### Enable IBKR execution
 
+**Dashboard (recommended):** On Overview, turn on **IBKR paper orders** in Trading controls. The trader picks this up within ~30s (no restart).
+
+**Or via env** (initial default only):
+
 ```env
 DATA_SOURCE=ibkr
 EXECUTION_MODE=ibkr
 ```
 
-Restart the trader. On BUY ELIGIBLE + bot ON + risk pass, the engine places a **market buy** with **stop-loss** and **take-profit** bracket legs at IBKR.
+On BUY ELIGIBLE + bot ON + risk pass, the engine places a **market buy** with **stop-loss** and **take-profit** bracket legs at IBKR.
 
 ### Expected log output
 
@@ -298,7 +302,9 @@ IBKR exit NVDA @ $228.00 (take_profit) PnL $3.37
 - [ ] SL or TP closes trade in IBKR and Supabase
 - [ ] Live mode still requires `LIVE_TRADING_CONFIRMATION` (unchanged)
 
-Execution mode is **env-only** — not toggleable from the dashboard.
+Execution mode is controlled from the dashboard **Overview → Trading controls** (`bot_status.execution_mode`). Env `EXECUTION_MODE` is the fallback if the database read fails.
+
+Status badges show **Trader online/offline** based on heartbeat age (~30s). Stopping the trader clears connection flags immediately.
 
 ## Running Phase 5 (Next.js Dashboard)
 
@@ -323,7 +329,8 @@ Open [http://localhost:3000](http://localhost:3000) and sign in.
 
 - [ ] Login required — unauthenticated users redirect to `/login`
 - [ ] Overview shows equity, connection badges, open positions
-- [ ] Bot toggle updates `bot_status.enabled` (trader picks up within ~30s)
+- [ ] Overview trading controls update `bot_status.enabled` and `execution_mode` (trader picks up within ~30s)
+- [ ] Stopping the trader shows Trader/IBKR/Jev offline on the dashboard
 - [ ] Settings save and trader reloads risk params each cycle
 - [ ] Predictions and trades populate from engine data
 - [ ] Live updates via Supabase Realtime (no manual refresh)

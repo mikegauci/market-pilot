@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Logo } from "@/components/logo";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -38,8 +39,8 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-8">
-        <h1 className="text-2xl font-semibold">Market Pilot</h1>
-        <p className="mt-1 text-sm text-zinc-400">Sign in to your trading dashboard</p>
+        <Logo size="lg" />
+        <p className="mt-3 text-sm text-zinc-400">Sign in to your trading dashboard</p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           <div>
