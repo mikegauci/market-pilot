@@ -6,6 +6,7 @@ import { Card, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RiskProfilePicker } from "@/components/risk-profile-picker";
+import { WatchlistPicker } from "@/components/watchlist-picker";
 import { RiskRecommendationStatus } from "@/components/risk-recommendation-status";
 import { updateSettings } from "@/lib/actions";
 import {
@@ -427,14 +428,7 @@ export function SettingsForm({
           )}
         />
         <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/30 p-3 sm:col-span-2">
-          <Label htmlFor="watchlist">Watchlist (comma-separated)</Label>
-          <Input
-            id="watchlist"
-            name="watchlist"
-            defaultValue={settings.watchlist.join(", ")}
-            required
-            className="mt-2"
-          />
+          <WatchlistPicker defaultValue={settings.watchlist} />
           <FieldDescription>{SETTING_DESCRIPTIONS.watchlist}</FieldDescription>
         </div>
         <div className="sm:col-span-2 space-y-2">

@@ -40,3 +40,24 @@ describe("parseSettingsForm risk_profile", () => {
     ).toThrow("Risk profile must be low, medium, or high");
   });
 });
+
+describe("parseSettingsForm watchlist", () => {
+  it("deduplicates symbols", () => {
+    const parsed = parseSettingsForm(
+      form({ ...baseFields, watchlist: "AAPL, aapl, MSFT" }),
+    );
+    expect(parsed.watchlist).toEqual(["AAPL", "MSFT"]);
+  });
+
+  it("rejects empty watchlist", () => {
+    expect(() => parseSettingsForm(form({ ...baseFields, watchlist: "  " }))).toThrow(
+      "Watchlist must include at least one symbol",
+    );
+  });
+
+  it("rejects malformed tickers", () => {
+    expect(() =>
+      parseSettingsForm(form({ ...baseFields, watchlist: "AAPL, bad ticker" })),
+    ).toThrow("Invalid ticker(s): BAD TICKER");
+  });
+});

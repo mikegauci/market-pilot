@@ -89,12 +89,20 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
 
   const watchlistRaw = String(formData.get("watchlist") ?? "");
-  const watchlist = watchlistRaw
-    .split(",")
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean);
+  const watchlist = [
+    ...new Set(
+      watchlistRaw
+        .split(",")
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ];
   if (watchlist.length === 0) {
     throw new Error("Watchlist must include at least one symbol");
+  }
+  const invalidSymbols = watchlist.filter((s) => !/^[A-Z][A-Z0-9.]{0,9}$/.test(s));
+  if (invalidSymbols.length > 0) {
+    throw new Error(`Invalid ticker(s): ${invalidSymbols.join(", ")}`);
   }
 
   return {
