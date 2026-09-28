@@ -331,7 +331,7 @@ Open [http://localhost:3000](http://localhost:3000) and sign in.
 
 ### Deploy to Vercel
 
-Live at [dashboard](https://vercel.com/mikegaucis-projects/dashboard) (`https://dashboard-mikegaucis-projects.vercel.app`). Root directory `dashboard`, env vars per [`dashboard/README.md`](dashboard/README.md). Add the Vercel URL to Supabase Auth redirect URLs for login to work in production.
+Live at [market-pilot-dashboard](https://vercel.com/mikegaucis-projects/market-pilot-dashboard) (`https://market-pilot-dashboard.vercel.app`). Root directory `dashboard`, env vars per [`dashboard/README.md`](dashboard/README.md). Add the Vercel URL to Supabase Auth redirect URLs for login to work in production.
 
 ## Phase 1 Verification Checklist
 
