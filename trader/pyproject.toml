@@ -1,0 +1,23 @@
+[project]
+name = "market-pilot-trader"
+version = "0.1.0"
+description = "Python trading engine for market-pilot"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "ib-insync>=0.9.86",
+    "supabase>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+]
+
+[project.scripts]
+market-pilot-trader = "main:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main", "config"]
