@@ -16,7 +16,14 @@ from market.history import HistoryStore
 from market.hours import is_us_regular_session_open
 from market.indicators import build_market_state
 from market.mock import MockMarketProvider
-from models.types import BotStatusUpdate, DataSource, ExecutionMode, Quote, TradingMode
+from models.types import (
+    BotStatusUpdate,
+    DataSource,
+    ExecutionMode,
+    Quote,
+    RiskSettings,
+    TradingMode,
+)
 from risk.manager import RiskManager
 from strategy.signals import is_trade_eligible, signal_tier
 
@@ -134,8 +141,10 @@ def _init_risk_manager(
     db: SupabaseRepository,
     ibkr: IBKRClient,
     trading_mode: TradingMode,
+    risk_settings: RiskSettings | None = None,
 ) -> RiskManager:
-    risk_settings = db.get_risk_settings()
+    if risk_settings is None:
+        risk_settings = db.get_risk_settings()
     capital, currency = _resolve_effective_capital(ibkr, risk_settings.account_capital)
     return RiskManager(
         settings=risk_settings,
@@ -182,8 +191,8 @@ def run() -> int:
         logger.error("Supabase initialization failed: %s", exc)
         return 1
 
-    strategy_settings = db.get_settings()
-    watchlist = strategy_settings.watchlist or settings.watchlist_symbols
+    risk_settings = db.get_risk_settings()
+    watchlist = risk_settings.watchlist or settings.watchlist_symbols
     all_symbols = _all_symbols(watchlist)
 
     mock = MockMarketProvider(all_symbols)
@@ -222,16 +231,16 @@ def run() -> int:
     else:
         logger.info("Using mock market data (IBKR not required)")
 
-    trading_mode = settings.trading_mode
+    bot_control = db.get_bot_control(settings.execution_mode)
+    trading_mode = bot_control.trading_mode
+    execution_mode = bot_control.execution_mode
     risk_manager: Optional[RiskManager] = None
     if db:
-        trading_mode = db.get_trading_mode()
-        risk_manager = _init_risk_manager(db, ibkr, trading_mode)
-        db_execution = db.get_execution_mode(settings.execution_mode)
-        if db_execution != settings.execution_mode:
+        risk_manager = _init_risk_manager(db, ibkr, trading_mode, risk_settings)
+        if execution_mode != settings.execution_mode:
             logger.info(
                 "Execution mode from dashboard: %s (env default: %s)",
-                db_execution.value,
+                execution_mode.value,
                 settings.execution_mode.value,
             )
         logger.info(
@@ -243,9 +252,8 @@ def run() -> int:
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)
 
-    bot_enabled = False
+    bot_enabled = bot_control.enabled
     jev_connected = False
-    execution_mode = settings.execution_mode
     last_heartbeat = 0.0
     data_source_label = "ibkr" if ibkr.is_connected() else "mock"
 
@@ -256,20 +264,21 @@ def run() -> int:
 
         try:
             if db:
-                bot_enabled = db.get_bot_enabled()
-                trading_mode = db.get_trading_mode()
-                execution_mode = db.get_execution_mode(settings.execution_mode)
-                strategy_settings = db.get_settings()
-                watchlist = strategy_settings.watchlist or settings.watchlist_symbols
+                bot_control = db.get_bot_control(settings.execution_mode)
+                bot_enabled = bot_control.enabled
+                trading_mode = bot_control.trading_mode
+                execution_mode = bot_control.execution_mode
+                risk_settings = db.get_risk_settings()
+                watchlist = risk_settings.watchlist or settings.watchlist_symbols
                 all_symbols = _all_symbols(watchlist)
                 _sync_watchlist_symbols(
                     all_symbols, mock, history, settings.data_source
                 )
                 if risk_manager:
-                    risk_manager.update_settings(db.get_risk_settings())
+                    risk_manager.update_settings(risk_settings)
                     capital, currency = _resolve_effective_capital(
                         ibkr,
-                        risk_manager.settings.account_capital,
+                        risk_settings.account_capital,
                     )
                     risk_manager.update_capital(capital, currency)
 
@@ -335,8 +344,8 @@ def run() -> int:
                     prediction = jev.predict(state)
                     tier = signal_tier(
                         prediction,
-                        strategy_settings.signal_record_threshold,
-                        strategy_settings.minimum_jev_confidence,
+                        risk_settings.signal_record_threshold,
+                        risk_settings.minimum_jev_confidence,
                     )
                     _log_jev_prediction(prediction, tier)
 
@@ -416,29 +425,38 @@ def run() -> int:
 
             now = time.monotonic()
             if db and (now - last_heartbeat) >= settings.heartbeat_interval_sec:
+                heartbeat_status = BotStatusUpdate(
+                    enabled=bot_enabled,
+                    trading_mode=trading_mode,
+                    ibkr_connected=ibkr.is_connected(),
+                    jev_connected=jev_connected_this_cycle or jev_connected,
+                    execution_mode=execution_mode,
+                    last_error=None,
+                )
+                account = None
+                ibkr_positions = None
+                simulated_portfolio = None
+                open_trades = None
+
                 if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
                     try:
                         account = ibkr.get_account_summary()
-                        positions = ibkr.get_positions()
-                        db.insert_portfolio_snapshot(account)
-                        db.upsert_positions(positions)
+                        ibkr_positions = ibkr.get_positions()
                     except Exception as exc:
                         logger.warning("IBKR heartbeat failed: %s", exc)
                 elif risk_manager:
-                    portfolio = risk_manager.get_portfolio_snapshot(quotes_by_symbol)
-                    db.insert_simulated_portfolio(portfolio)
-                    db.sync_positions_from_trades(risk_manager.open_trades, quotes)
-
-                db.insert_market_snapshots(quotes)
-                db.update_bot_status(
-                    BotStatusUpdate(
-                        enabled=bot_enabled,
-                        trading_mode=trading_mode,
-                        ibkr_connected=ibkr.is_connected(),
-                        jev_connected=jev_connected_this_cycle or jev_connected,
-                        execution_mode=execution_mode,
-                        last_error=None,
+                    simulated_portfolio = risk_manager.get_portfolio_snapshot(
+                        quotes_by_symbol
                     )
+                    open_trades = risk_manager.open_trades
+
+                db.write_heartbeat(
+                    heartbeat_status,
+                    quotes,
+                    account=account,
+                    ibkr_positions=ibkr_positions,
+                    simulated_portfolio=simulated_portfolio,
+                    open_trades=open_trades,
                 )
                 logger.info("Heartbeat written to Supabase")
                 last_heartbeat = now

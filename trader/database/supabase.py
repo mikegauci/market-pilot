@@ -8,6 +8,7 @@ from supabase import Client, create_client
 
 from models.types import (
     AccountSummary,
+    BotControl,
     BotStatusUpdate,
     ExecutionMode,
     JevPrediction,
@@ -94,19 +95,22 @@ class SupabaseRepository:
         }
         self.client.table("portfolio_history").insert(payload).execute()
 
-    def upsert_positions(self, positions: List[Position]) -> None:
-        # Replace snapshot: delete rows not in current IBKR positions, upsert the rest.
-        current_symbols = {p.symbol for p in positions}
-
+    def _replace_positions(self, rows: List[dict], current_symbols: set[str]) -> None:
         existing = self.client.table("positions").select("symbol").execute()
-        for row in existing.data or []:
-            symbol = row.get("symbol")
-            if symbol and symbol not in current_symbols:
-                self.client.table("positions").delete().eq("symbol", symbol).execute()
+        stale = [
+            row["symbol"]
+            for row in (existing.data or [])
+            if row.get("symbol") and row["symbol"] not in current_symbols
+        ]
+        if stale:
+            self.client.table("positions").delete().in_("symbol", stale).execute()
+        if rows:
+            self.client.table("positions").upsert(rows, on_conflict="symbol").execute()
 
+    def upsert_positions(self, positions: List[Position]) -> None:
         now = datetime.now(timezone.utc).isoformat()
-        for position in positions:
-            payload = {
+        rows = [
+            {
                 "symbol": position.symbol,
                 "quantity": position.quantity,
                 "avg_cost": position.avg_cost,
@@ -116,7 +120,9 @@ class SupabaseRepository:
                 "currency": position.currency,
                 "updated_at": now,
             }
-            self.client.table("positions").upsert(payload, on_conflict="symbol").execute()
+            for position in positions
+        ]
+        self._replace_positions(rows, {position.symbol for position in positions})
 
     def insert_market_snapshots(self, quotes: List[Quote]) -> None:
         if not quotes:
@@ -137,20 +143,33 @@ class SupabaseRepository:
         ]
         self.client.table("market_snapshots").insert(rows).execute()
 
-    def get_bot_enabled(self) -> bool:
-        result = self.client.table("bot_status").select("enabled").eq("id", 1).single().execute()
-        return bool(result.data.get("enabled", False))
-
-    def get_trading_mode(self) -> TradingMode:
-        result = (
-            self.client.table("bot_status")
-            .select("trading_mode")
-            .eq("id", 1)
-            .single()
-            .execute()
-        )
-        mode = result.data.get("trading_mode", "paper")
-        return TradingMode(mode)
+    def get_bot_control(
+        self,
+        fallback_execution_mode: ExecutionMode = ExecutionMode.SIMULATED,
+    ) -> BotControl:
+        try:
+            result = (
+                self.client.table("bot_status")
+                .select("enabled, trading_mode, execution_mode")
+                .eq("id", 1)
+                .single()
+                .execute()
+            )
+            data = result.data
+            return BotControl(
+                enabled=bool(data.get("enabled", False)),
+                trading_mode=TradingMode(data.get("trading_mode", "paper")),
+                execution_mode=ExecutionMode(
+                    data.get("execution_mode", fallback_execution_mode.value)
+                ),
+            )
+        except Exception as exc:
+            logger.warning("Could not read bot_status: %s", exc)
+            return BotControl(
+                enabled=False,
+                trading_mode=TradingMode.PAPER,
+                execution_mode=fallback_execution_mode,
+            )
 
     def mark_trader_offline(
         self,
@@ -170,21 +189,6 @@ class SupabaseRepository:
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         self.client.table("bot_status").update(payload).eq("id", 1).execute()
-
-    def get_execution_mode(self, fallback: ExecutionMode = ExecutionMode.SIMULATED) -> ExecutionMode:
-        try:
-            result = (
-                self.client.table("bot_status")
-                .select("execution_mode")
-                .eq("id", 1)
-                .single()
-                .execute()
-            )
-            mode = result.data.get("execution_mode", fallback.value)
-            return ExecutionMode(mode)
-        except Exception as exc:
-            logger.warning("Could not read execution_mode from bot_status: %s", exc)
-            return fallback
 
     def get_settings(self) -> StrategySettings:
         risk = self.get_risk_settings()
@@ -311,15 +315,8 @@ class SupabaseRepository:
         quotes: List[Quote],
     ) -> None:
         quotes_by_symbol = {q.symbol: q for q in quotes}
-        current_symbols = {t.symbol for t in open_trades}
-
-        existing = self.client.table("positions").select("symbol").execute()
-        for row in existing.data or []:
-            symbol = row.get("symbol")
-            if symbol and symbol not in current_symbols:
-                self.client.table("positions").delete().eq("symbol", symbol).execute()
-
         now = datetime.now(timezone.utc).isoformat()
+        rows = []
         for trade in open_trades:
             quote = quotes_by_symbol.get(trade.symbol)
             market_price = quote.price if quote else trade.entry_price
@@ -327,18 +324,42 @@ class SupabaseRepository:
             unrealized = None
             if market_price is not None:
                 unrealized = (market_price - trade.entry_price) * trade.quantity
+            rows.append(
+                {
+                    "symbol": trade.symbol,
+                    "quantity": trade.quantity,
+                    "avg_cost": trade.entry_price,
+                    "market_price": market_price,
+                    "market_value": market_value,
+                    "unrealized_pnl": unrealized,
+                    "currency": "USD",
+                    "updated_at": now,
+                }
+            )
+        self._replace_positions(rows, {trade.symbol for trade in open_trades})
 
-            payload = {
-                "symbol": trade.symbol,
-                "quantity": trade.quantity,
-                "avg_cost": trade.entry_price,
-                "market_price": market_price,
-                "market_value": market_value,
-                "unrealized_pnl": unrealized,
-                "currency": "USD",
-                "updated_at": now,
-            }
-            self.client.table("positions").upsert(payload, on_conflict="symbol").execute()
+    def write_heartbeat(
+        self,
+        status: BotStatusUpdate,
+        quotes: List[Quote],
+        *,
+        account: Optional[AccountSummary] = None,
+        ibkr_positions: Optional[List[Position]] = None,
+        simulated_portfolio: Optional[SimulatedPortfolio] = None,
+        open_trades: Optional[List[TradeRecord]] = None,
+    ) -> None:
+        if account is not None:
+            self.insert_portfolio_snapshot(account)
+        elif simulated_portfolio is not None:
+            self.insert_simulated_portfolio(simulated_portfolio)
+
+        if ibkr_positions is not None:
+            self.upsert_positions(ibkr_positions)
+        elif open_trades is not None:
+            self.sync_positions_from_trades(open_trades, quotes)
+
+        self.insert_market_snapshots(quotes)
+        self.update_bot_status(status)
 
     def insert_simulated_portfolio(self, portfolio: SimulatedPortfolio) -> None:
         payload = {

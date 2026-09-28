@@ -62,6 +62,13 @@ class BotStatusUpdate:
 
 
 @dataclass
+class BotControl:
+    enabled: bool
+    trading_mode: TradingMode
+    execution_mode: ExecutionMode
+
+
+@dataclass
 class MarketState:
     symbol: str
     price: float
