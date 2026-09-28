@@ -6,6 +6,8 @@ from typing import List, Optional
 
 from supabase import Client, create_client
 
+from risk.recommendations import should_advance_baseline
+
 from models.types import (
     AccountSummary,
     BotControl,
@@ -204,7 +206,8 @@ class SupabaseRepository:
             .select(
                 "minimum_jev_confidence, signal_record_threshold, risk_per_trade, "
                 "max_position_size, max_daily_loss, max_open_positions, "
-                "stop_loss_percentage, take_profit_percentage, account_capital, watchlist"
+                "stop_loss_percentage, take_profit_percentage, account_capital, "
+                "risk_sync_equity, watchlist"
             )
             .eq("id", 1)
             .single()
@@ -222,8 +225,45 @@ class SupabaseRepository:
             stop_loss_percentage=float(data.get("stop_loss_percentage", 0.01)),
             take_profit_percentage=float(data.get("take_profit_percentage", 0.015)),
             account_capital=float(data.get("account_capital", 1000)),
+            risk_sync_equity=(
+                float(data["risk_sync_equity"])
+                if data.get("risk_sync_equity") is not None
+                else None
+            ),
             watchlist=[str(s).upper() for s in watchlist],
         )
+
+    def maybe_advance_risk_baseline(
+        self,
+        current_equity: float,
+        threshold: float = 0.05,
+    ) -> bool:
+        """Advance risk_sync_equity when equity moves enough; does not change risk dollar fields."""
+        if current_equity <= 0:
+            return False
+
+        result = (
+            self.client.table("settings")
+            .select("risk_sync_equity")
+            .eq("id", 1)
+            .single()
+            .execute()
+        )
+        raw_baseline = result.data.get("risk_sync_equity") if result.data else None
+        baseline = float(raw_baseline) if raw_baseline is not None else None
+
+        if not should_advance_baseline(current_equity, baseline, threshold):
+            return False
+
+        self.client.table("settings").update(
+            {"risk_sync_equity": current_equity}
+        ).eq("id", 1).execute()
+        logger.info(
+            "Risk recommendation baseline updated: %s -> %s",
+            baseline,
+            current_equity,
+        )
+        return True
 
     def get_open_trades(self) -> List[TradeRecord]:
         result = (

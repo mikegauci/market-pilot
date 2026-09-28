@@ -212,7 +212,19 @@ UPDATE bot_status SET enabled = true WHERE id = 1;
 
 When IBKR is connected, **effective capital** uses your paper account `NetLiquidation` (e.g. €1M). Tune absolute limits in Supabase or the dashboard Settings page.
 
-**Recommended values for ~€1M paper account:**
+**Risk profiles** (dashboard Settings — percentages of equity):
+
+| Profile | Risk per trade | Max position | Max daily loss |
+|---|---|---|---|
+| Low | 0.15% | 0.75% | 0.75% |
+| Medium (default) | 0.25% | 1.00% | 1.00% |
+| High | 0.40% | 1.50% | 1.50% |
+
+Example at €1M: Low €1,500 / €7,500 / €7,500 — Medium €2,500 / €10,000 / €10,000 — High €4,000 / €15,000 / €15,000.
+
+Set `risk_profile` to `low`, `medium`, or `high` in the dashboard; Apply fills dollar fields from your equity tier. Stop loss / take profit / Jev confidence are unchanged across profiles.
+
+**Medium profile (~€1M paper account):**
 
 | Column | Suggested | Purpose |
 |---|---|---|

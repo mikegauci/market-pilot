@@ -116,6 +116,7 @@ class RiskSettings:
     stop_loss_percentage: float
     take_profit_percentage: float
     account_capital: float
+    risk_sync_equity: Optional[float]
     watchlist: List[str]
 
 

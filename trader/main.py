@@ -458,6 +458,21 @@ def run() -> int:
                     simulated_portfolio=simulated_portfolio,
                     open_trades=open_trades,
                 )
+
+                heartbeat_equity = None
+                if account is not None:
+                    heartbeat_equity = account.net_liquidation
+                if heartbeat_equity is None and risk_manager is not None:
+                    snapshot = simulated_portfolio or risk_manager.get_portfolio_snapshot(
+                        quotes_by_symbol
+                    )
+                    heartbeat_equity = snapshot.equity
+                if heartbeat_equity is not None and heartbeat_equity > 0:
+                    db.maybe_advance_risk_baseline(
+                        heartbeat_equity,
+                        threshold=settings.risk_sync_threshold_pct,
+                    )
+
                 logger.info("Heartbeat written to Supabase")
                 last_heartbeat = now
 

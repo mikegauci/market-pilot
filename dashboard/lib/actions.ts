@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { resolveCurrentEquity } from "@/lib/resolve-current-equity";
 import { createClient } from "@/lib/supabase/server";
+import { parseSettingsForm } from "@/lib/validate-settings";
 
 export async function toggleBot(enabled: boolean) {
   const supabase = await createClient();
@@ -27,29 +29,22 @@ export async function setExecutionMode(mode: "simulated" | "ibkr") {
 
 export async function updateSettings(formData: FormData) {
   const supabase = await createClient();
+  const parsed = parseSettingsForm(formData);
+  const equityForBaseline = await resolveCurrentEquity();
 
-  const watchlistRaw = String(formData.get("watchlist") ?? "");
-  const watchlist = watchlistRaw
-    .split(",")
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean);
-
-  const payload = {
-    minimum_jev_confidence: Number(formData.get("minimum_jev_confidence")),
-    signal_record_threshold: Number(formData.get("signal_record_threshold")),
-    risk_per_trade: Number(formData.get("risk_per_trade")),
-    max_position_size: Number(formData.get("max_position_size")),
-    max_daily_loss: Number(formData.get("max_daily_loss")),
-    max_open_positions: Number(formData.get("max_open_positions")),
-    stop_loss_percentage: Number(formData.get("stop_loss_percentage")),
-    take_profit_percentage: Number(formData.get("take_profit_percentage")),
-    watchlist,
+  const payload: Record<string, unknown> = {
+    ...parsed,
     updated_at: new Date().toISOString(),
   };
+
+  if (equityForBaseline > 0) {
+    payload.risk_sync_equity = equityForBaseline;
+  }
 
   const { error } = await supabase.from("settings").update(payload).eq("id", 1);
   if (error) throw new Error(error.message);
   revalidatePath("/settings");
+  revalidatePath("/");
 }
 
 export async function signOut() {

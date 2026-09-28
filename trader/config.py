@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     jev_timeout_sec: float = 10.0
 
     heartbeat_interval_sec: int = 10
+    risk_sync_threshold_pct: float = 0.05
     log_level: str = "INFO"
 
     @field_validator("trading_mode", mode="before")

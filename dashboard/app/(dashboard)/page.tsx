@@ -12,6 +12,7 @@ import {
   getRecentTrades,
   getSettings,
 } from "@/lib/queries";
+import { resolveBaselineEquity } from "@/lib/risk-recommendations";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function OverviewPage() {
@@ -25,6 +26,14 @@ export default async function OverviewPage() {
   ]);
 
   const currency = portfolio?.currency ?? "USD";
+  const currentEquity = portfolio?.equity ?? settings?.account_capital ?? 0;
+  const baselineEquity = settings
+    ? resolveBaselineEquity(
+        settings.risk_sync_equity,
+        currentEquity,
+        settings.account_capital,
+      )
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -66,7 +75,14 @@ export default async function OverviewPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <PortfolioChart data={history} currency={currency} />
-        {settings && <SettingsSummary settings={settings} />}
+        {settings && (
+          <SettingsSummary
+            settings={settings}
+            currentEquity={currentEquity}
+            baselineEquity={baselineEquity}
+            currency={currency}
+          />
+        )}
       </div>
 
       <PositionsTable positions={positions} />

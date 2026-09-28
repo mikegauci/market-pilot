@@ -23,6 +23,8 @@ export type Settings = {
   stop_loss_percentage: number;
   take_profit_percentage: number;
   account_capital: number;
+  risk_sync_equity: number | null;
+  risk_profile?: "low" | "medium" | "high" | null;
   watchlist: string[];
   updated_at: string;
 };
