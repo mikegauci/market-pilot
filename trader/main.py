@@ -25,12 +25,22 @@ _shutdown_requested = False
 _warmup_logged: Set[str] = set()
 _last_closed_market_log = 0.0
 _CLOSED_MARKET_LOG_INTERVAL_SEC = 300.0
+_SHUTDOWN_SLEEP_CHUNK_SEC = 0.5
 
 
 def _handle_shutdown(signum: int, _frame: object) -> None:
     global _shutdown_requested
     logger.info("Received signal %s, shutting down...", signum)
     _shutdown_requested = True
+
+
+def _interruptible_sleep(seconds: float) -> None:
+    deadline = time.monotonic() + seconds
+    while not _shutdown_requested:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(min(_SHUTDOWN_SLEEP_CHUNK_SEC, remaining))
 
 
 def _configure_logging(level: str) -> None:
@@ -403,7 +413,7 @@ def run() -> int:
         )
         sleep_for = max(0.0, interval - elapsed)
         if sleep_for > 0 and not _shutdown_requested:
-            time.sleep(sleep_for)
+            _interruptible_sleep(sleep_for)
 
     if db:
         try:
