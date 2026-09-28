@@ -10,6 +10,8 @@ from models.types import AccountSummary, BracketLegs, BracketOrderResult, Positi
 
 logger = logging.getLogger(__name__)
 
+TERMINAL_ORDER_STATUSES = frozenset({"Filled", "Cancelled", "Inactive", "ApiCancelled"})
+
 
 def _safe_float(value: object) -> Optional[float]:
     if value is None:
@@ -39,6 +41,24 @@ def _ticker_price(ticker: object) -> Optional[float]:
     if bid is not None and ask is not None and ask >= bid > 0:
         return round((bid + ask) / 2, 6)
     return None
+
+
+def _describe_trade_state(trade: Trade) -> str:
+    order_status = trade.orderStatus
+    parts = [
+        f"status={order_status.status}",
+        f"filled={order_status.filled}",
+        f"remaining={order_status.remaining}",
+    ]
+    why_held = getattr(order_status, "whyHeld", None)
+    if why_held:
+        parts.append(f"whyHeld={why_held!r}")
+    for entry in reversed(trade.log):
+        if entry.errorCode:
+            message = entry.message.strip() or "(no message)"
+            parts.append(f"IB {entry.errorCode}: {message}")
+            break
+    return ", ".join(parts)
 
 
 class IBKRClient:
@@ -301,6 +321,22 @@ class IBKRClient:
 
         return quotes
 
+    def has_pending_entry_order(self, symbol: str) -> bool:
+        """True when an unfilled BUY order is already open for this symbol."""
+        if not self.is_connected():
+            return False
+        self.ib.reqOpenOrders()
+        self.ib.sleep(0.2)
+        for trade in self.ib.openTrades():
+            contract = trade.contract
+            if getattr(contract, "symbol", None) != symbol:
+                continue
+            if trade.order.action != "BUY":
+                continue
+            if trade.orderStatus.status not in TERMINAL_ORDER_STATUSES:
+                return True
+        return False
+
     def place_bracket_buy(
         self,
         symbol: str,
@@ -322,6 +358,7 @@ class IBKRClient:
         parent.orderId = self.ib.client.getReqId()
         parent.transmit = False
         parent.tif = "DAY"
+        parent.outsideRth = False
 
         take_profit_order = LimitOrder("SELL", qty, round(take_profit, 2))
         take_profit_order.account = account
@@ -329,6 +366,7 @@ class IBKRClient:
         take_profit_order.parentId = parent.orderId
         take_profit_order.transmit = False
         take_profit_order.tif = "DAY"
+        take_profit_order.outsideRth = False
 
         stop_loss_order = StopOrder("SELL", qty, round(stop_loss, 2))
         stop_loss_order.account = account
@@ -336,23 +374,25 @@ class IBKRClient:
         stop_loss_order.parentId = parent.orderId
         stop_loss_order.transmit = True
         stop_loss_order.tif = "DAY"
+        stop_loss_order.outsideRth = False
 
         parent_trade = self.ib.placeOrder(contract, parent)
         tp_trade = self.ib.placeOrder(contract, take_profit_order)
         sl_trade = self.ib.placeOrder(contract, stop_loss_order)
 
-        fill = self._wait_for_fill(parent_trade, fill_timeout_sec)
+        fill = self._wait_for_fill(parent_trade, fill_timeout_sec, symbol)
         if fill is None:
             status = parent_trade.orderStatus.status
+            detail = _describe_trade_state(parent_trade)
             self._cancel_trade(parent_trade)
             self._cancel_trade(tp_trade)
             self._cancel_trade(sl_trade)
             if status in {"Cancelled", "Inactive", "ApiCancelled"}:
                 raise RuntimeError(
-                    f"Parent order for {symbol} was {status.lower()} before fill"
+                    f"Parent order for {symbol} was {status.lower()} before fill ({detail})"
                 )
             raise RuntimeError(
-                f"Parent order for {symbol} did not fill within {fill_timeout_sec}s"
+                f"Parent order for {symbol} did not fill within {fill_timeout_sec}s ({detail})"
             )
 
         fill_price, filled_qty = fill
@@ -378,9 +418,14 @@ class IBKRClient:
         self,
         trade: Trade,
         timeout_sec: float,
+        symbol: str = "",
     ) -> Optional[Tuple[float, float]]:
         elapsed = 0.0
         step = 0.5
+        last_logged_filled = 0.0
+        target_qty = _safe_float(trade.order.totalQuantity) or 0.0
+        label = symbol or getattr(trade.contract, "symbol", "order")
+
         while elapsed < timeout_sec:
             self.ib.sleep(step)
             elapsed += step
@@ -392,6 +437,30 @@ class IBKRClient:
                     return avg, filled
             if status in {"Cancelled", "Inactive", "ApiCancelled"}:
                 return None
+
+            filled = _safe_float(trade.orderStatus.filled) or 0.0
+            if filled > last_logged_filled:
+                logger.info(
+                    "%s fill progress: %.0f / %.0f shares (%.0fs)",
+                    label,
+                    filled,
+                    target_qty,
+                    elapsed,
+                )
+                last_logged_filled = filled
+
+        filled = _safe_float(trade.orderStatus.filled) or 0.0
+        avg = _safe_float(trade.orderStatus.avgFillPrice)
+        if filled >= 1 and avg is not None:
+            logger.warning(
+                "%s partial fill accepted after %.0fs timeout: %.0f / %.0f shares @ $%.2f",
+                label,
+                timeout_sec,
+                filled,
+                target_qty,
+                avg,
+            )
+            return avg, filled
         return None
 
     def _cancel_trade(self, trade: Trade) -> None:

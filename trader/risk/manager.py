@@ -158,11 +158,9 @@ class RiskManager:
         remaining: List[TradeRecord] = []
 
         for trade in self.open_trades:
-            if (
-                trade.execution_mode == "ibkr"
-                and trade.ibkr_sl_order_id
-                and trade.ibkr_tp_order_id
-            ):
+            # IBKR trades exit only when bracket SL/TP legs fill (sync_ibkr_exits).
+            # Orphans reconciled without live bracket orders must not simulate-close.
+            if trade.execution_mode == "ibkr":
                 remaining.append(trade)
                 continue
 

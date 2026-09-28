@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 _shutdown_requested = False
 _warmup_logged: Set[str] = set()
 _last_closed_market_log = 0.0
+_ibkr_entry_cooldown_until: Dict[str, float] = {}
 _CLOSED_MARKET_LOG_INTERVAL_SEC = 300.0
 _SHUTDOWN_SLEEP_CHUNK_SEC = 0.5
 
@@ -76,6 +77,8 @@ def _configure_logging(level: str) -> None:
         format="%(asctime)s %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
     )
+    # ib_insync logs every orderStatus tick at INFO — far too noisy for normal use.
+    logging.getLogger("ib_insync").setLevel(logging.WARNING)
 
 
 def _connect_ibkr(client: IBKRClient, max_attempts: int = 1, delay_sec: float = 2.0) -> bool:
@@ -377,36 +380,93 @@ def run() -> int:
                                 and ibkr.is_connected()
                             ):
                                 try:
-                                    bracket = ibkr.place_bracket_buy(
-                                        trade.symbol,
-                                        trade.quantity,
-                                        trade.stop_loss,
-                                        trade.take_profit,
+                                    skip_reason: Optional[str] = None
+                                    now_mono = time.monotonic()
+                                    cooldown_until = _ibkr_entry_cooldown_until.get(
+                                        trade.symbol, 0.0
                                     )
-                                    trade.execution_mode = "ibkr"
-                                    trade.entry_price = bracket.fill_price
-                                    trade.quantity = bracket.filled_quantity
-                                    trade.position_value = (
-                                        bracket.fill_price * bracket.filled_quantity
-                                    )
-                                    trade.ibkr_parent_order_id = bracket.parent_order_id
-                                    trade.ibkr_sl_order_id = bracket.sl_order_id
-                                    trade.ibkr_tp_order_id = bracket.tp_order_id
-                                    db.insert_trade(trade)
-                                    risk_manager.register_open_trade(trade)
-                                    trade_created = True
-                                    logger.info(
-                                        "IBKR BUY %s x %.0f @ $%.2f (SL $%.2f / TP $%.2f)",
-                                        trade.symbol,
-                                        trade.quantity,
-                                        trade.entry_price,
-                                        trade.stop_loss,
-                                        trade.take_profit,
-                                    )
+                                    if now_mono < cooldown_until:
+                                        remaining = cooldown_until - now_mono
+                                        skip_reason = (
+                                            f"cooldown after recent failure "
+                                            f"({remaining:.0f}s left)"
+                                        )
+                                    elif ibkr.has_pending_entry_order(trade.symbol):
+                                        skip_reason = "unfilled BUY order already open"
+                                    else:
+                                        try:
+                                            account = ibkr.get_account_summary()
+                                            if (
+                                                trade.position_value
+                                                > account.buying_power
+                                            ):
+                                                skip_reason = (
+                                                    "ibkr_insufficient_buying_power "
+                                                    f"(need ${trade.position_value:.0f}, "
+                                                    f"have ${account.buying_power:.0f})"
+                                                )
+                                        except Exception as exc:
+                                            logger.warning(
+                                                "Could not verify IBKR buying power "
+                                                "for %s: %s",
+                                                trade.symbol,
+                                                exc,
+                                            )
+
+                                    if skip_reason:
+                                        logger.info(
+                                            "Skipping %s IBKR entry — %s",
+                                            trade.symbol,
+                                            skip_reason,
+                                        )
+                                    else:
+                                        bracket = ibkr.place_bracket_buy(
+                                            trade.symbol,
+                                            trade.quantity,
+                                            trade.stop_loss,
+                                            trade.take_profit,
+                                            fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                                        )
+                                        trade.execution_mode = "ibkr"
+                                        trade.entry_price = bracket.fill_price
+                                        trade.quantity = bracket.filled_quantity
+                                        trade.position_value = (
+                                            bracket.fill_price
+                                            * bracket.filled_quantity
+                                        )
+                                        trade.ibkr_parent_order_id = (
+                                            bracket.parent_order_id
+                                        )
+                                        trade.ibkr_sl_order_id = bracket.sl_order_id
+                                        trade.ibkr_tp_order_id = bracket.tp_order_id
+                                        db.insert_trade(trade)
+                                        risk_manager.register_open_trade(trade)
+                                        trade_created = True
+                                        logger.info(
+                                            "IBKR BUY %s x %.0f @ $%.2f "
+                                            "(SL $%.2f / TP $%.2f)",
+                                            trade.symbol,
+                                            trade.quantity,
+                                            trade.entry_price,
+                                            trade.stop_loss,
+                                            trade.take_profit,
+                                        )
                                 except Exception as exc:
+                                    _ibkr_entry_cooldown_until[symbol] = (
+                                        time.monotonic()
+                                        + settings.ibkr_entry_cooldown_sec
+                                    )
                                     logger.error(
                                         "IBKR order failed for %s: %s", symbol, exc
                                     )
+                                    if "PendingSubmit" in str(exc) or "whyHeld" in str(
+                                        exc
+                                    ):
+                                        logger.error(
+                                            "Hint: if orders stay PendingSubmit, disable "
+                                            "order confirmations in TWS/Gateway "
+                                            "(Global Config → Presets → Confirmations)."
+                                        )
                             elif execution_mode == ExecutionMode.IBKR:
                                 logger.warning(
                                     "Execution mode ibkr but IBKR not connected — skipping %s",

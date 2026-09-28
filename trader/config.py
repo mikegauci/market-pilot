@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     typesafe_ai_api_key: str = ""
     jev_model: str = "jev-latest"
     jev_timeout_sec: float = 10.0
+    ibkr_fill_timeout_sec: float = 60.0
+    ibkr_entry_cooldown_sec: float = 120.0
 
     heartbeat_interval_sec: int = 10
     risk_sync_threshold_pct: float = 0.05
