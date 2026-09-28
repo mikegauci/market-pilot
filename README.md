@@ -201,7 +201,7 @@ UPDATE bot_status SET enabled = true WHERE id = 1;
 
 | Column | Default | Purpose |
 |---|---|---|
-| `minimum_jev_confidence` | 0.80 | Min BUY % for ELIGIBLE signal |
+| `minimum_jev_confidence` | 0.85 | Min BUY % for ELIGIBLE signal |
 | `max_open_positions` | 2 | Max concurrent simulated positions |
 | `max_position_size` | 250 | Max notional per trade (USD) |
 | `risk_per_trade` | 2.50 | Max dollar risk per trade |
@@ -273,7 +273,25 @@ Simulated exit NVDA @ $222.38 (stop_loss) PnL $-2.25
 - [ ] `portfolio_history` tracks simulated equity / daily PnL
 - [ ] No orders submitted to IBKR
 
-To test without waiting for 80% BUY, temporarily lower `minimum_jev_confidence` in Supabase (restore to `0.80` after testing).
+To test without waiting for 85% BUY, temporarily lower `minimum_jev_confidence` in Supabase (restore to `0.85` after testing).
+
+### Strategy filters (Phase 3+)
+
+The trader applies additional gates before opening a position:
+
+| Filter | Default | Purpose |
+|---|---|---|
+| BUY − HOLD margin | 15% | Reject weak BUY signals |
+| Confirmation cycles | 2 | Require consecutive ELIGIBLE signals |
+| Max RSI | 70 | Skip overbought entries |
+| Price vs EMA 20 | above | Trend alignment |
+| SPY 5m change | ≥ −0.3% | Avoid broad-market headwinds |
+| Max spread | 0.15% | Skip illiquid quotes |
+| Max hold time | 15 min | Time-based exit (matches Jev horizon) |
+| Jev SELL exit | 75% | Close on high-confidence SELL |
+| Correlated positions | 2 max | Limit mega-cap tech stacking |
+
+Tune via `STRATEGY_*` env vars in `trader/.env` (see `.env.example`).
 
 ## Running Phase 4 (IBKR Paper Orders)
 

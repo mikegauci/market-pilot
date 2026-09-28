@@ -18,12 +18,21 @@ ACTION_QUESTION = {
     "instructions": (
         "Evaluate the short-term day-trading direction for this US equity "
         "from the supplied market state. Return calibrated buy, hold, or sell "
-        "probabilities for the next few minutes of intraday movement."
+        "probabilities for the next few minutes of intraday movement. "
+        "Prefer BUY only when momentum, volume, and trend alignment (price vs EMAs, "
+        "RSI not overbought) support a long entry. Penalize BUY when the stock is "
+        "extended, spread is wide, or broad market (SPY) is weak."
     ),
     "criteria": {
-        "buy": "Indicators and momentum favor entering a long position now.",
+        "buy": (
+            "Clear intraday edge: bullish momentum, supportive volume, price above "
+            "key EMAs, RSI not overbought, and no broad-market headwind."
+        ),
         "hold": "No clear edge; waiting is preferable to acting.",
-        "sell": "Indicators favor exiting or avoiding a long position now.",
+        "sell": (
+            "Indicators favor exiting or avoiding a long position now — weakening "
+            "momentum, overbought RSI, or price breaking below short-term support."
+        ),
     },
 }
 

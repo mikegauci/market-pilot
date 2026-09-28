@@ -36,7 +36,7 @@ export type ParsedSettings = {
 };
 
 function parseRiskProfile(formData: FormData): RiskProfile {
-  const raw = String(formData.get("risk_profile") ?? "medium");
+  const raw = String(formData.get("risk_profile") ?? "low");
   if (!isRiskProfile(raw)) {
     throw new Error("Risk profile must be low, medium, or high");
   }

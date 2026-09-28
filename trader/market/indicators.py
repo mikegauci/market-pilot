@@ -48,12 +48,15 @@ def build_market_state(
     quote: Quote,
     history: HistoryStore,
     spy_history: PriceHistory,
+    *,
+    warmup_min_samples: int = 30,
+    warmup_min_span_sec: float = 120.0,
 ) -> Optional[MarketState]:
     if quote.price is None:
         return None
 
     symbol_history = history.get(quote.symbol)
-    if not symbol_history.is_ready():
+    if not symbol_history.is_ready(warmup_min_samples, warmup_min_span_sec):
         return None
 
     prices = symbol_history.prices()

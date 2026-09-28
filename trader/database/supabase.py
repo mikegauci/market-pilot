@@ -231,8 +231,8 @@ class SupabaseRepository:
         data = result.data
         watchlist = data.get("watchlist") or []
         return RiskSettings(
-            minimum_jev_confidence=float(data.get("minimum_jev_confidence", 0.8)),
-            signal_record_threshold=float(data.get("signal_record_threshold", 0.75)),
+            minimum_jev_confidence=float(data.get("minimum_jev_confidence", 0.85)),
+            signal_record_threshold=float(data.get("signal_record_threshold", 0.80)),
             risk_per_trade=float(data.get("risk_per_trade", 2.5)),
             max_position_size=float(data.get("max_position_size", 250)),
             max_daily_loss=float(data.get("max_daily_loss", 10)),

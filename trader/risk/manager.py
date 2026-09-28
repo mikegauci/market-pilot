@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from models.types import (
@@ -153,7 +153,12 @@ class RiskManager:
         self.daily_realized_pnl += net_pnl
         self.total_realized_pnl += net_pnl
 
-    def check_exits(self, quotes_by_symbol: Dict[str, Quote]) -> List[ClosedTrade]:
+    def check_exits(
+        self,
+        quotes_by_symbol: Dict[str, Quote],
+        *,
+        max_hold_minutes: Optional[float] = None,
+    ) -> List[ClosedTrade]:
         closed: List[ClosedTrade] = []
         remaining: List[TradeRecord] = []
 
@@ -179,38 +184,67 @@ class RiskManager:
             elif price >= trade.take_profit:
                 exit_price = trade.take_profit
                 reason = "take_profit"
+            elif max_hold_minutes is not None and max_hold_minutes > 0:
+                hold_limit = trade.entry_time + timedelta(minutes=max_hold_minutes)
+                if datetime.now(timezone.utc) >= hold_limit:
+                    exit_price = price
+                    reason = "time_exit"
 
             if exit_price is None:
                 remaining.append(trade)
                 continue
 
-            gross_pnl = (exit_price - trade.entry_price) * trade.quantity
-            net_pnl = gross_pnl  # no commission/slippage in Phase 3
-            now = datetime.now(timezone.utc)
-
-            closed.append(
-                ClosedTrade(
-                    trade_id=trade.id,
-                    symbol=trade.symbol,
-                    exit_price=exit_price,
-                    exit_time=now,
-                    gross_pnl=gross_pnl,
-                    net_pnl=net_pnl,
-                    reason=reason,
-                )
-            )
-            self.daily_realized_pnl += net_pnl
-            self.total_realized_pnl += net_pnl
-            logger.info(
-                "Simulated exit %s @ $%.2f (%s) PnL $%.2f",
-                trade.symbol,
-                exit_price,
-                reason,
-                net_pnl,
-            )
+            closed.append(self._build_closed_trade(trade, exit_price, reason))
 
         self.open_trades = remaining
         return closed
+
+    def check_jev_exit(
+        self,
+        symbol: str,
+        quotes_by_symbol: Dict[str, Quote],
+    ) -> Optional[ClosedTrade]:
+        """Simulated exit at market when Jev SELL signal triggers (IBKR handled separately)."""
+        trade = next((t for t in self.open_trades if t.symbol == symbol), None)
+        if trade is None or trade.execution_mode == "ibkr":
+            return None
+
+        quote = quotes_by_symbol.get(symbol)
+        if quote is None or quote.price is None:
+            return None
+
+        closed = self._build_closed_trade(trade, quote.price, "jev_sell")
+        self.open_trades = [t for t in self.open_trades if t.id != trade.id]
+        return closed
+
+    def _build_closed_trade(
+        self,
+        trade: TradeRecord,
+        exit_price: float,
+        reason: str,
+    ) -> ClosedTrade:
+        gross_pnl = (exit_price - trade.entry_price) * trade.quantity
+        net_pnl = gross_pnl
+        now = datetime.now(timezone.utc)
+
+        self.daily_realized_pnl += net_pnl
+        self.total_realized_pnl += net_pnl
+        logger.info(
+            "Simulated exit %s @ $%.2f (%s) PnL $%.2f",
+            trade.symbol,
+            exit_price,
+            reason,
+            net_pnl,
+        )
+        return ClosedTrade(
+            trade_id=trade.id,
+            symbol=trade.symbol,
+            exit_price=exit_price,
+            exit_time=now,
+            gross_pnl=gross_pnl,
+            net_pnl=net_pnl,
+            reason=reason,
+        )
 
     def get_portfolio_snapshot(self, quotes_by_symbol: Dict[str, Quote]) -> SimulatedPortfolio:
         unrealized = self._unrealized_pnl(quotes_by_symbol)

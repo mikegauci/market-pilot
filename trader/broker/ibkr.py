@@ -555,3 +555,55 @@ class IBKRClient:
             trade = self._find_trade_by_order_id(order_id)
             if trade:
                 self._cancel_trade(trade)
+
+    def close_long_position(
+        self,
+        symbol: str,
+        quantity: float,
+        *,
+        parent_order_id: Optional[int] = None,
+        sl_order_id: Optional[int] = None,
+        tp_order_id: Optional[int] = None,
+        fill_timeout_sec: float = 30.0,
+    ) -> Tuple[float, float]:
+        """Cancel bracket legs (if any) and market-sell to close a long position."""
+        if quantity < 1:
+            raise ValueError(f"Invalid quantity for {symbol}: {quantity}")
+
+        if sl_order_id and tp_order_id:
+            self.cancel_open_brackets(
+                parent_order_id or 0,
+                sl_order_id,
+                tp_order_id,
+            )
+            self.ib.sleep(0.3)
+
+        account = self._resolve_account()
+        contract = self._ensure_contract(symbol)
+        qty = int(quantity)
+
+        sell = MarketOrder("SELL", qty)
+        sell.account = account
+        sell.orderId = self.ib.client.getReqId()
+        sell.tif = "DAY"
+        sell.outsideRth = False
+
+        sell_trade = self.ib.placeOrder(contract, sell)
+        fill = self._wait_for_fill(sell_trade, fill_timeout_sec, symbol)
+        if fill is None:
+            status = sell_trade.orderStatus.status
+            detail = _describe_trade_state(sell_trade)
+            self._cancel_trade(sell_trade)
+            raise RuntimeError(
+                f"Market SELL for {symbol} did not fill within {fill_timeout_sec}s "
+                f"({status}, {detail})"
+            )
+
+        fill_price, filled_qty = fill
+        logger.info(
+            "IBKR market SELL %s x %s @ $%.2f",
+            symbol,
+            filled_qty,
+            fill_price,
+        )
+        return fill_price, filled_qty

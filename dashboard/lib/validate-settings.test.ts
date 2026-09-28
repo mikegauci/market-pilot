@@ -10,7 +10,7 @@ function form(entries: Record<string, string>): FormData {
 }
 
 const baseFields = {
-  minimum_jev_confidence: "80",
+  minimum_jev_confidence: "85",
   signal_record_threshold: "75",
   risk_per_trade: "2500",
   max_position_size: "10000",
@@ -29,9 +29,9 @@ describe("parseSettingsForm risk_profile", () => {
     }
   });
 
-  it("defaults to medium when missing", () => {
+  it("defaults to low when missing", () => {
     const parsed = parseSettingsForm(form(baseFields));
-    expect(parsed.risk_profile).toBe("medium");
+    expect(parsed.risk_profile).toBe("low");
   });
 
   it("rejects invalid profiles", () => {

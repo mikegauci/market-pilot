@@ -7,6 +7,7 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from models.types import DataSource, ExecutionMode, TradingMode
+from strategy.config import StrategyConfig
 
 LIVE_CONFIRMATION_PHRASE = "I_UNDERSTAND_LIVE_TRADING"
 LIVE_PORTS = {4001, 7496}
@@ -27,9 +28,9 @@ class Settings(BaseSettings):
     ibkr_port: int = 4002
     ibkr_client_id: int = 1
     ibkr_account: str = ""
-    ibkr_market_data_type: int = 3
+    ibkr_market_data_type: int = 1
 
-    watchlist: str = "SPY,QQQ,NVDA,AAPL,MSFT,AMD,META,TSLA,GOOGL,AMZN"
+    watchlist: str = "NVDA,AAPL,MSFT,META,GOOGL"
 
     supabase_url: str = ""
     supabase_service_role_key: str = ""
@@ -48,6 +49,18 @@ class Settings(BaseSettings):
     heartbeat_interval_sec: int = 2
     risk_sync_threshold_pct: float = 0.05
     log_level: str = "INFO"
+
+    strategy_max_spread_pct: float = 0.0015
+    strategy_max_rsi: float = 70.0
+    strategy_require_price_above_ema20: bool = True
+    strategy_max_spy_drop_5m_pct: float = -0.3
+    strategy_min_buy_hold_margin: float = 0.15
+    strategy_confirmation_cycles: int = 2
+    strategy_max_hold_minutes: float = 15.0
+    strategy_jev_sell_exit_threshold: float = 0.75
+    strategy_max_correlated_positions: int = 2
+    strategy_warmup_min_samples: int = 30
+    strategy_warmup_min_span_sec: float = 120.0
 
     @field_validator("trading_mode", mode="before")
     @classmethod
@@ -95,6 +108,13 @@ class Settings(BaseSettings):
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
+    @field_validator("strategy_require_price_above_ema20", mode="before")
+    @classmethod
+    def parse_strategy_bool(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
     @model_validator(mode="after")
     def validate_execution_mode(self) -> Settings:
         if self.execution_mode == ExecutionMode.IBKR and self.data_source != DataSource.IBKR:
@@ -121,6 +141,22 @@ class Settings(BaseSettings):
     @property
     def watchlist_symbols(self) -> List[str]:
         return [s.strip().upper() for s in self.watchlist.split(",") if s.strip()]
+
+    @property
+    def strategy_config(self) -> StrategyConfig:
+        return StrategyConfig(
+            max_spread_pct=self.strategy_max_spread_pct,
+            max_rsi=self.strategy_max_rsi,
+            require_price_above_ema20=self.strategy_require_price_above_ema20,
+            max_spy_drop_5m_pct=self.strategy_max_spy_drop_5m_pct,
+            min_buy_hold_margin=self.strategy_min_buy_hold_margin,
+            confirmation_cycles=self.strategy_confirmation_cycles,
+            max_hold_minutes=self.strategy_max_hold_minutes,
+            jev_sell_exit_threshold=self.strategy_jev_sell_exit_threshold,
+            max_correlated_positions=self.strategy_max_correlated_positions,
+            warmup_min_samples=self.strategy_warmup_min_samples,
+            warmup_min_span_sec=self.strategy_warmup_min_span_sec,
+        )
 
     @property
     def mode_banner(self) -> str:

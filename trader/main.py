@@ -6,7 +6,7 @@ import sys
 import time
 from typing import Dict, Optional, Set
 
-from broker.execution import sync_ibkr_exits
+from broker.execution import close_ibkr_signal_exits, sync_ibkr_exits
 from broker.ibkr import IBKRClient
 from broker.reconcile import reconcile_orphan_ibkr_positions
 from config import Settings, load_settings
@@ -26,7 +26,9 @@ from models.types import (
     TradingMode,
 )
 from risk.manager import RiskManager
-from strategy.signals import is_trade_eligible, signal_tier
+from strategy.confirmation import ConfirmationTracker
+from strategy.filters import check_correlation_cap, check_entry_filters
+from strategy.signals import is_sell_exit_eligible, is_trade_eligible, signal_tier
 
 logger = logging.getLogger(__name__)
 
@@ -241,7 +243,20 @@ def run() -> int:
         mock.seed_history(history)
         logger.info("Seeded mock price history for indicators")
     elif settings.data_source == DataSource.IBKR:
-        logger.info("Using IBKR quotes to build indicator history (warm-up ~15 min)")
+        logger.info(
+            "Using IBKR quotes to build indicator history (warm-up ~%.0fs)",
+            settings.strategy_config.warmup_min_span_sec,
+        )
+
+    strategy_config = settings.strategy_config
+    confirmation_tracker = ConfirmationTracker(strategy_config.confirmation_cycles)
+    logger.info(
+        "Strategy filters: min confidence from settings, margin %.0f%%, "
+        "confirmation %sx, max hold %.0fm",
+        strategy_config.min_buy_hold_margin * 100,
+        strategy_config.confirmation_cycles,
+        strategy_config.max_hold_minutes,
+    )
 
     ibkr = IBKRClient(
         host=settings.ibkr_host,
@@ -327,10 +342,22 @@ def run() -> int:
                 execution_mode = bot_control.execution_mode
                 risk_settings = db.get_risk_settings()
                 watchlist = risk_settings.watchlist or settings.watchlist_symbols
-                all_symbols = _all_symbols(watchlist)
+                open_symbols = (
+                    [t.symbol for t in risk_manager.open_trades]
+                    if risk_manager
+                    else []
+                )
+                all_symbols = _all_symbols(
+                    list(dict.fromkeys(watchlist + open_symbols))
+                )
                 _sync_watchlist_symbols(
                     all_symbols, mock, history, settings.data_source
                 )
+                if (
+                    settings.data_source == DataSource.IBKR
+                    and ibkr.is_connected()
+                ):
+                    ibkr.sync_watchlist_subscriptions(all_symbols)
                 if risk_manager:
                     risk_manager.update_settings(risk_settings)
                     capital, currency = _resolve_effective_capital(
@@ -346,7 +373,10 @@ def run() -> int:
                 history.record(quote)
 
             if risk_manager and db:
-                closed = risk_manager.check_exits(quotes_by_symbol)
+                closed = risk_manager.check_exits(
+                    quotes_by_symbol,
+                    max_hold_minutes=strategy_config.max_hold_minutes,
+                )
                 for closed_trade in closed:
                     db.close_trade(
                         closed_trade.trade_id,
@@ -361,6 +391,14 @@ def run() -> int:
 
                 if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
                     if sync_ibkr_exits(ibkr, risk_manager, db):
+                        portfolio_dirty = True
+                    if close_ibkr_signal_exits(
+                        ibkr,
+                        risk_manager,
+                        db,
+                        max_hold_minutes=strategy_config.max_hold_minutes,
+                        fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                    ):
                         portfolio_dirty = True
 
             if portfolio_dirty and db:
@@ -383,12 +421,29 @@ def run() -> int:
                     )
                     _last_closed_market_log = now_mono
 
-            for symbol in watchlist if market_open else []:
+            eval_symbols: list[str] = []
+            if market_open:
+                open_symbols = (
+                    [t.symbol for t in risk_manager.open_trades]
+                    if risk_manager
+                    else []
+                )
+                eval_symbols = list(dict.fromkeys(watchlist + open_symbols))
+
+            jev_sell_symbols: Set[str] = set()
+
+            for symbol in eval_symbols:
                 quote = quotes_by_symbol.get(symbol)
                 if quote is None:
                     continue
 
-                state = build_market_state(quote, history, spy_history)
+                state = build_market_state(
+                    quote,
+                    history,
+                    spy_history,
+                    warmup_min_samples=strategy_config.warmup_min_samples,
+                    warmup_min_span_sec=strategy_config.warmup_min_span_sec,
+                )
                 if state is None:
                     if symbol not in _warmup_logged:
                         logger.debug("%s warming up — need more price history", symbol)
@@ -411,11 +466,70 @@ def run() -> int:
                         prediction,
                         risk_settings.signal_record_threshold,
                         risk_settings.minimum_jev_confidence,
+                        strategy_config.min_buy_hold_margin,
                     )
                     _log_jev_prediction(prediction, tier)
 
+                    if (
+                        risk_manager
+                        and is_sell_exit_eligible(
+                            prediction, strategy_config.jev_sell_exit_threshold
+                        )
+                        and any(t.symbol == symbol for t in risk_manager.open_trades)
+                    ):
+                        jev_sell_symbols.add(symbol)
+                        closed = risk_manager.check_jev_exit(symbol, quotes_by_symbol)
+                        if closed and db:
+                            db.close_trade(
+                                closed.trade_id,
+                                closed.exit_price,
+                                closed.exit_time,
+                                closed.gross_pnl,
+                                closed.net_pnl,
+                            )
+                            portfolio_dirty = True
+                            risk_manager.set_daily_realized_pnl(
+                                db.get_daily_realized_pnl()
+                            )
+
                     trade_created = False
-                    if is_trade_eligible(tier) and risk_manager and db:
+                    eligible = is_trade_eligible(tier)
+                    if eligible and not confirmation_tracker.record(symbol, True):
+                        current, required = confirmation_tracker.progress(symbol)
+                        logger.info(
+                            "Filter: awaiting confirmation for %s (%s/%s cycles)",
+                            symbol,
+                            current,
+                            required,
+                        )
+                        eligible = False
+                    elif not eligible:
+                        confirmation_tracker.record(symbol, False)
+
+                    if eligible and risk_manager and db:
+                        entry_filter = check_entry_filters(state, strategy_config)
+                        if not entry_filter.passed:
+                            logger.info(
+                                "Filter: rejected %s — %s",
+                                symbol,
+                                entry_filter.reason,
+                            )
+                            confirmation_tracker.reset(symbol)
+                            eligible = False
+
+                        corr_filter = check_correlation_cap(
+                            risk_manager.open_trades, symbol, strategy_config
+                        )
+                        if eligible and not corr_filter.passed:
+                            logger.info(
+                                "Filter: rejected %s — %s",
+                                symbol,
+                                corr_filter.reason,
+                            )
+                            confirmation_tracker.reset(symbol)
+                            eligible = False
+
+                    if eligible and risk_manager and db:
                         decision = risk_manager.evaluate_entry(
                             state, prediction, bot_enabled, quotes_by_symbol
                         )
@@ -487,6 +601,7 @@ def run() -> int:
                                         trade.ibkr_tp_order_id = bracket.tp_order_id
                                         db.insert_trade(trade)
                                         risk_manager.register_open_trade(trade)
+                                        confirmation_tracker.reset(trade.symbol)
                                         trade_created = True
                                         portfolio_dirty = True
                                         logger.info(
@@ -523,6 +638,7 @@ def run() -> int:
                                 trade.execution_mode = "simulated"
                                 db.insert_trade(trade)
                                 risk_manager.register_open_trade(trade)
+                                confirmation_tracker.reset(trade.symbol)
                                 trade_created = True
                                 portfolio_dirty = True
                                 logger.info(
@@ -546,6 +662,23 @@ def run() -> int:
                 except Exception as exc:
                     logger.error("Jev prediction failed for %s: %s", symbol, exc)
                     jev_connected = False
+
+            if (
+                jev_sell_symbols
+                and risk_manager
+                and db
+                and execution_mode == ExecutionMode.IBKR
+                and ibkr.is_connected()
+            ):
+                if close_ibkr_signal_exits(
+                    ibkr,
+                    risk_manager,
+                    db,
+                    max_hold_minutes=0,
+                    jev_sell_symbols=jev_sell_symbols,
+                    fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                ):
+                    portfolio_dirty = True
 
             if portfolio_dirty and db:
                 _sync_portfolio_state(
