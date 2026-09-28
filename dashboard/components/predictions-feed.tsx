@@ -1,16 +1,48 @@
 "use client";
 
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
 import type { Prediction } from "@/lib/types/database";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { formatCurrency, formatDateTime, formatPercent } from "@/lib/utils";
 
+type SortKey =
+  | "timestamp"
+  | "symbol"
+  | "price"
+  | "buy_probability"
+  | "hold_probability"
+  | "sell_probability"
+  | "trade_created";
+type SortDir = "asc" | "desc";
+
+function comparePredictions(a: Prediction, b: Prediction, key: SortKey): number {
+  switch (key) {
+    case "timestamp":
+      return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+    case "symbol":
+      return a.symbol.localeCompare(b.symbol);
+    case "price":
+      return a.price - b.price;
+    case "buy_probability":
+      return a.buy_probability - b.buy_probability;
+    case "hold_probability":
+      return a.hold_probability - b.hold_probability;
+    case "sell_probability":
+      return a.sell_probability - b.sell_probability;
+    case "trade_created":
+      return Number(a.trade_created) - Number(b.trade_created);
+  }
+}
+
 export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) {
   const router = useRouter();
   const [symbolFilter, setSymbolFilter] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("timestamp");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const refresh = useCallback(() => router.refresh(), [router]);
   useRealtimeRefresh(["predictions"], refresh);
 
@@ -18,6 +50,24 @@ export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) 
   const filtered = symbolFilter
     ? predictions.filter((p) => p.symbol === symbolFilter)
     : predictions;
+
+  const sorted = useMemo(() => {
+    const list = [...filtered];
+    list.sort((a, b) => {
+      const cmp = comparePredictions(a, b, sortKey);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return list;
+  }, [filtered, sortKey, sortDir]);
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "symbol" ? "asc" : "desc");
+    }
+  }
 
   return (
     <Card>
@@ -43,17 +93,37 @@ export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) 
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-800 text-left text-zinc-500">
-                <th className="pb-2 pr-3">Time</th>
-                <th className="pb-2 pr-3">Symbol</th>
-                <th className="pb-2 pr-3">Price</th>
-                <th className="pb-2 pr-3">BUY</th>
-                <th className="pb-2 pr-3">HOLD</th>
-                <th className="pb-2 pr-3">SELL</th>
-                <th className="pb-2">Trade</th>
+                {(
+                  [
+                    ["Time", "timestamp"],
+                    ["Symbol", "symbol"],
+                    ["Price", "price"],
+                    ["BUY", "buy_probability"],
+                    ["HOLD", "hold_probability"],
+                    ["SELL", "sell_probability"],
+                    ["Trade", "trade_created"],
+                  ] as const
+                ).map(([label, key], i, arr) => (
+                  <th key={key} className={`pb-2 ${i < arr.length - 1 ? "pr-3" : ""}`}>
+                    <button
+                      type="button"
+                      onClick={() => handleSort(key)}
+                      className="inline-flex items-center gap-1 hover:text-zinc-300"
+                    >
+                      {label}
+                      {sortKey === key &&
+                        (sortDir === "asc" ? (
+                          <ArrowUp className="h-3 w-3" />
+                        ) : (
+                          <ArrowDown className="h-3 w-3" />
+                        ))}
+                    </button>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((p) => (
+              {sorted.map((p) => (
                 <tr key={p.id} className="border-b border-zinc-800/50">
                   <td className="py-2 pr-3 text-zinc-400">{formatDateTime(p.timestamp)}</td>
                   <td className="py-2 pr-3 font-medium">{p.symbol}</td>
