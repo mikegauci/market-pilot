@@ -53,7 +53,7 @@ export default async function OverviewPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-4">
-        <h2 className="text-2xl font-semibold">Overview</h2>
+        <h2 className="text-xl font-semibold sm:text-2xl">Overview</h2>
         {botStatus && <OverviewStatusSection botStatus={botStatus} />}
       </div>
 

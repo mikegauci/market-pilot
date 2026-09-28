@@ -10,7 +10,7 @@ export default async function TradesPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-semibold">Trades</h2>
+      <h2 className="text-xl font-semibold sm:text-2xl">Trades</h2>
       <TradesTable
         trades={trades}
         tradeCommands={tradeCommands}

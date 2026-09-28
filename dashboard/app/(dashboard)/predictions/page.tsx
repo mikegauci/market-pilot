@@ -6,7 +6,7 @@ export default async function PredictionsPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-semibold">Predictions</h2>
+      <h2 className="text-xl font-semibold sm:text-2xl">Predictions</h2>
       <PredictionsFeed predictions={predictions} />
     </div>
   );

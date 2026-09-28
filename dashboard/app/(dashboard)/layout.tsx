@@ -1,10 +1,5 @@
-import { DashboardNav } from "@/components/dashboard-nav";
+import { DashboardShell } from "@/components/dashboard-shell";
 
 export default function DashboardLayout({ children }: LayoutProps<"/">) {
-  return (
-    <div className="flex min-h-screen">
-      <DashboardNav />
-      <main className="flex-1 overflow-auto p-6 lg:p-8">{children}</main>
-    </div>
-  );
+  return <DashboardShell>{children}</DashboardShell>;
 }

@@ -19,7 +19,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-semibold">Settings</h2>
+      <h2 className="text-xl font-semibold sm:text-2xl">Settings</h2>
       <SettingsForm
         settings={settings}
         currentEquity={currentEquity}

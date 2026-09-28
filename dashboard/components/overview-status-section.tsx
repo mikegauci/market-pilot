@@ -8,7 +8,7 @@ import type { BotStatus } from "@/lib/types/database";
 export function OverviewStatusSection({ botStatus }: { botStatus: BotStatus }) {
   return (
     <BotStatusProvider initialStatus={botStatus}>
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <LiveStatus />
         <TradingControls />
       </div>
