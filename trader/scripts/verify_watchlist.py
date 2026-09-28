@@ -17,6 +17,7 @@ from ib_insync import IB, Stock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from broker.symbols import to_ibkr_symbol  # noqa: E402
 from config import load_settings  # noqa: E402
 from database.supabase import SupabaseRepository  # noqa: E402
 
@@ -25,7 +26,7 @@ def qualify_symbols(ib: IB, symbols: list[str]) -> tuple[list[str], list[str]]:
     ok: list[str] = []
     failed: list[str] = []
     for symbol in symbols:
-        contract = Stock(symbol, "SMART", "USD")
+        contract = Stock(to_ibkr_symbol(symbol), "SMART", "USD")
         qualified = ib.qualifyContracts(contract)
         if qualified:
             ok.append(symbol)

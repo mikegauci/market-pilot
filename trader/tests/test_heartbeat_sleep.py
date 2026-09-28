@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from main import compute_loop_sleep_sec
+from main import compute_loop_sleep_sec, should_refresh
 
 
 class TestComputeLoopSleep(unittest.TestCase):
@@ -49,6 +49,17 @@ class TestComputeLoopSleep(unittest.TestCase):
             track_heartbeat=False,
         )
         self.assertEqual(sleep_for, 300.0)
+
+
+class TestShouldRefresh(unittest.TestCase):
+    def test_returns_true_when_interval_elapsed(self) -> None:
+        self.assertTrue(should_refresh(100.0, 80.0, 15.0))
+
+    def test_returns_false_before_interval(self) -> None:
+        self.assertFalse(should_refresh(90.0, 80.0, 15.0))
+
+    def test_returns_true_on_first_sync(self) -> None:
+        self.assertTrue(should_refresh(10.0, 0.0, 5.0))
 
 
 if __name__ == "__main__":

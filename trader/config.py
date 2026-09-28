@@ -42,11 +42,16 @@ class Settings(BaseSettings):
     jev_enabled: bool = True
     typesafe_ai_api_key: str = ""
     jev_model: str = "jev-latest"
-    jev_timeout_sec: float = 10.0
+    jev_timeout_sec: float = 20.0
+    jev_max_workers: int = 5
     ibkr_fill_timeout_sec: float = 60.0
     ibkr_entry_cooldown_sec: float = 120.0
 
-    heartbeat_interval_sec: int = 2
+    heartbeat_interval_sec: int = 5
+    bot_control_refresh_interval_sec: float = 5.0
+    settings_refresh_interval_sec: float = 15.0
+    portfolio_history_interval_sec: float = 30.0
+    market_snapshots_enabled: bool = False
     risk_sync_threshold_pct: float = 0.05
     log_level: str = "INFO"
 
@@ -125,6 +130,13 @@ class Settings(BaseSettings):
     @field_validator("news_enabled", mode="before")
     @classmethod
     def parse_news_enabled(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+    @field_validator("market_snapshots_enabled", mode="before")
+    @classmethod
+    def parse_market_snapshots_enabled(cls, value: object) -> bool:
         if isinstance(value, bool):
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "on"}

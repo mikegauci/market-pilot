@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple
 
 from ib_insync import IB, LimitOrder, MarketOrder, Stock, StopOrder, Trade
 
+from broker.symbols import from_ibkr_contract, to_ibkr_symbol
 from models.types import AccountSummary, BracketLegs, BracketOrderResult, Position, Quote
 
 logger = logging.getLogger(__name__)
@@ -229,7 +230,7 @@ class IBKRClient:
             contract = pos.contract
             if not hasattr(contract, "symbol"):
                 continue
-            symbol = contract.symbol
+            symbol = self._resolve_app_symbol(contract)
             market_price = None
             market_value = None
             unrealized_pnl = None
@@ -255,9 +256,30 @@ class IBKRClient:
 
         return result
 
+    def _resolve_app_symbol(self, contract: object) -> str:
+        con_id = getattr(contract, "conId", None)
+        if con_id:
+            for app_symbol, cached in self._contracts.items():
+                if cached.conId == con_id:
+                    return app_symbol
+
+        ib_symbol = getattr(contract, "symbol", "") or ""
+        local_symbol = getattr(contract, "localSymbol", "") or ""
+        app_symbol = from_ibkr_contract(ib_symbol, local_symbol)
+        for candidate in (app_symbol, ib_symbol):
+            if candidate in self._contracts:
+                return candidate
+        return app_symbol
+
+    def _contract_matches_symbol(self, contract: object, symbol: str) -> bool:
+        cached = self._contracts.get(symbol)
+        if cached is not None and getattr(contract, "conId", None) == cached.conId:
+            return True
+        return self._resolve_app_symbol(contract) == symbol
+
     def _ensure_contract(self, symbol: str) -> Stock:
         if symbol not in self._contracts:
-            contract = Stock(symbol, "SMART", "USD")
+            contract = Stock(to_ibkr_symbol(symbol), "SMART", "USD")
             qualified = self.ib.qualifyContracts(contract)
             if not qualified:
                 raise RuntimeError(f"Could not qualify contract for {symbol}")
@@ -268,7 +290,11 @@ class IBKRClient:
         for symbol in symbols:
             if symbol in self._tickers:
                 continue
-            contract = self._ensure_contract(symbol)
+            try:
+                contract = self._ensure_contract(symbol)
+            except RuntimeError:
+                logger.warning("Skipping market data for %s — contract could not be qualified", symbol)
+                continue
             ticker = self.ib.reqMktData(contract, "", False, False)
             self._tickers[symbol] = ticker
             logger.debug("Subscribed to market data for %s", symbol)
@@ -329,7 +355,7 @@ class IBKRClient:
         self.ib.sleep(0.2)
         for trade in self.ib.openTrades():
             contract = trade.contract
-            if getattr(contract, "symbol", None) != symbol:
+            if not self._contract_matches_symbol(contract, symbol):
                 continue
             if trade.order.action != "BUY":
                 continue
@@ -491,7 +517,7 @@ class IBKRClient:
 
         for trade in self.ib.openTrades():
             contract = trade.contract
-            if getattr(contract, "symbol", None) != symbol:
+            if not self._contract_matches_symbol(contract, symbol):
                 continue
             order = trade.order
             if order.action != "SELL":

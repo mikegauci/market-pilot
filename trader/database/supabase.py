@@ -82,6 +82,8 @@ class SupabaseRepository:
         if not url or not service_role_key:
             raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required")
         self.client: Client = create_client(url, service_role_key)
+        self._cached_risk_sync_equity: Optional[float] = None
+        self._known_position_symbols: Optional[set[str]] = None
 
     def update_bot_status(self, status: BotStatusUpdate) -> None:
         payload = {
@@ -113,16 +115,20 @@ class SupabaseRepository:
         self.client.table("portfolio_history").insert(payload).execute()
 
     def _replace_positions(self, rows: List[dict], current_symbols: set[str]) -> None:
-        existing = self.client.table("positions").select("symbol").execute()
-        stale = [
-            row["symbol"]
-            for row in (existing.data or [])
-            if row.get("symbol") and row["symbol"] not in current_symbols
-        ]
+        if self._known_position_symbols is None:
+            existing = self.client.table("positions").select("symbol").execute()
+            self._known_position_symbols = {
+                row["symbol"]
+                for row in (existing.data or [])
+                if row.get("symbol")
+            }
+
+        stale = self._known_position_symbols - current_symbols
         if stale:
-            self.client.table("positions").delete().in_("symbol", stale).execute()
+            self.client.table("positions").delete().in_("symbol", list(stale)).execute()
         if rows:
             self.client.table("positions").upsert(rows, on_conflict="symbol").execute()
+        self._known_position_symbols = current_symbols
 
     def upsert_positions(self, positions: List[Position]) -> None:
         now = datetime.now(timezone.utc).isoformat()
@@ -231,6 +237,12 @@ class SupabaseRepository:
         )
         data = result.data
         watchlist = data.get("watchlist") or []
+        risk_sync_equity = (
+            float(data["risk_sync_equity"])
+            if data.get("risk_sync_equity") is not None
+            else None
+        )
+        self._cached_risk_sync_equity = risk_sync_equity
         return RiskSettings(
             minimum_jev_confidence=float(data.get("minimum_jev_confidence", 0.85)),
             signal_record_threshold=float(data.get("signal_record_threshold", 0.80)),
@@ -242,11 +254,7 @@ class SupabaseRepository:
             take_profit_percentage=float(data.get("take_profit_percentage", 0.015)),
             max_hold_minutes=float(data.get("max_hold_minutes", 0)),
             account_capital=float(data.get("account_capital", 1000)),
-            risk_sync_equity=(
-                float(data["risk_sync_equity"])
-                if data.get("risk_sync_equity") is not None
-                else None
-            ),
+            risk_sync_equity=risk_sync_equity,
             watchlist=[str(s).upper() for s in watchlist],
         )
 
@@ -259,15 +267,7 @@ class SupabaseRepository:
         if current_equity <= 0:
             return False
 
-        result = (
-            self.client.table("settings")
-            .select("risk_sync_equity")
-            .eq("id", 1)
-            .single()
-            .execute()
-        )
-        raw_baseline = result.data.get("risk_sync_equity") if result.data else None
-        baseline = float(raw_baseline) if raw_baseline is not None else None
+        baseline = self._cached_risk_sync_equity
 
         if not should_advance_baseline(current_equity, baseline, threshold):
             return False
@@ -275,6 +275,7 @@ class SupabaseRepository:
         self.client.table("settings").update(
             {"risk_sync_equity": current_equity}
         ).eq("id", 1).execute()
+        self._cached_risk_sync_equity = current_equity
         logger.info(
             "Risk recommendation baseline updated: %s -> %s",
             baseline,
@@ -407,6 +408,29 @@ class SupabaseRepository:
             )
         self._replace_positions(rows, {trade.symbol for trade in open_trades})
 
+    def _sync_positions(
+        self,
+        quotes: List[Quote],
+        *,
+        ibkr_positions: Optional[List[Position]] = None,
+        open_trades: Optional[List[TradeRecord]] = None,
+    ) -> None:
+        if ibkr_positions is not None:
+            self.upsert_positions(ibkr_positions)
+        elif open_trades is not None:
+            self.sync_positions_from_trades(open_trades, quotes)
+
+    def _write_portfolio_snapshot(
+        self,
+        *,
+        account: Optional[AccountSummary] = None,
+        simulated_portfolio: Optional[SimulatedPortfolio] = None,
+    ) -> None:
+        if account is not None:
+            self.insert_portfolio_snapshot(account)
+        elif simulated_portfolio is not None:
+            self.insert_simulated_portfolio(simulated_portfolio)
+
     def write_portfolio_state(
         self,
         quotes: List[Quote],
@@ -416,16 +440,16 @@ class SupabaseRepository:
         simulated_portfolio: Optional[SimulatedPortfolio] = None,
         open_trades: Optional[List[TradeRecord]] = None,
     ) -> None:
-        """Persist equity and positions without bot status or market snapshots."""
-        if account is not None:
-            self.insert_portfolio_snapshot(account)
-        elif simulated_portfolio is not None:
-            self.insert_simulated_portfolio(simulated_portfolio)
-
-        if ibkr_positions is not None:
-            self.upsert_positions(ibkr_positions)
-        elif open_trades is not None:
-            self.sync_positions_from_trades(open_trades, quotes)
+        """Persist equity and positions immediately (e.g. on trade open/close)."""
+        self._write_portfolio_snapshot(
+            account=account,
+            simulated_portfolio=simulated_portfolio,
+        )
+        self._sync_positions(
+            quotes,
+            ibkr_positions=ibkr_positions,
+            open_trades=open_trades,
+        )
 
     def write_heartbeat(
         self,
@@ -436,15 +460,21 @@ class SupabaseRepository:
         ibkr_positions: Optional[List[Position]] = None,
         simulated_portfolio: Optional[SimulatedPortfolio] = None,
         open_trades: Optional[List[TradeRecord]] = None,
+        include_portfolio_history: bool = True,
+        include_market_snapshots: bool = False,
     ) -> None:
-        self.write_portfolio_state(
+        if include_portfolio_history:
+            self._write_portfolio_snapshot(
+                account=account,
+                simulated_portfolio=simulated_portfolio,
+            )
+        self._sync_positions(
             quotes,
-            account=account,
             ibkr_positions=ibkr_positions,
-            simulated_portfolio=simulated_portfolio,
             open_trades=open_trades,
         )
-        self.insert_market_snapshots(quotes)
+        if include_market_snapshots:
+            self.insert_market_snapshots(quotes)
         self.update_bot_status(status)
 
     def insert_simulated_portfolio(self, portfolio: SimulatedPortfolio) -> None:

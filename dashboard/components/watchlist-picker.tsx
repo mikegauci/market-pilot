@@ -21,6 +21,10 @@ function isValidSymbol(symbol: string): boolean {
   return SYMBOL_PATTERN.test(symbol);
 }
 
+function parseSymbolList(raw: string): string[] {
+  return normalizeSymbols(raw.split(","));
+}
+
 export function WatchlistPicker({ defaultValue }: { defaultValue: string[] }) {
   const [selected, setSelected] = useState<string[]>(() => normalizeSymbols(defaultValue));
   const [search, setSearch] = useState("");
@@ -61,12 +65,55 @@ export function WatchlistPicker({ defaultValue }: { defaultValue: string[] }) {
     setSearch("");
   }
 
+  function addSymbolsFromInput(raw: string, clearInput: () => void) {
+    const candidates = parseSymbolList(raw);
+    if (candidates.length === 0) return;
+
+    if (candidates.length === 1) {
+      addSymbol(candidates[0]);
+      clearInput();
+      return;
+    }
+
+    const toAdd: string[] = [];
+    const invalid: string[] = [];
+    const seen = new Set(selected);
+
+    for (const symbol of candidates) {
+      if (!isValidSymbol(symbol)) {
+        invalid.push(symbol);
+        continue;
+      }
+      if (seen.has(symbol)) continue;
+      seen.add(symbol);
+      toAdd.push(symbol);
+    }
+
+    if (toAdd.length > 0) {
+      setSelected((prev) => [...prev, ...toAdd]);
+    }
+
+    if (invalid.length > 0) {
+      setCustomError(`Invalid symbols: ${invalid.join(", ")}`);
+    } else {
+      setCustomError(null);
+    }
+
+    clearInput();
+  }
+
   function removeSymbol(symbol: string) {
     setSelected((prev) => prev.filter((s) => s !== symbol));
   }
 
   function handleCustomAdd() {
-    addSymbol(customSymbol);
+    addSymbolsFromInput(customSymbol, () => setCustomSymbol(""));
+  }
+
+  function handleBulkInput(raw: string, clearInput: () => void) {
+    if (!raw.includes(",")) return false;
+    addSymbolsFromInput(raw, clearInput);
+    return true;
   }
 
   return (
@@ -110,14 +157,31 @@ export function WatchlistPicker({ defaultValue }: { defaultValue: string[] }) {
         <Input
           id="watchlist-search"
           type="search"
-          placeholder="Search S&P 500 by ticker or company name…"
+          placeholder="Search S&P 500, or paste comma-separated tickers…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleBulkInput(search, () => setSearch(""));
+            }
+          }}
+          onPaste={(e) => {
+            const text = e.clipboardData.getData("text");
+            if (text.includes(",")) {
+              e.preventDefault();
+              addSymbolsFromInput(text, () => setSearch(""));
+            }
+          }}
           autoComplete="off"
         />
       </div>
 
-      {search.trim() && (
+      {search.trim() && search.includes(",") ? (
+        <p className="rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-xs text-zinc-400">
+          Press Enter to add {parseSymbolList(search).length} symbols (existing ones are skipped).
+        </p>
+      ) : search.trim() ? (
         <ul className="max-h-48 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950/50">
           {filtered.length === 0 ? (
             <li className="px-3 py-2 text-xs text-zinc-500">No matching symbols.</li>
@@ -136,7 +200,7 @@ export function WatchlistPicker({ defaultValue }: { defaultValue: string[] }) {
             ))
           )}
         </ul>
-      )}
+      ) : null}
 
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[10rem] flex-1">

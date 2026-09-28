@@ -4,7 +4,8 @@ import logging
 import signal
 import sys
 import time
-from typing import Dict, Optional, Set
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, List, Optional, Set, Tuple
 
 from broker.execution import close_ibkr_signal_exits, sync_ibkr_exits
 from broker.ibkr import IBKRClient
@@ -25,6 +26,8 @@ from models.types import (
     BotStatusUpdate,
     DataSource,
     ExecutionMode,
+    JevPrediction,
+    MarketState,
     Quote,
     RiskSettings,
     TradingMode,
@@ -60,6 +63,11 @@ def compute_loop_sleep_sec(
     if next_heartbeat_in <= 0:
         return 0.0
     return min(sleep_for, next_heartbeat_in)
+
+
+def should_refresh(now_mono: float, last_sync_mono: float, interval_sec: float) -> bool:
+    """True when a cached Supabase read should be refreshed."""
+    return (now_mono - last_sync_mono) >= interval_sec
 
 
 def _handle_shutdown(signum: int, _frame: object) -> None:
@@ -203,6 +211,30 @@ def _init_risk_manager(
     )
 
 
+def _fetch_jev_predictions(
+    jev: JevClient,
+    ready_states: List[Tuple[str, MarketState]],
+    max_workers: int,
+) -> Dict[str, JevPrediction]:
+    """Call Jev in parallel so one slow symbol does not block the watchlist."""
+    if not ready_states:
+        return {}
+
+    workers = min(max_workers, len(ready_states))
+    predictions: Dict[str, JevPrediction] = {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(jev.predict, state): symbol for symbol, state in ready_states
+        }
+        for future in as_completed(futures):
+            symbol = futures[future]
+            try:
+                predictions[symbol] = future.result()
+            except Exception as exc:
+                logger.error("Jev prediction failed for %s: %s", symbol, exc)
+    return predictions
+
+
 def _log_jev_prediction(prediction, tier: str) -> None:
     logger.info(
         "%s market update",
@@ -224,10 +256,18 @@ def run() -> int:
 
     logger.info("=== %s ===", settings.mode_banner)
     logger.info(
-        "Data source: %s | Execution: %s | Eval interval: %ss",
+        "Data source: %s | Execution: %s | Eval interval: %ss | Heartbeat: %ss",
         settings.data_source.value,
         settings.execution_mode.value,
         settings.eval_interval_sec,
+        settings.heartbeat_interval_sec,
+    )
+    logger.info(
+        "Supabase sync: bot control every %.0fs, settings every %.0fs, "
+        "portfolio history every %.0fs",
+        settings.bot_control_refresh_interval_sec,
+        settings.settings_refresh_interval_sec,
+        settings.portfolio_history_interval_sec,
     )
 
     db: Optional[SupabaseRepository] = None
@@ -354,7 +394,11 @@ def run() -> int:
 
     bot_enabled = bot_control.enabled
     jev_connected = False
+    startup_mono = time.monotonic()
     last_heartbeat = 0.0
+    last_bot_control_sync = startup_mono
+    last_settings_sync = startup_mono
+    last_portfolio_history = 0.0
     data_source_label = "ibkr" if ibkr.is_connected() else "mock"
 
     while not _shutdown_requested:
@@ -365,11 +409,26 @@ def run() -> int:
 
         try:
             if db:
-                bot_control = db.get_bot_control(settings.execution_mode)
-                bot_enabled = bot_control.enabled
-                trading_mode = bot_control.trading_mode
-                execution_mode = bot_control.execution_mode
-                risk_settings = db.get_risk_settings()
+                now_mono = time.monotonic()
+                if should_refresh(
+                    now_mono,
+                    last_bot_control_sync,
+                    settings.bot_control_refresh_interval_sec,
+                ):
+                    bot_control = db.get_bot_control(settings.execution_mode)
+                    bot_enabled = bot_control.enabled
+                    trading_mode = bot_control.trading_mode
+                    execution_mode = bot_control.execution_mode
+                    last_bot_control_sync = now_mono
+
+                if should_refresh(
+                    now_mono,
+                    last_settings_sync,
+                    settings.settings_refresh_interval_sec,
+                ):
+                    risk_settings = db.get_risk_settings()
+                    last_settings_sync = now_mono
+
                 watchlist = risk_settings.watchlist or settings.watchlist_symbols
                 open_symbols = (
                     [t.symbol for t in risk_manager.open_trades]
@@ -464,6 +523,7 @@ def run() -> int:
             if news_service and eval_symbols:
                 news_service.refresh_stale(eval_symbols)
 
+            ready_states: List[Tuple[str, MarketState]] = []
             for symbol in eval_symbols:
                 quote = quotes_by_symbol.get(symbol)
                 if quote is None:
@@ -492,10 +552,27 @@ def run() -> int:
                 if jev is None:
                     continue
 
-                state = enrich_market_state_with_news(state, news_service)
+                ready_states.append(
+                    (symbol, enrich_market_state_with_news(state, news_service))
+                )
+
+            predictions_by_symbol = (
+                _fetch_jev_predictions(jev, ready_states, settings.jev_max_workers)
+                if jev is not None
+                else {}
+            )
+            if predictions_by_symbol:
+                jev_connected_this_cycle = True
+                jev_connected = True
+            elif ready_states and jev is not None:
+                jev_connected = False
+
+            for symbol, state in ready_states:
+                prediction = predictions_by_symbol.get(symbol)
+                if prediction is None:
+                    continue
 
                 try:
-                    prediction = jev.predict(state)
                     tier = signal_tier(
                         prediction,
                         risk_settings.signal_record_threshold,
@@ -690,12 +767,8 @@ def run() -> int:
                         db.insert_prediction(state, prediction, trade_created=trade_created)
                         logger.info("Prediction stored")
 
-                    jev_connected_this_cycle = True
-                    jev_connected = True
-
                 except Exception as exc:
-                    logger.error("Jev prediction failed for %s: %s", symbol, exc)
-                    jev_connected = False
+                    logger.error("Post-Jev processing failed for %s: %s", symbol, exc)
 
             if (
                 jev_sell_symbols
@@ -747,6 +820,12 @@ def run() -> int:
                     )
                     open_trades = risk_manager.open_trades
 
+                include_portfolio_history = should_refresh(
+                    now,
+                    last_portfolio_history,
+                    settings.portfolio_history_interval_sec,
+                )
+
                 db.write_heartbeat(
                     heartbeat_status,
                     quotes,
@@ -754,7 +833,11 @@ def run() -> int:
                     ibkr_positions=ibkr_positions,
                     simulated_portfolio=simulated_portfolio,
                     open_trades=open_trades,
+                    include_portfolio_history=include_portfolio_history,
+                    include_market_snapshots=settings.market_snapshots_enabled,
                 )
+                if include_portfolio_history:
+                    last_portfolio_history = now
 
                 heartbeat_equity = None
                 if account is not None:
