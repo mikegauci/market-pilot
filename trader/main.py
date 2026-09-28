@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Set, Tuple
 
 from broker.execution import close_ibkr_signal_exits, sync_ibkr_exits
+from broker.manual_close import process_manual_close_commands
 from broker.ibkr import IBKRClient
 from broker.reconcile import reconcile_orphan_ibkr_positions
 from config import Settings, load_settings
@@ -378,6 +379,13 @@ def run() -> int:
             risk_manager.effective_capital,
         )
 
+        reclaimed = db.reclaim_stale_trade_commands()
+        if reclaimed:
+            logger.info(
+                "Reclaimed %s stale manual close command(s) on startup",
+                reclaimed,
+            )
+
         if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
             reconciled = reconcile_orphan_ibkr_positions(
                 ibkr,
@@ -461,6 +469,17 @@ def run() -> int:
 
             quotes = _get_quotes(settings, ibkr, mock, all_symbols)
             quotes_by_symbol: Dict[str, Quote] = {q.symbol: q for q in quotes}
+
+            if risk_manager and db:
+                if process_manual_close_commands(
+                    db,
+                    risk_manager,
+                    ibkr,
+                    execution_mode,
+                    quotes_by_symbol,
+                    fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                ):
+                    portfolio_dirty = True
 
             for quote in quotes:
                 history.record(quote)

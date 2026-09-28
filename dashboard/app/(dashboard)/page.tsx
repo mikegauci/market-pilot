@@ -6,8 +6,10 @@ import { SettingsSummary } from "@/components/settings-summary";
 import { TradedPredictionsTable } from "@/components/traded-predictions-table";
 import { TradesTable } from "@/components/trades-table";
 import {
+  getActiveTradeCommands,
   getBotStatus,
   getLatestPortfolio,
+  getOpenTrades,
   getPortfolioHistory,
   getPositions,
   getRecentTrades,
@@ -15,18 +17,28 @@ import {
   getTradedPredictions,
 } from "@/lib/queries";
 import { resolveBaselineEquity } from "@/lib/risk-recommendations";
-
 export default async function OverviewPage() {
-  const [botStatus, portfolio, history, positions, trades, tradedPredictions, settings] =
-    await Promise.all([
-      getBotStatus(),
-      getLatestPortfolio(),
-      getPortfolioHistory(24),
-      getPositions(),
-      getRecentTrades(10),
-      getTradedPredictions(10),
-      getSettings(),
-    ]);
+  const [
+    botStatus,
+    portfolio,
+    history,
+    positions,
+    openTrades,
+    tradeCommands,
+    trades,
+    tradedPredictions,
+    settings,
+  ] = await Promise.all([
+    getBotStatus(),
+    getLatestPortfolio(),
+    getPortfolioHistory(24),
+    getPositions(),
+    getOpenTrades(),
+    getActiveTradeCommands(),
+    getRecentTrades(10),
+    getTradedPredictions(10),
+    getSettings(),
+  ]);
 
   const currency = portfolio?.currency ?? "USD";
   const currentEquity = portfolio?.equity ?? settings?.account_capital ?? 0;
@@ -59,9 +71,32 @@ export default async function OverviewPage() {
         )}
       </div>
 
-      <PositionsTable positions={positions} />
+      <PositionsTable
+        positions={positions}
+        openTrades={openTrades}
+        tradeCommands={tradeCommands}
+        botStatus={
+          botStatus ?? {
+            id: 1,
+            enabled: false,
+            trading_mode: "paper",
+            execution_mode: "simulated",
+            ibkr_connected: false,
+            jev_connected: false,
+            last_heartbeat: null,
+            last_error: null,
+            updated_at: "",
+          }
+        }
+      />
       <TradedPredictionsTable predictions={tradedPredictions} trades={trades} />
-      <TradesTable trades={trades} title="Recent Trades" />
+      <TradesTable
+        trades={trades}
+        tradeCommands={tradeCommands}
+        botStatus={botStatus}
+        showCloseAction
+        title="Recent Trades"
+      />
     </div>
   );
 }

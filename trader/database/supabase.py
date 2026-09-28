@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from supabase import Client, create_client
@@ -367,6 +367,8 @@ class SupabaseRepository:
         exit_time: datetime,
         gross_pnl: float,
         net_pnl: float,
+        *,
+        filled_quantity: Optional[float] = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         payload = {
@@ -377,6 +379,9 @@ class SupabaseRepository:
             "status": "closed",
             "updated_at": now,
         }
+        if filled_quantity is not None:
+            payload["quantity"] = filled_quantity
+            payload["position_value"] = round(exit_price * filled_quantity, 6)
         self.client.table("trades").update(payload).eq("id", trade_id).execute()
 
     def sync_positions_from_trades(
@@ -507,6 +512,53 @@ class SupabaseRepository:
             "trade_skip_reason": None if trade_created else trade_skip_reason,
         }
         self.client.table("predictions").insert(payload).execute()
+
+    def reclaim_stale_trade_commands(self, stale_after_sec: float = 120.0) -> int:
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(seconds=stale_after_sec)
+        ).isoformat()
+        result = (
+            self.client.table("trade_commands")
+            .update({"status": "pending", "processed_at": None, "error": None})
+            .eq("status", "processing")
+            .lt("processed_at", cutoff)
+            .execute()
+        )
+        return len(result.data or [])
+
+    def get_pending_trade_commands(self) -> List[dict]:
+        result = (
+            self.client.table("trade_commands")
+            .select("id, trade_id, command, reason, requested_at")
+            .eq("status", "pending")
+            .order("requested_at")
+            .limit(10)
+            .execute()
+        )
+        return list(result.data or [])
+
+    def claim_trade_command(self, command_id: str) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        result = (
+            self.client.table("trade_commands")
+            .update({"status": "processing", "processed_at": now})
+            .eq("id", command_id)
+            .eq("status", "pending")
+            .execute()
+        )
+        return bool(result.data)
+
+    def complete_trade_command(self, command_id: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("trade_commands").update(
+            {"status": "completed", "processed_at": now, "error": None}
+        ).eq("id", command_id).execute()
+
+    def fail_trade_command(self, command_id: str, error: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("trade_commands").update(
+            {"status": "failed", "processed_at": now, "error": error[:500]}
+        ).eq("id", command_id).execute()
 
     def record_error(
         self,

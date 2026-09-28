@@ -1,5 +1,11 @@
 import { createClient } from "@/lib/supabase/client";
-import type { PortfolioSnapshot, Position, Prediction, Trade } from "@/lib/types/database";
+import type {
+  PortfolioSnapshot,
+  Position,
+  Prediction,
+  Trade,
+  TradeCommand,
+} from "@/lib/types/database";
 
 function logFetchError(table: string, message: string) {
   if (process.env.NODE_ENV !== "production") {
@@ -48,6 +54,34 @@ export async function fetchTradedPredictions(limit = 10): Promise<Prediction[]> 
     return [];
   }
   return (data ?? []) as Prediction[];
+}
+
+export async function fetchOpenTrades(): Promise<Trade[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("trades")
+    .select("*")
+    .eq("status", "open")
+    .order("entry_time", { ascending: false });
+  if (error) {
+    logFetchError("trades", error.message);
+    return [];
+  }
+  return (data ?? []) as Trade[];
+}
+
+export async function fetchActiveTradeCommands(): Promise<TradeCommand[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("trade_commands")
+    .select("*")
+    .in("status", ["pending", "processing", "failed"])
+    .order("requested_at", { ascending: false });
+  if (error) {
+    logFetchError("trade_commands", error.message);
+    return [];
+  }
+  return (data ?? []) as TradeCommand[];
 }
 
 export async function fetchRecentTrades(limit = 10): Promise<Trade[]> {

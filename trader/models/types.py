@@ -186,6 +186,7 @@ class ClosedTrade:
     gross_pnl: float
     net_pnl: float
     reason: str
+    filled_quantity: Optional[float] = None
 
 
 @dataclass

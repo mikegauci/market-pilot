@@ -88,6 +88,17 @@ export type Trade = {
   created_at: string;
 };
 
+export type TradeCommand = {
+  id: string;
+  trade_id: string;
+  command: "close";
+  status: "pending" | "processing" | "completed" | "failed";
+  reason: string;
+  requested_at: string;
+  processed_at: string | null;
+  error: string | null;
+};
+
 export type Position = {
   id: string;
   symbol: string;

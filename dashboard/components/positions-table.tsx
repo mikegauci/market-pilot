@@ -1,15 +1,46 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
+import { ClosePositionButton } from "@/components/close-position-button";
 import { Card, CardTitle } from "@/components/ui/card";
-import { fetchPositions } from "@/lib/data-client";
+import { fetchActiveTradeCommands, fetchOpenTrades, fetchPositions } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
-import type { Position } from "@/lib/types/database";
+import { useTraderOnline } from "@/lib/hooks/use-trader-online";
+import { tradeForPosition } from "@/lib/trade-matching";
+import type { BotStatus, Position, Trade, TradeCommand } from "@/lib/types/database";
 import { formatCurrency } from "@/lib/utils";
 
-export function PositionsTable({ positions }: { positions: Position[] }) {
+type Props = {
+  positions: Position[];
+  openTrades: Trade[];
+  tradeCommands: TradeCommand[];
+  botStatus: BotStatus;
+};
+
+export function PositionsTable({
+  positions,
+  openTrades,
+  tradeCommands,
+  botStatus,
+}: Props) {
+  const traderOnline = useTraderOnline(botStatus);
   const fetchList = useCallback(() => fetchPositions(), []);
+  const fetchTrades = useCallback(() => fetchOpenTrades(), []);
+  const fetchCommands = useCallback(() => fetchActiveTradeCommands(), []);
+
   const livePositions = useLiveQuery(positions, fetchList, ["positions"]);
+  const liveOpenTrades = useLiveQuery(openTrades, fetchTrades, ["trades"]);
+  const liveCommands = useLiveQuery(tradeCommands, fetchCommands, ["trade_commands"]);
+
+  const commandByTradeId = useMemo(() => {
+    const map = new Map<string, TradeCommand>();
+    for (const command of liveCommands) {
+      if (!map.has(command.trade_id)) {
+        map.set(command.trade_id, command);
+      }
+    }
+    return map;
+  }, [liveCommands]);
 
   return (
     <Card>
@@ -25,25 +56,48 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
                 <th className="pb-2 pr-4">Qty</th>
                 <th className="pb-2 pr-4">Avg</th>
                 <th className="pb-2 pr-4">Price</th>
-                <th className="pb-2">Unrealized</th>
+                <th className="pb-2 pr-4">Unrealized</th>
+                <th className="pb-2">Action</th>
               </tr>
             </thead>
             <tbody>
-              {livePositions.map((p) => (
-                <tr key={p.id} className="border-b border-zinc-800/50">
-                  <td className="py-2 pr-4 font-medium">{p.symbol}</td>
-                  <td className="py-2 pr-4">{p.quantity}</td>
-                  <td className="py-2 pr-4">{formatCurrency(p.avg_cost)}</td>
-                  <td className="py-2 pr-4">{formatCurrency(p.market_price)}</td>
-                  <td
-                    className={`py-2 ${
-                      (p.unrealized_pnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"
-                    }`}
-                  >
-                    {formatCurrency(p.unrealized_pnl)}
-                  </td>
-                </tr>
-              ))}
+              {livePositions.map((p) => {
+                const trade = tradeForPosition(p, liveOpenTrades);
+                const command = trade ? commandByTradeId.get(trade.id) : undefined;
+                const pending =
+                  command?.status === "pending" || command?.status === "processing";
+                const failed = command?.status === "failed";
+
+                return (
+                  <tr key={p.id} className="border-b border-zinc-800/50">
+                    <td className="py-2 pr-4 font-medium">{p.symbol}</td>
+                    <td className="py-2 pr-4">{p.quantity}</td>
+                    <td className="py-2 pr-4">{formatCurrency(p.avg_cost)}</td>
+                    <td className="py-2 pr-4">{formatCurrency(p.market_price)}</td>
+                    <td
+                      className={`py-2 pr-4 ${
+                        (p.unrealized_pnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"
+                      }`}
+                    >
+                      {formatCurrency(p.unrealized_pnl)}
+                    </td>
+                    <td className="py-2">
+                      {trade ? (
+                        <ClosePositionButton
+                          tradeId={trade.id}
+                          symbol={p.symbol}
+                          traderOnline={traderOnline}
+                          pending={pending}
+                          failed={failed}
+                          errorMessage={command?.error}
+                        />
+                      ) : (
+                        <span className="text-xs text-zinc-600">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

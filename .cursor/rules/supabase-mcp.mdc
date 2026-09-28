@@ -1,0 +1,26 @@
+---
+description: Apply Supabase schema changes via MCP, not local SQL migration files
+alwaysApply: true
+---
+
+# Supabase database changes
+
+For this project, **all database/schema changes must be applied through the Supabase MCP** (`plugin-supabase-supabase`), not by adding files under `supabase/migrations/`.
+
+## Workflow
+
+1. Read the Supabase skill before schema work.
+2. Inspect existing tables/policies with MCP (`list_tables`, `execute_sql`) before changing anything.
+3. Apply changes with MCP `apply_migration` or `execute_sql` on project `gbprapqifrvhylfazjvs`.
+4. Verify the change with a follow-up MCP query.
+5. **Do not create new `.sql` migration files** in the repo for these changes.
+
+## When updating application code
+
+- Update TypeScript/Python types and queries to match the live schema.
+- Document notable schema changes in commit messages or PR descriptions, not in new migration files.
+
+## Do not
+
+- Add `supabase/migrations/*.sql` for new features or fixes.
+- Rely on local SQL files as the source of truth for production schema.

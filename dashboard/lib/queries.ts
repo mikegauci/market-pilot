@@ -6,6 +6,7 @@ import type {
   Prediction,
   Settings,
   Trade,
+  TradeCommand,
 } from "@/lib/types/database";
 
 export async function getBotStatus(): Promise<BotStatus | null> {
@@ -46,6 +47,26 @@ export async function getPositions(): Promise<Position[]> {
   const supabase = await createClient();
   const { data } = await supabase.from("positions").select("*").order("symbol");
   return (data ?? []) as Position[];
+}
+
+export async function getOpenTrades(): Promise<Trade[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("trades")
+    .select("*")
+    .eq("status", "open")
+    .order("entry_time", { ascending: false });
+  return (data ?? []) as Trade[];
+}
+
+export async function getActiveTradeCommands(): Promise<TradeCommand[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("trade_commands")
+    .select("*")
+    .in("status", ["pending", "processing", "failed"])
+    .order("requested_at", { ascending: false });
+  return (data ?? []) as TradeCommand[];
 }
 
 export async function getRecentTrades(limit = 10): Promise<Trade[]> {
