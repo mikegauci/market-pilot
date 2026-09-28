@@ -331,7 +331,7 @@ Open [http://localhost:3000](http://localhost:3000) and sign in.
 
 ### Deploy to Vercel
 
-Set root directory to `dashboard` and add `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+Live at [dashboard](https://vercel.com/mikegaucis-projects/dashboard) (`https://dashboard-mikegaucis-projects.vercel.app`). Root directory `dashboard`, env vars per [`dashboard/README.md`](dashboard/README.md). Add the Vercel URL to Supabase Auth redirect URLs for login to work in production.
 
 ## Phase 1 Verification Checklist
 

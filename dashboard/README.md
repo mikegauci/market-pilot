@@ -40,11 +40,16 @@ Flipping the bot switch updates `bot_status.enabled` in Supabase. The Python tra
 
 ## Deploy to Vercel
 
-1. Create a Vercel project with **Root Directory** = `dashboard`
-2. Set environment variables:
+Production: [dashboard on Vercel](https://vercel.com/mikegaucis-projects/dashboard) → `https://dashboard-mikegaucis-projects.vercel.app`
+
+1. Vercel project name: **`dashboard`** (team: mikegaucis-projects)
+2. **Root Directory** = `dashboard`, linked to `mikegauci/market-pilot` on `main`
+3. Environment variables (Production + Preview):
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-3. Deploy
+4. In [Supabase Auth URL config](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/auth/url-configuration), add:
+   - Site URL: `https://dashboard-mikegaucis-projects.vercel.app`
+   - Redirect URL: `https://dashboard-mikegaucis-projects.vercel.app/auth/callback`
 
 ## Security
 
