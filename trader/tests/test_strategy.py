@@ -123,6 +123,7 @@ class TestTimeExit(unittest.TestCase):
                 max_open_positions=2,
                 stop_loss_percentage=0.01,
                 take_profit_percentage=0.015,
+                max_hold_minutes=15.0,
                 account_capital=10_000.0,
                 risk_sync_equity=None,
                 watchlist=["NVDA"],

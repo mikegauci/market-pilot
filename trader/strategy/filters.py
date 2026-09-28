@@ -33,6 +33,22 @@ def check_entry_filters(state: MarketState, config: StrategyConfig) -> FilterRes
             f"spy_headwind ({state.spy_change_5m:.2f}% 5m)",
         )
 
+    if state.news_sentiment is not None:
+        if state.news_sentiment <= config.min_news_sentiment:
+            return FilterResult(
+                False,
+                f"news_sentiment_bearish ({state.news_sentiment:.2f})",
+            )
+
+    if state.news_tags:
+        blocked = set(config.news_block_tags) & set(state.news_tags)
+        if blocked:
+            tag = sorted(blocked)[0]
+            return FilterResult(False, f"news_block_tag ({tag})")
+
+        if config.block_on_earnings and "earnings" in state.news_tags:
+            return FilterResult(False, "news_earnings_window")
+
     return FilterResult(True, "ok")
 
 

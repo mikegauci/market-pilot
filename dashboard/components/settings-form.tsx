@@ -24,6 +24,7 @@ import {
 } from "@/lib/risk-recommendations";
 import {
   fractionToDisplayPercent,
+  getMaxHoldHints,
   getStopLossHints,
   getTakeProfitHints,
   isNearStrategyPercent,
@@ -48,6 +49,8 @@ const SETTING_DESCRIPTIONS = {
     "Auto-sell if the price drops this % below your entry — also controls how large each trade is for a given risk budget.",
   take_profit_percentage:
     "Auto-sell when the price rises this % above your entry to lock in gains.",
+  max_hold_minutes:
+    "Force-close open trades after this many minutes (0 = off). When off, exits use stop loss, take profit, and Jev SELL only.",
   watchlist: "Stock symbols the bot watches for buy and sell signals.",
 } as const;
 
@@ -265,6 +268,8 @@ export function SettingsForm({
   const [takeProfitPct, setTakeProfitPct] = useState(
     fractionToDisplayPercent(settings.take_profit_percentage),
   );
+  const [maxHoldMinutes, setMaxHoldMinutes] = useState(settings.max_hold_minutes ?? 0);
+  const maxHoldHints = getMaxHoldHints(maxHoldMinutes);
   const [selectedProfile, setSelectedProfile] = useState<RiskProfile>(
     resolveRiskProfile(settings.risk_profile),
   );
@@ -427,6 +432,27 @@ export function SettingsForm({
             STRATEGY_RECOMMENDATIONS.take_profit_percentage,
           )}
         />
+        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/30 p-3">
+          <Label htmlFor="max_hold_minutes">Max hold (minutes)</Label>
+          <Input
+            id="max_hold_minutes"
+            name="max_hold_minutes"
+            type="number"
+            step="1"
+            min={0}
+            max={480}
+            value={maxHoldMinutes}
+            onChange={(event) => setMaxHoldMinutes(Number(event.target.value))}
+            required
+            className="mt-2"
+          />
+          <div className="mt-2 space-y-1">
+            {maxHoldHints.map((hint) => (
+              <StrategyHintLine key={hint.message} hint={hint} />
+            ))}
+          </div>
+          <FieldDescription>{SETTING_DESCRIPTIONS.max_hold_minutes}</FieldDescription>
+        </div>
         <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/30 p-3 sm:col-span-2">
           <WatchlistPicker defaultValue={settings.watchlist} />
           <FieldDescription>{SETTING_DESCRIPTIONS.watchlist}</FieldDescription>

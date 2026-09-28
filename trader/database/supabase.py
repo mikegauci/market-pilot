@@ -221,7 +221,8 @@ class SupabaseRepository:
             .select(
                 "minimum_jev_confidence, signal_record_threshold, risk_per_trade, "
                 "max_position_size, max_daily_loss, max_open_positions, "
-                "stop_loss_percentage, take_profit_percentage, account_capital, "
+                "stop_loss_percentage, take_profit_percentage, max_hold_minutes, "
+                "account_capital, "
                 "risk_sync_equity, watchlist"
             )
             .eq("id", 1)
@@ -239,6 +240,7 @@ class SupabaseRepository:
             max_open_positions=int(data.get("max_open_positions", 2)),
             stop_loss_percentage=float(data.get("stop_loss_percentage", 0.01)),
             take_profit_percentage=float(data.get("take_profit_percentage", 0.015)),
+            max_hold_minutes=float(data.get("max_hold_minutes", 0)),
             account_capital=float(data.get("account_capital", 1000)),
             risk_sync_equity=(
                 float(data["risk_sync_equity"])

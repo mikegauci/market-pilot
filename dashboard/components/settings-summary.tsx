@@ -140,6 +140,14 @@ export function SettingsSummary({
           label="Take profit"
           value={formatStrategyPercent(settings.take_profit_percentage)}
         />
+        <SettingRow
+          label="Max hold"
+          value={
+            settings.max_hold_minutes > 0
+              ? `${settings.max_hold_minutes} min`
+              : "Off"
+          }
+        />
       </div>
 
       <div className="mt-3 border-t border-zinc-800/60 pt-3">

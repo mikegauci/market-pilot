@@ -21,17 +21,27 @@ ACTION_QUESTION = {
         "probabilities for the next few minutes of intraday movement. "
         "Prefer BUY only when momentum, volume, and trend alignment (price vs EMAs, "
         "RSI not overbought) support a long entry. Penalize BUY when the stock is "
-        "extended, spread is wide, or broad market (SPY) is weak."
+        "extended, spread is wide, or broad market (SPY) is weak. "
+        "When news_sentiment, news_tags, or news_top_headline are present, fold "
+        "headline context into the decision: penalize BUY on bearish sentiment "
+        "(news_sentiment below zero) or tags such as downgrade, lawsuit, "
+        "sec_investigation, guidance_cut, or earnings_miss; favor caution (hold/sell) "
+        "on high-impact negative tags. Treat missing news fields as neutral."
     ),
     "criteria": {
         "buy": (
             "Clear intraday edge: bullish momentum, supportive volume, price above "
-            "key EMAs, RSI not overbought, and no broad-market headwind."
+            "key EMAs, RSI not overbought, no broad-market headwind, and no bearish "
+            "news sentiment or blocking news tags."
         ),
-        "hold": "No clear edge; waiting is preferable to acting.",
+        "hold": (
+            "No clear edge; waiting is preferable to acting — including when news "
+            "is ambiguous or mildly negative."
+        ),
         "sell": (
             "Indicators favor exiting or avoiding a long position now — weakening "
-            "momentum, overbought RSI, or price breaking below short-term support."
+            "momentum, overbought RSI, price breaking below short-term support, or "
+            "bearish news sentiment/tags."
         ),
     },
 }

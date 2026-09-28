@@ -22,11 +22,36 @@ export type Settings = {
   max_open_positions: number;
   stop_loss_percentage: number;
   take_profit_percentage: number;
+  max_hold_minutes: number;
   account_capital: number;
   risk_sync_equity: number | null;
   risk_profile?: "low" | "medium" | "high" | null;
   watchlist: string[];
   updated_at: string;
+};
+
+export type MarketSnapshotNews = {
+  news_sentiment?: number | null;
+  news_headline_count?: number | null;
+  news_top_headline?: string | null;
+  news_tags?: string[] | null;
+  news_fetched_at?: string | null;
+};
+
+export type MarketSnapshot = MarketSnapshotNews & {
+  symbol?: string;
+  price?: number;
+  change_1m?: number | null;
+  change_5m?: number | null;
+  change_15m?: number | null;
+  volume_ratio?: number | null;
+  rsi?: number | null;
+  ema_9?: number | null;
+  ema_20?: number | null;
+  bid?: number | null;
+  ask?: number | null;
+  spread?: number | null;
+  spy_change_5m?: number | null;
 };
 
 export type Prediction = {
@@ -38,6 +63,7 @@ export type Prediction = {
   hold_probability: number;
   sell_probability: number;
   trade_created: boolean;
+  market_snapshot?: MarketSnapshot | null;
   created_at: string;
 };
 

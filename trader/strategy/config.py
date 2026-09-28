@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Tuple
 
 
 @dataclass(frozen=True)
@@ -13,8 +14,17 @@ class StrategyConfig:
     max_spy_drop_5m_pct: float = -0.3
     min_buy_hold_margin: float = 0.15
     confirmation_cycles: int = 2
-    max_hold_minutes: float = 15.0
+    max_hold_minutes: float = 0.0
     jev_sell_exit_threshold: float = 0.75
     max_correlated_positions: int = 2
     warmup_min_samples: int = 30
     warmup_min_span_sec: float = 120.0
+    min_news_sentiment: float = -0.3
+    news_block_tags: Tuple[str, ...] = (
+        "downgrade",
+        "lawsuit",
+        "sec_investigation",
+        "guidance_cut",
+        "layoffs",
+    )
+    block_on_earnings: bool = False

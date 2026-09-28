@@ -1,11 +1,11 @@
 "use client";
 
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
-import type { Prediction } from "@/lib/types/database";
+import type { MarketSnapshot, Prediction } from "@/lib/types/database";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { formatCurrency, formatDateTime, formatPercent } from "@/lib/utils";
 
@@ -38,11 +38,60 @@ function comparePredictions(a: Prediction, b: Prediction, key: SortKey): number 
   }
 }
 
+function sentimentLabel(sentiment: number): string {
+  if (sentiment > 0.1) return "bullish";
+  if (sentiment < -0.1) return "bearish";
+  return "neutral";
+}
+
+function sentimentClass(sentiment: number): string {
+  if (sentiment > 0.1) return "bg-emerald-900 text-emerald-300";
+  if (sentiment < -0.1) return "bg-red-900 text-red-300";
+  return "bg-zinc-800 text-zinc-300";
+}
+
+function NewsCell({ snapshot }: { snapshot?: MarketSnapshot | null }) {
+  if (
+    snapshot?.news_sentiment == null &&
+    !snapshot?.news_top_headline &&
+    !(snapshot?.news_tags && snapshot.news_tags.length > 0)
+  ) {
+    return <span className="text-zinc-600">—</span>;
+  }
+
+  const sentiment = snapshot?.news_sentiment ?? 0;
+
+  return (
+    <div className="space-y-1">
+      {snapshot?.news_sentiment != null && (
+        <Badge className={sentimentClass(sentiment)}>
+          {sentimentLabel(sentiment)} ({sentiment.toFixed(2)})
+        </Badge>
+      )}
+      {snapshot?.news_top_headline && (
+        <p className="max-w-xs truncate text-xs text-zinc-400" title={snapshot.news_top_headline}>
+          {snapshot.news_top_headline}
+        </p>
+      )}
+      {snapshot?.news_tags && snapshot.news_tags.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {snapshot.news_tags.map((tag) => (
+            <Badge key={tag} className="border border-zinc-700 bg-transparent text-[10px] text-zinc-400">
+              {tag}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) {
   const router = useRouter();
   const [symbolFilter, setSymbolFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("timestamp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const refresh = useCallback(() => router.refresh(), [router]);
   useRealtimeRefresh(["predictions"], refresh);
 
@@ -69,6 +118,10 @@ export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) 
     }
   }
 
+  function toggleExpanded(id: string) {
+    setExpandedId((current) => (current === id ? null : id));
+  }
+
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -93,6 +146,7 @@ export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) 
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-800 text-left text-zinc-500">
+                <th className="pb-2 pr-2 w-8" />
                 {(
                   [
                     ["Time", "timestamp"],
@@ -101,45 +155,102 @@ export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) 
                     ["BUY", "buy_probability"],
                     ["HOLD", "hold_probability"],
                     ["SELL", "sell_probability"],
+                    ["News", null],
                     ["Trade", "trade_created"],
                   ] as const
                 ).map(([label, key], i, arr) => (
-                  <th key={key} className={`pb-2 ${i < arr.length - 1 ? "pr-3" : ""}`}>
-                    <button
-                      type="button"
-                      onClick={() => handleSort(key)}
-                      className="inline-flex items-center gap-1 hover:text-zinc-300"
-                    >
-                      {label}
-                      {sortKey === key &&
-                        (sortDir === "asc" ? (
-                          <ArrowUp className="h-3 w-3" />
-                        ) : (
-                          <ArrowDown className="h-3 w-3" />
-                        ))}
-                    </button>
+                  <th key={label} className={`pb-2 ${i < arr.length - 1 ? "pr-3" : ""}`}>
+                    {key ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSort(key)}
+                        className="inline-flex items-center gap-1 hover:text-zinc-300"
+                      >
+                        {label}
+                        {sortKey === key &&
+                          (sortDir === "asc" ? (
+                            <ArrowUp className="h-3 w-3" />
+                          ) : (
+                            <ArrowDown className="h-3 w-3" />
+                          ))}
+                      </button>
+                    ) : (
+                      label
+                    )}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {sorted.map((p) => (
-                <tr key={p.id} className="border-b border-zinc-800/50">
-                  <td className="py-2 pr-3 text-zinc-400">{formatDateTime(p.timestamp)}</td>
-                  <td className="py-2 pr-3 font-medium">{p.symbol}</td>
-                  <td className="py-2 pr-3">{formatCurrency(p.price)}</td>
-                  <td className="py-2 pr-3 text-emerald-400">{formatPercent(p.buy_probability)}</td>
-                  <td className="py-2 pr-3 text-zinc-300">{formatPercent(p.hold_probability)}</td>
-                  <td className="py-2 pr-3 text-red-400">{formatPercent(p.sell_probability)}</td>
-                  <td className="py-2">
-                    {p.trade_created ? (
-                      <Badge className="bg-emerald-900 text-emerald-300">opened</Badge>
-                    ) : (
-                      <span className="text-zinc-600">—</span>
+              {sorted.map((p) => {
+                const snapshot = p.market_snapshot;
+                const hasNewsDetail = Boolean(snapshot?.news_top_headline);
+                const isExpanded = expandedId === p.id;
+
+                return (
+                  <Fragment key={p.id}>
+                    <tr className="border-b border-zinc-800/50">
+                      <td className="py-2 pr-2">
+                        {hasNewsDetail ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(p.id)}
+                            className="text-zinc-500 hover:text-zinc-300"
+                            aria-label={isExpanded ? "Collapse news" : "Expand news"}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4" />
+                            )}
+                          </button>
+                        ) : null}
+                      </td>
+                      <td className="py-2 pr-3 text-zinc-400">{formatDateTime(p.timestamp)}</td>
+                      <td className="py-2 pr-3 font-medium">{p.symbol}</td>
+                      <td className="py-2 pr-3">{formatCurrency(p.price)}</td>
+                      <td className="py-2 pr-3 text-emerald-400">
+                        {formatPercent(p.buy_probability)}
+                      </td>
+                      <td className="py-2 pr-3 text-zinc-300">
+                        {formatPercent(p.hold_probability)}
+                      </td>
+                      <td className="py-2 pr-3 text-red-400">
+                        {formatPercent(p.sell_probability)}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <NewsCell snapshot={snapshot} />
+                      </td>
+                      <td className="py-2">
+                        {p.trade_created ? (
+                          <Badge className="bg-emerald-900 text-emerald-300">opened</Badge>
+                        ) : (
+                          <span className="text-zinc-600">—</span>
+                        )}
+                      </td>
+                    </tr>
+                    {isExpanded && hasNewsDetail && (
+                      <tr className="border-b border-zinc-800/50 bg-zinc-900/40">
+                        <td />
+                        <td colSpan={8} className="py-3 pr-3">
+                          <div className="space-y-2 text-xs text-zinc-400">
+                            <p className="text-sm text-zinc-300">{snapshot?.news_top_headline}</p>
+                            {snapshot?.news_headline_count != null && (
+                              <p>
+                                {snapshot.news_headline_count} headline
+                                {snapshot.news_headline_count === 1 ? "" : "s"} in lookback window
+                              </p>
+                            )}
+                            {snapshot?.news_fetched_at && (
+                              <p>News fetched: {formatDateTime(snapshot.news_fetched_at)}</p>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                </tr>
-              ))}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

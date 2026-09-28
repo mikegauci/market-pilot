@@ -1,6 +1,7 @@
 export const STRATEGY_RECOMMENDATIONS = {
   stop_loss_percentage: 0.01,
   take_profit_percentage: 0.015,
+  max_hold_minutes: 0,
 } as const;
 
 export type StrategyPercentKey = keyof typeof STRATEGY_RECOMMENDATIONS;
@@ -116,6 +117,56 @@ export function getTakeProfitHints(
         message: "High take-profit target — wins may be less frequent.",
       });
     }
+  }
+
+  return hints;
+}
+
+export function formatMaxHoldMinutes(minutes: number): string {
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    return "Off (brackets + Jev SELL)";
+  }
+  return `${minutes} min`;
+}
+
+export function getMaxHoldHints(minutes: number): StrategyHint[] {
+  const hints: StrategyHint[] = [];
+  const rec = STRATEGY_RECOMMENDATIONS.max_hold_minutes;
+
+  if (minutes === rec) {
+    hints.push({
+      tone: "ok",
+      message: "Off — recommended with 1% / 1.5% bracket targets on large caps.",
+    });
+    return hints;
+  }
+
+  if (minutes === 0) {
+    hints.push({
+      tone: "ok",
+      message: "Time cutoff disabled — exits rely on stop loss, take profit, and Jev SELL.",
+    });
+    return hints;
+  }
+
+  hints.push({
+    tone: "info",
+    message: `Recommended: ${rec} (off) when take profit is 1.5% on large caps.`,
+  });
+
+  if (minutes > 0 && minutes <= 20) {
+    hints.push({
+      tone: "warn",
+      message:
+        "Short hold — may close winners before take profit; pair with a smaller profit target.",
+    });
+  }
+
+  if (minutes >= 120) {
+    hints.push({
+      tone: "info",
+      message: "Long hold — gives bracket take profit more time to fill.",
+    });
   }
 
   return hints;

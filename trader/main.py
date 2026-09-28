@@ -14,6 +14,10 @@ from instance_lock import acquire_trader_lock
 from database.supabase import SupabaseRepository
 from jev.client import JevClient
 from market.history import HistoryStore
+from news.cache import TtlCache
+from news.client import FinnhubNewsClient, NewsService
+from news.enrich import enrich_market_state_with_news
+from news.sentiment import NewsContext
 from market.hours import is_us_regular_session_open
 from market.indicators import build_market_state
 from market.mock import MockMarketProvider
@@ -252,10 +256,10 @@ def run() -> int:
     confirmation_tracker = ConfirmationTracker(strategy_config.confirmation_cycles)
     logger.info(
         "Strategy filters: min confidence from settings, margin %.0f%%, "
-        "confirmation %sx, max hold %.0fm",
+        "confirmation %sx, max hold %.0fm (dashboard)",
         strategy_config.min_buy_hold_margin * 100,
         strategy_config.confirmation_cycles,
-        strategy_config.max_hold_minutes,
+        risk_settings.max_hold_minutes,
     )
 
     ibkr = IBKRClient(
@@ -276,6 +280,31 @@ def run() -> int:
             )
         else:
             logger.warning("JEV_ENABLED=true but TYPESAFE_AI_API_KEY is not set — skipping Jev calls")
+
+    news_service: Optional[NewsService] = None
+    if settings.news_enabled and settings.data_source != DataSource.MOCK:
+        news_client = FinnhubNewsClient(
+            settings.finnhub_api_key,
+            lookback_hours=settings.news_lookback_hours,
+            max_headlines=settings.news_max_headlines,
+            max_retries=settings.news_max_retries,
+        )
+        news_cache: TtlCache[NewsContext] = TtlCache(settings.news_cache_ttl_sec)
+        news_service = NewsService(
+            news_client,
+            news_cache,
+            skip_symbols=settings.news_skip_symbol_set,
+            empty_cooldown_sec=settings.news_empty_cooldown_sec,
+            failure_cooldown_sec=settings.news_failure_cooldown_sec,
+            fetch_workers=settings.news_fetch_workers,
+        )
+        logger.info(
+            "News enrichment enabled (Finnhub, cache TTL %.0fs, skip %s)",
+            settings.news_cache_ttl_sec,
+            ", ".join(sorted(settings.news_skip_symbol_set)) or "none",
+        )
+    elif settings.data_source == DataSource.MOCK:
+        logger.info("News enrichment skipped in mock data mode")
 
     if settings.data_source == DataSource.IBKR:
         if _connect_ibkr(ibkr, max_attempts=3):
@@ -375,7 +404,7 @@ def run() -> int:
             if risk_manager and db:
                 closed = risk_manager.check_exits(
                     quotes_by_symbol,
-                    max_hold_minutes=strategy_config.max_hold_minutes,
+                    max_hold_minutes=risk_settings.max_hold_minutes,
                 )
                 for closed_trade in closed:
                     db.close_trade(
@@ -396,7 +425,7 @@ def run() -> int:
                         ibkr,
                         risk_manager,
                         db,
-                        max_hold_minutes=strategy_config.max_hold_minutes,
+                        max_hold_minutes=risk_settings.max_hold_minutes,
                         fill_timeout_sec=settings.ibkr_fill_timeout_sec,
                     ):
                         portfolio_dirty = True
@@ -432,6 +461,9 @@ def run() -> int:
 
             jev_sell_symbols: Set[str] = set()
 
+            if news_service and eval_symbols:
+                news_service.refresh_stale(eval_symbols)
+
             for symbol in eval_symbols:
                 quote = quotes_by_symbol.get(symbol)
                 if quote is None:
@@ -459,6 +491,8 @@ def run() -> int:
 
                 if jev is None:
                     continue
+
+                state = enrich_market_state_with_news(state, news_service)
 
                 try:
                     prediction = jev.predict(state)

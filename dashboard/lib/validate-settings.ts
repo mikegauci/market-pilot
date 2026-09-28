@@ -18,6 +18,7 @@ function labelFor(name: string): string {
     max_open_positions: "Max open positions",
     stop_loss_percentage: "Stop loss (%)",
     take_profit_percentage: "Take profit (%)",
+    max_hold_minutes: "Max hold (minutes)",
   };
   return labels[name] ?? name;
 }
@@ -31,6 +32,7 @@ export type ParsedSettings = {
   max_open_positions: number;
   stop_loss_percentage: number;
   take_profit_percentage: number;
+  max_hold_minutes: number;
   risk_profile: RiskProfile;
   watchlist: string[];
 };
@@ -68,6 +70,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   const max_open_positions = parseRequiredNumber(formData, "max_open_positions");
   const stop_loss_percentage = parseStrategyPercent(formData, "stop_loss_percentage");
   const take_profit_percentage = parseStrategyPercent(formData, "take_profit_percentage");
+  const max_hold_minutes = parseRequiredNumber(formData, "max_hold_minutes");
 
   if (signal_record_threshold > minimum_jev_confidence) {
     throw new Error("Signal record threshold (%) must be at or below Min Jev confidence (%)");
@@ -86,6 +89,9 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   if (take_profit_percentage <= stop_loss_percentage) {
     throw new Error("Take profit (%) must be greater than stop loss (%)");
+  }
+  if (!Number.isInteger(max_hold_minutes) || max_hold_minutes < 0 || max_hold_minutes > 480) {
+    throw new Error("Max hold (minutes) must be a whole number from 0 to 480");
   }
 
   const watchlistRaw = String(formData.get("watchlist") ?? "");
@@ -114,6 +120,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     max_open_positions,
     stop_loss_percentage,
     take_profit_percentage,
+    max_hold_minutes,
     risk_profile: parseRiskProfile(formData),
     watchlist,
   };

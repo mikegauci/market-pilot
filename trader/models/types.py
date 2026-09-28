@@ -83,6 +83,11 @@ class MarketState:
     ask: Optional[float]
     spread: Optional[float]
     spy_change_5m: Optional[float]
+    news_sentiment: Optional[float] = None
+    news_headline_count: Optional[int] = None
+    news_top_headline: Optional[str] = None
+    news_tags: Optional[List[str]] = None
+    news_fetched_at: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -115,6 +120,7 @@ class RiskSettings:
     max_open_positions: int
     stop_loss_percentage: float
     take_profit_percentage: float
+    max_hold_minutes: float
     account_capital: float
     risk_sync_equity: Optional[float]
     watchlist: List[str]

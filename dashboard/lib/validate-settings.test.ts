@@ -18,6 +18,7 @@ const baseFields = {
   max_open_positions: "5",
   stop_loss_percentage: "1",
   take_profit_percentage: "1.5",
+  max_hold_minutes: "0",
   watchlist: "AAPL, MSFT",
 };
 
@@ -59,5 +60,21 @@ describe("parseSettingsForm watchlist", () => {
     expect(() =>
       parseSettingsForm(form({ ...baseFields, watchlist: "AAPL, bad ticker" })),
     ).toThrow("Invalid ticker(s): BAD TICKER");
+  });
+});
+
+describe("parseSettingsForm max_hold_minutes", () => {
+  it("parses zero as disabled", () => {
+    const parsed = parseSettingsForm(form({ ...baseFields, max_hold_minutes: "0" }));
+    expect(parsed.max_hold_minutes).toBe(0);
+  });
+
+  it("rejects negative or fractional values", () => {
+    expect(() =>
+      parseSettingsForm(form({ ...baseFields, max_hold_minutes: "-1" })),
+    ).toThrow("Max hold (minutes) must be a whole number from 0 to 480");
+    expect(() =>
+      parseSettingsForm(form({ ...baseFields, max_hold_minutes: "15.5" })),
+    ).toThrow("Max hold (minutes) must be a whole number from 0 to 480");
   });
 });

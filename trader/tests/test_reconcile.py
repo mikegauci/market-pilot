@@ -16,6 +16,7 @@ def _risk_settings() -> RiskSettings:
         max_open_positions=5,
         stop_loss_percentage=0.01,
         take_profit_percentage=0.015,
+        max_hold_minutes=0.0,
         account_capital=10000.0,
         risk_sync_equity=None,
         watchlist=["META", "AAPL"],

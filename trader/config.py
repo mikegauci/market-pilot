@@ -56,11 +56,25 @@ class Settings(BaseSettings):
     strategy_max_spy_drop_5m_pct: float = -0.3
     strategy_min_buy_hold_margin: float = 0.15
     strategy_confirmation_cycles: int = 2
-    strategy_max_hold_minutes: float = 15.0
+    strategy_max_hold_minutes: float = 0.0
     strategy_jev_sell_exit_threshold: float = 0.75
     strategy_max_correlated_positions: int = 2
     strategy_warmup_min_samples: int = 30
     strategy_warmup_min_span_sec: float = 120.0
+    strategy_min_news_sentiment: float = -0.3
+    strategy_news_block_tags: str = "downgrade,lawsuit,sec_investigation,guidance_cut,layoffs"
+    strategy_block_on_earnings: bool = False
+
+    news_enabled: bool = False
+    finnhub_api_key: str = ""
+    news_cache_ttl_sec: float = 600.0
+    news_lookback_hours: int = 24
+    news_max_headlines: int = 5
+    news_skip_symbols: str = "SPY,QQQ,IWM,DIA"
+    news_empty_cooldown_sec: float = 300.0
+    news_failure_cooldown_sec: float = 60.0
+    news_fetch_workers: int = 3
+    news_max_retries: int = 3
 
     @field_validator("trading_mode", mode="before")
     @classmethod
@@ -108,6 +122,20 @@ class Settings(BaseSettings):
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
+    @field_validator("news_enabled", mode="before")
+    @classmethod
+    def parse_news_enabled(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+    @field_validator("strategy_block_on_earnings", mode="before")
+    @classmethod
+    def parse_news_bool(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
     @field_validator("strategy_require_price_above_ema20", mode="before")
     @classmethod
     def parse_strategy_bool(cls, value: object) -> bool:
@@ -124,6 +152,20 @@ class Settings(BaseSettings):
                 file=sys.stderr,
             )
         return self
+
+    @model_validator(mode="after")
+    def disable_news_without_api_key(self) -> Settings:
+        if self.news_enabled and not self.finnhub_api_key.strip():
+            self.news_enabled = False
+        return self
+
+    @property
+    def news_skip_symbol_set(self) -> frozenset[str]:
+        return frozenset(
+            symbol.strip().upper()
+            for symbol in self.news_skip_symbols.split(",")
+            if symbol.strip()
+        )
 
     @model_validator(mode="after")
     def validate_live_trading_safety(self) -> Settings:
@@ -156,6 +198,13 @@ class Settings(BaseSettings):
             max_correlated_positions=self.strategy_max_correlated_positions,
             warmup_min_samples=self.strategy_warmup_min_samples,
             warmup_min_span_sec=self.strategy_warmup_min_span_sec,
+            min_news_sentiment=self.strategy_min_news_sentiment,
+            news_block_tags=tuple(
+                tag.strip()
+                for tag in self.strategy_news_block_tags.split(",")
+                if tag.strip()
+            ),
+            block_on_earnings=self.strategy_block_on_earnings,
         )
 
     @property
