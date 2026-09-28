@@ -179,6 +179,12 @@ Set `JEV_ENABLED=false` to test mock data and indicators only (no API calls).
 
 When IBKR is ready, set `DATA_SOURCE=ibkr` — the same pipeline uses live quotes.
 
+### Market-hours gate (IBKR only)
+
+When `DATA_SOURCE=ibkr`, the trader **skips Jev predictions and new entries** outside the US regular session (Mon–Fri 9:30–16:00 America/New_York). Exits, heartbeats, and quote snapshots continue. `DATA_SOURCE=mock` always runs Jev (useful for dev).
+
+Tune the closed-market poll interval with `CLOSED_MARKET_EVAL_INTERVAL_SEC` (default `300`).
+
 ## Running Phase 3 (Risk Engine + Simulated Trades)
 
 Phase 3 opens **simulated** positions when Jev signals `BUY ELIGIBLE` and risk checks pass. Trades are stored in Supabase with stop-loss / take-profit exits. **No IBKR orders are placed.**
@@ -204,7 +210,17 @@ UPDATE bot_status SET enabled = true WHERE id = 1;
 | `take_profit_percentage` | 0.015 | 1.5% take-profit from entry |
 | `account_capital` | 1000 | Fallback capital when IBKR offline |
 
-When IBKR is connected, **effective capital** uses your paper account `NetLiquidation` (e.g. €1M). Risk limits above stay as absolute USD amounts — tune them in Supabase as needed.
+When IBKR is connected, **effective capital** uses your paper account `NetLiquidation` (e.g. €1M). Tune absolute limits in Supabase or the dashboard Settings page.
+
+**Recommended values for ~€1M paper account:**
+
+| Column | Suggested | Purpose |
+|---|---|---|
+| `max_position_size` | 10000 | ~1% notional per trade |
+| `max_open_positions` | 5 | Max concurrent positions |
+| `risk_per_trade` | 2500 | ~0.25% risk per trade |
+| `max_daily_loss` | 10000 | ~1% daily stop |
+| `account_capital` | 1000000 | Fallback when IBKR offline |
 
 ### Run
 

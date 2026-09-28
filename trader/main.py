@@ -12,6 +12,7 @@ from config import Settings, load_settings
 from database.supabase import SupabaseRepository
 from jev.client import JevClient
 from market.history import HistoryStore
+from market.hours import is_us_regular_session_open
 from market.indicators import build_market_state
 from market.mock import MockMarketProvider
 from models.types import BotStatusUpdate, DataSource, ExecutionMode, Quote, TradingMode
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 _shutdown_requested = False
 _warmup_logged: Set[str] = set()
+_last_closed_market_log = 0.0
+_CLOSED_MARKET_LOG_INTERVAL_SEC = 300.0
 
 
 def _handle_shutdown(signum: int, _frame: object) -> None:
@@ -187,6 +190,7 @@ def run() -> int:
     while not _shutdown_requested:
         loop_start = time.monotonic()
         jev_connected_this_cycle = False
+        market_open = True
 
         try:
             if db:
@@ -226,7 +230,19 @@ def run() -> int:
 
             spy_history = history.get("SPY")
 
-            for symbol in watchlist:
+            market_open = (
+                settings.data_source != DataSource.IBKR or is_us_regular_session_open()
+            )
+            if not market_open:
+                global _last_closed_market_log
+                now_mono = time.monotonic()
+                if (now_mono - _last_closed_market_log) >= _CLOSED_MARKET_LOG_INTERVAL_SEC:
+                    logger.info(
+                        "US market closed — skipping Jev (exits/heartbeat continue)"
+                    )
+                    _last_closed_market_log = now_mono
+
+            for symbol in watchlist if market_open else []:
                 quote = quotes_by_symbol.get(symbol)
                 if quote is None:
                     continue
@@ -365,7 +381,12 @@ def run() -> int:
                 db.record_error(str(exc), enabled=bot_enabled, trading_mode=trading_mode)
 
         elapsed = time.monotonic() - loop_start
-        sleep_for = max(0.0, settings.eval_interval_sec - elapsed)
+        interval = (
+            settings.eval_interval_sec
+            if market_open
+            else settings.closed_market_eval_interval_sec
+        )
+        sleep_for = max(0.0, interval - elapsed)
         if sleep_for > 0 and not _shutdown_requested:
             time.sleep(sleep_for)
 

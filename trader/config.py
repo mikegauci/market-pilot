@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     data_source: DataSource = DataSource.MOCK
     execution_mode: ExecutionMode = ExecutionMode.SIMULATED
     eval_interval_sec: float = 1.0
+    closed_market_eval_interval_sec: float = 300.0
     jev_enabled: bool = True
     typesafe_ai_api_key: str = ""
     jev_model: str = "jev-latest"
