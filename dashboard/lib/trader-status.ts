@@ -26,14 +26,18 @@ export function isTraderOnline(
 
 function formatHeartbeatLabel(lastHeartbeat: string | null, now = Date.now()): string {
   const age = heartbeatAgeSec(lastHeartbeat, now);
-  if (age === null) return "offline";
+  if (age === null) return "Never";
   if (age <= HEARTBEAT_STALE_SEC) {
-    if (age < 5) return "just now";
-    return `${age}s ago`;
+    if (age < 5) return "Just now";
+    if (age < 60) return `${age} seconds ago`;
+    return "1 minute ago";
   }
-  if (age < 120) return `${age}s ago (stale)`;
-  const minutes = Math.floor(age / 60);
-  return `${minutes}m ago (offline)`;
+  if (age < 3600) {
+    const minutes = Math.floor(age / 60);
+    return minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
+  }
+  const hours = Math.floor(age / 3600);
+  return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
 }
 
 /** Fixed timestamp for SSR/hydration so relative labels do not drift by a second. */

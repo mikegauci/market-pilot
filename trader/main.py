@@ -63,6 +63,30 @@ def _connect_ibkr(client: IBKRClient, max_attempts: int = 1, delay_sec: float = 
     return False
 
 
+def _all_symbols(watchlist: list[str]) -> list[str]:
+    return list(dict.fromkeys(watchlist + ["SPY"]))
+
+
+def _sync_watchlist_symbols(
+    all_symbols: list[str],
+    mock: MockMarketProvider,
+    history: HistoryStore,
+    data_source: DataSource,
+) -> None:
+    """Pick up watchlist changes at runtime without restarting the trader."""
+    if data_source != DataSource.MOCK:
+        return
+    new_symbols = mock.ensure_symbols(all_symbols)
+    for symbol in new_symbols:
+        mock.seed_symbol_history(history, symbol)
+        _warmup_logged.discard(symbol)
+    if new_symbols:
+        logger.info(
+            "Watchlist expanded — seeded mock history for: %s",
+            ", ".join(new_symbols),
+        )
+
+
 def _get_quotes(
     settings: Settings,
     ibkr: IBKRClient,
@@ -71,7 +95,7 @@ def _get_quotes(
 ) -> list[Quote]:
     if settings.data_source == DataSource.IBKR and ibkr.is_connected():
         return ibkr.get_quotes(symbols, wait_sec=0.5)
-    return mock.get_quotes()
+    return mock.get_quotes(symbols)
 
 
 def _resolve_effective_capital(
@@ -140,7 +164,7 @@ def run() -> int:
 
     strategy_settings = db.get_settings()
     watchlist = strategy_settings.watchlist or settings.watchlist_symbols
-    all_symbols = list(dict.fromkeys(watchlist + ["SPY"]))
+    all_symbols = _all_symbols(watchlist)
 
     mock = MockMarketProvider(all_symbols)
     history = HistoryStore(all_symbols)
@@ -217,6 +241,10 @@ def run() -> int:
                 execution_mode = db.get_execution_mode(settings.execution_mode)
                 strategy_settings = db.get_settings()
                 watchlist = strategy_settings.watchlist or settings.watchlist_symbols
+                all_symbols = _all_symbols(watchlist)
+                _sync_watchlist_symbols(
+                    all_symbols, mock, history, settings.data_source
+                )
                 if risk_manager:
                     risk_manager.update_settings(db.get_risk_settings())
                     capital, currency = _resolve_effective_capital(

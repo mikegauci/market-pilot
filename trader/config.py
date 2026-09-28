@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     ibkr_account: str = ""
     ibkr_market_data_type: int = 3
 
-    watchlist: str = "SPY,QQQ,NVDA,AAPL,MSFT,AMD,META"
+    watchlist: str = "SPY,QQQ,NVDA,AAPL,MSFT,AMD,META,TSLA,GOOGL,AMZN"
 
     supabase_url: str = ""
     supabase_service_role_key: str = ""

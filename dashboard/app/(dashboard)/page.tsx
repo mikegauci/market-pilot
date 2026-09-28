@@ -26,16 +26,14 @@ export default async function OverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold">Overview</h2>
-          {botStatus && (
-            <div className="mt-3">
-              <LiveStatus status={botStatus} />
-            </div>
-          )}
-        </div>
-        {botStatus && <TradingControls status={botStatus} />}
+      <div className="space-y-4">
+        <h2 className="text-2xl font-semibold">Overview</h2>
+        {botStatus && (
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <LiveStatus status={botStatus} />
+            <TradingControls status={botStatus} />
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
