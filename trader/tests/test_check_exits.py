@@ -94,6 +94,35 @@ class TestCheckExits(unittest.TestCase):
         self.assertEqual(closed, [])
         self.assertEqual(len(self.manager.open_trades), 1)
 
+    def test_jev_sell_exit_closes_profitable_trade(self) -> None:
+        self.manager.open_trades = [_trade()]
+        quotes = {"META": Quote(symbol="META", price=760.0, bid=None, ask=None, spread=None)}
+
+        closed = self.manager.check_jev_exit("META", quotes)
+
+        self.assertIsNotNone(closed)
+        assert closed is not None
+        self.assertEqual(closed.reason, "jev_sell")
+        self.assertEqual(self.manager.open_trades, [])
+
+    def test_jev_sell_exit_skips_losing_trade(self) -> None:
+        self.manager.open_trades = [_trade()]
+        quotes = {"META": Quote(symbol="META", price=740.0, bid=None, ask=None, spread=None)}
+
+        closed = self.manager.check_jev_exit("META", quotes)
+
+        self.assertIsNone(closed)
+        self.assertEqual(len(self.manager.open_trades), 1)
+        self.assertFalse(
+            self.manager.can_jev_sell_exit("META", quotes),
+        )
+
+    def test_jev_sell_exit_allowed_at_breakeven(self) -> None:
+        self.manager.open_trades = [_trade()]
+        quotes = {"META": Quote(symbol="META", price=746.73, bid=None, ask=None, spread=None)}
+
+        self.assertTrue(self.manager.can_jev_sell_exit("META", quotes))
+
 
 if __name__ == "__main__":
     unittest.main()

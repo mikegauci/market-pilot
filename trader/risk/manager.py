@@ -199,12 +199,42 @@ class RiskManager:
         self.open_trades = remaining
         return closed
 
+    def can_jev_sell_exit(
+        self,
+        symbol: str,
+        quotes_by_symbol: Dict[str, Quote],
+        *,
+        log_skip: bool = False,
+    ) -> bool:
+        """True when a Jev SELL may close an open trade (skip while unrealized PnL is negative)."""
+        trade = next((t for t in self.open_trades if t.symbol == symbol), None)
+        if trade is None:
+            return False
+
+        quote = quotes_by_symbol.get(symbol)
+        if quote is None or quote.price is None:
+            return False
+
+        pnl = (quote.price - trade.entry_price) * trade.quantity
+        if pnl < 0:
+            if log_skip:
+                logger.info(
+                    "Filter: skipping Jev SELL exit for %s — unrealized loss ($%.2f)",
+                    symbol,
+                    pnl,
+                )
+            return False
+        return True
+
     def check_jev_exit(
         self,
         symbol: str,
         quotes_by_symbol: Dict[str, Quote],
     ) -> Optional[ClosedTrade]:
         """Simulated exit at market when Jev SELL signal triggers (IBKR handled separately)."""
+        if not self.can_jev_sell_exit(symbol, quotes_by_symbol):
+            return None
+
         trade = next((t for t in self.open_trades if t.symbol == symbol), None)
         if trade is None or trade.execution_mode == "ibkr":
             return None

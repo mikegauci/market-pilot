@@ -610,7 +610,9 @@ def run() -> int:
                         and is_sell_exit_eligible(
                             prediction, strategy_config.jev_sell_exit_threshold
                         )
-                        and any(t.symbol == symbol for t in risk_manager.open_trades)
+                        and risk_manager.can_jev_sell_exit(
+                            symbol, quotes_by_symbol, log_skip=True
+                        )
                     ):
                         jev_sell_symbols.add(symbol)
                         closed = risk_manager.check_jev_exit(symbol, quotes_by_symbol)
