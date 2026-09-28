@@ -18,7 +18,7 @@ def sync_ibkr_exits(
     ibkr: IBKRClient,
     risk_manager: RiskManager,
     db: SupabaseRepository,
-) -> None:
+) -> bool:
     """Close DB trades when IBKR bracket SL or TP legs fill."""
     closed_any = False
 
@@ -57,3 +57,5 @@ def sync_ibkr_exits(
 
     if closed_any:
         risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
+
+    return closed_any

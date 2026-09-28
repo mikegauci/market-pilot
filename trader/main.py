@@ -141,6 +141,42 @@ def _resolve_effective_capital(
     return fallback, "USD"
 
 
+def _sync_portfolio_state(
+    db: SupabaseRepository,
+    ibkr: IBKRClient,
+    risk_manager: Optional[RiskManager],
+    execution_mode: ExecutionMode,
+    quotes: list[Quote],
+) -> None:
+    """Push equity and positions to Supabase for dashboard Realtime updates."""
+    account = None
+    ibkr_positions = None
+    simulated_portfolio = None
+    open_trades = None
+
+    if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
+        try:
+            account = ibkr.get_account_summary()
+            ibkr_positions = ibkr.get_positions()
+        except Exception as exc:
+            logger.warning("Portfolio sync failed (IBKR): %s", exc)
+            return
+    elif risk_manager:
+        quotes_by_symbol = {q.symbol: q for q in quotes}
+        simulated_portfolio = risk_manager.get_portfolio_snapshot(quotes_by_symbol)
+        open_trades = risk_manager.open_trades
+    else:
+        return
+
+    db.write_portfolio_state(
+        quotes,
+        account=account,
+        ibkr_positions=ibkr_positions,
+        simulated_portfolio=simulated_portfolio,
+        open_trades=open_trades,
+    )
+
+
 def _init_risk_manager(
     db: SupabaseRepository,
     ibkr: IBKRClient,
@@ -267,6 +303,7 @@ def run() -> int:
                     "Startup reconciliation complete — %s orphan IBKR position(s) adopted",
                     reconciled,
                 )
+                _sync_portfolio_state(db, ibkr, risk_manager, execution_mode, [])
 
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)
@@ -280,6 +317,7 @@ def run() -> int:
         loop_start = time.monotonic()
         jev_connected_this_cycle = False
         market_open = True
+        portfolio_dirty = False
 
         try:
             if db:
@@ -317,11 +355,19 @@ def run() -> int:
                         closed_trade.gross_pnl,
                         closed_trade.net_pnl,
                     )
+                    portfolio_dirty = True
                 if closed:
                     risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
 
                 if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
-                    sync_ibkr_exits(ibkr, risk_manager, db)
+                    if sync_ibkr_exits(ibkr, risk_manager, db):
+                        portfolio_dirty = True
+
+            if portfolio_dirty and db:
+                _sync_portfolio_state(
+                    db, ibkr, risk_manager, execution_mode, quotes
+                )
+                portfolio_dirty = False
 
             spy_history = history.get("SPY")
 
@@ -442,6 +488,7 @@ def run() -> int:
                                         db.insert_trade(trade)
                                         risk_manager.register_open_trade(trade)
                                         trade_created = True
+                                        portfolio_dirty = True
                                         logger.info(
                                             "IBKR BUY %s x %.0f @ $%.2f "
                                             "(SL $%.2f / TP $%.2f)",
@@ -477,6 +524,7 @@ def run() -> int:
                                 db.insert_trade(trade)
                                 risk_manager.register_open_trade(trade)
                                 trade_created = True
+                                portfolio_dirty = True
                                 logger.info(
                                     "Simulated BUY %s x %.0f @ $%.2f (SL $%.2f / TP $%.2f)",
                                     trade.symbol,
@@ -498,6 +546,12 @@ def run() -> int:
                 except Exception as exc:
                     logger.error("Jev prediction failed for %s: %s", symbol, exc)
                     jev_connected = False
+
+            if portfolio_dirty and db:
+                _sync_portfolio_state(
+                    db, ibkr, risk_manager, execution_mode, quotes
+                )
+                portfolio_dirty = False
 
             now = time.monotonic()
             if db and (now - last_heartbeat) >= settings.heartbeat_interval_sec:

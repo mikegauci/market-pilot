@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -26,11 +27,25 @@ from models.types import (
 
 logger = logging.getLogger(__name__)
 
+# Postgres may return variable fractional digits (e.g. .99074); Python 3.9 needs 6.
+_ISO_FRACTION = re.compile(r"\.(\d+)([+-])")
+
+
+def _normalize_iso_timestamp(text: str) -> str:
+    text = text.replace("Z", "+00:00")
+
+    def repl(match: re.Match[str]) -> str:
+        frac = match.group(1)
+        tz_sep = match.group(2)
+        return f".{frac[:6]:0<6}{tz_sep}"
+
+    return _ISO_FRACTION.sub(repl, text, count=1)
+
 
 def _parse_timestamp(value: object) -> datetime:
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    text = str(value).replace("Z", "+00:00")
+    text = _normalize_iso_timestamp(str(value))
     parsed = datetime.fromisoformat(text)
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
@@ -390,9 +405,8 @@ class SupabaseRepository:
             )
         self._replace_positions(rows, {trade.symbol for trade in open_trades})
 
-    def write_heartbeat(
+    def write_portfolio_state(
         self,
-        status: BotStatusUpdate,
         quotes: List[Quote],
         *,
         account: Optional[AccountSummary] = None,
@@ -400,6 +414,7 @@ class SupabaseRepository:
         simulated_portfolio: Optional[SimulatedPortfolio] = None,
         open_trades: Optional[List[TradeRecord]] = None,
     ) -> None:
+        """Persist equity and positions without bot status or market snapshots."""
         if account is not None:
             self.insert_portfolio_snapshot(account)
         elif simulated_portfolio is not None:
@@ -410,6 +425,23 @@ class SupabaseRepository:
         elif open_trades is not None:
             self.sync_positions_from_trades(open_trades, quotes)
 
+    def write_heartbeat(
+        self,
+        status: BotStatusUpdate,
+        quotes: List[Quote],
+        *,
+        account: Optional[AccountSummary] = None,
+        ibkr_positions: Optional[List[Position]] = None,
+        simulated_portfolio: Optional[SimulatedPortfolio] = None,
+        open_trades: Optional[List[TradeRecord]] = None,
+    ) -> None:
+        self.write_portfolio_state(
+            quotes,
+            account=account,
+            ibkr_positions=ibkr_positions,
+            simulated_portfolio=simulated_portfolio,
+            open_trades=open_trades,
+        )
         self.insert_market_snapshots(quotes)
         self.update_bot_status(status)
 

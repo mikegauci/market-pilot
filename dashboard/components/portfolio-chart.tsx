@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 import {
   CartesianGrid,
@@ -12,21 +11,25 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardTitle } from "@/components/ui/card";
+import { fetchPortfolioHistory } from "@/lib/data-client";
+import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import type { PortfolioSnapshot } from "@/lib/types/database";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { formatCurrency } from "@/lib/utils";
 
 type Props = {
   data: PortfolioSnapshot[];
   currency?: string;
+  historyHours?: number;
 };
 
-export function PortfolioChart({ data, currency = "USD" }: Props) {
-  const router = useRouter();
-  const refresh = useCallback(() => router.refresh(), [router]);
-  useRealtimeRefresh(["portfolio_history"], refresh);
+export function PortfolioChart({ data, currency = "USD", historyHours = 24 }: Props) {
+  const fetchHistory = useCallback(
+    () => fetchPortfolioHistory(historyHours),
+    [historyHours],
+  );
+  const liveData = useLiveQuery(data, fetchHistory, ["portfolio_history"]);
 
-  const chartData = data.map((row) => ({
+  const chartData = liveData.map((row) => ({
     time: new Date(row.timestamp).toLocaleTimeString("en-GB", {
       hour: "2-digit",
       minute: "2-digit",

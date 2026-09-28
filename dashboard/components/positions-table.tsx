@@ -1,21 +1,20 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 import { Card, CardTitle } from "@/components/ui/card";
+import { fetchPositions } from "@/lib/data-client";
+import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import type { Position } from "@/lib/types/database";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { formatCurrency } from "@/lib/utils";
 
 export function PositionsTable({ positions }: { positions: Position[] }) {
-  const router = useRouter();
-  const refresh = useCallback(() => router.refresh(), [router]);
-  useRealtimeRefresh(["positions"], refresh);
+  const fetchList = useCallback(() => fetchPositions(), []);
+  const livePositions = useLiveQuery(positions, fetchList, ["positions"]);
 
   return (
     <Card>
-      <CardTitle>Open Positions ({positions.length})</CardTitle>
-      {positions.length === 0 ? (
+      <CardTitle>Open Positions ({livePositions.length})</CardTitle>
+      {livePositions.length === 0 ? (
         <p className="mt-4 text-sm text-zinc-500">No open positions</p>
       ) : (
         <div className="mt-4 overflow-x-auto">
@@ -30,7 +29,7 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
               </tr>
             </thead>
             <tbody>
-              {positions.map((p) => (
+              {livePositions.map((p) => (
                 <tr key={p.id} className="border-b border-zinc-800/50">
                   <td className="py-2 pr-4 font-medium">{p.symbol}</td>
                   <td className="py-2 pr-4">{p.quantity}</td>

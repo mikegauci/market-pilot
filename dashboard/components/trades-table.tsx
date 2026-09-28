@@ -1,27 +1,35 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
+import { fetchAllTrades, fetchRecentTrades } from "@/lib/data-client";
+import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import type { Trade } from "@/lib/types/database";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 
 type Props = {
   trades: Trade[];
   showFilter?: boolean;
   title?: string;
+  recentLimit?: number;
 };
 
-export function TradesTable({ trades, showFilter = false, title = "Trades" }: Props) {
-  const router = useRouter();
+export function TradesTable({
+  trades,
+  showFilter = false,
+  title = "Trades",
+  recentLimit = 10,
+}: Props) {
   const [filter, setFilter] = useState<"all" | "open" | "closed">("all");
-  const refresh = useCallback(() => router.refresh(), [router]);
-  useRealtimeRefresh(["trades"], refresh);
+  const fetchTrades = useCallback(
+    () => (showFilter ? fetchAllTrades() : fetchRecentTrades(recentLimit)),
+    [showFilter, recentLimit],
+  );
+  const liveTrades = useLiveQuery(trades, fetchTrades, ["trades"]);
 
   const filtered =
-    filter === "all" ? trades : trades.filter((t) => t.status === filter);
+    filter === "all" ? liveTrades : liveTrades.filter((t) => t.status === filter);
 
   return (
     <Card>

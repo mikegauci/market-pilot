@@ -1,4 +1,4 @@
-import { Card, CardTitle, CardValue } from "@/components/ui/card";
+import { OverviewStats } from "@/components/overview-stats";
 import { OverviewStatusSection } from "@/components/overview-status-section";
 import { PortfolioChart } from "@/components/portfolio-chart";
 import { PositionsTable } from "@/components/positions-table";
@@ -13,7 +13,6 @@ import {
   getSettings,
 } from "@/lib/queries";
 import { resolveBaselineEquity } from "@/lib/risk-recommendations";
-import { formatCurrency } from "@/lib/utils";
 
 export default async function OverviewPage() {
   const [botStatus, portfolio, history, positions, trades, settings] = await Promise.all([
@@ -42,36 +41,7 @@ export default async function OverviewPage() {
         {botStatus && <OverviewStatusSection botStatus={botStatus} />}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardTitle>Equity</CardTitle>
-          <CardValue>{formatCurrency(portfolio?.equity, currency)}</CardValue>
-        </Card>
-        <Card>
-          <CardTitle>Daily P&L</CardTitle>
-          <CardValue
-            className={
-              (portfolio?.daily_pnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"
-            }
-          >
-            {formatCurrency(portfolio?.daily_pnl, currency)}
-          </CardValue>
-        </Card>
-        <Card>
-          <CardTitle>Total P&L</CardTitle>
-          <CardValue
-            className={
-              (portfolio?.total_pnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"
-            }
-          >
-            {formatCurrency(portfolio?.total_pnl, currency)}
-          </CardValue>
-        </Card>
-        <Card>
-          <CardTitle>Open Positions</CardTitle>
-          <CardValue>{positions.length}</CardValue>
-        </Card>
-      </div>
+      <OverviewStats portfolio={portfolio} positions={positions} currency={currency} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <PortfolioChart data={history} currency={currency} />

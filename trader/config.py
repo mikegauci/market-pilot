@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     ibkr_fill_timeout_sec: float = 60.0
     ibkr_entry_cooldown_sec: float = 120.0
 
-    heartbeat_interval_sec: int = 10
+    heartbeat_interval_sec: int = 2
     risk_sync_threshold_pct: float = 0.05
     log_level: str = "INFO"
 
