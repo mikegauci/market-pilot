@@ -1,10 +1,32 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { getDisplayStatus } from "@/lib/trader-status";
+import { getDisplayStatus, getStableDisplayNow } from "@/lib/trader-status";
 import type { BotStatus } from "@/lib/types/database";
 
 export function StatusBadges({ status }: { status: BotStatus }) {
-  const display = getDisplayStatus(status);
+  const [display, setDisplay] = useState(() =>
+    getDisplayStatus(status, getStableDisplayNow(status.last_heartbeat)),
+  );
 
+  useEffect(() => {
+    const update = () => setDisplay(getDisplayStatus(status));
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [status]);
+
+  return <StatusBadgesView status={status} display={display} />;
+}
+
+function StatusBadgesView({
+  status,
+  display,
+}: {
+  status: BotStatus;
+  display: ReturnType<typeof getDisplayStatus>;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Badge className={status.enabled ? "bg-emerald-900 text-emerald-300" : "bg-zinc-800 text-zinc-400"}>

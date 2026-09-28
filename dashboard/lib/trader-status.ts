@@ -36,6 +36,13 @@ function formatHeartbeatLabel(lastHeartbeat: string | null, now = Date.now()): s
   return `${minutes}m ago (offline)`;
 }
 
+/** Fixed timestamp for SSR/hydration so relative labels do not drift by a second. */
+export function getStableDisplayNow(lastHeartbeat: string | null): number {
+  if (!lastHeartbeat) return 0;
+  const ts = new Date(lastHeartbeat).getTime();
+  return Number.isNaN(ts) ? 0 : ts;
+}
+
 export function getDisplayStatus(status: BotStatus, now = Date.now()): DisplayStatus {
   const traderOnline = isTraderOnline(status.last_heartbeat, now);
 
