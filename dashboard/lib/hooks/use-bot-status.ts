@@ -1,0 +1,50 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import type { BotStatus } from "@/lib/types/database";
+
+const POLL_INTERVAL_MS = 10_000;
+
+export async function fetchBotStatus(): Promise<BotStatus | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("bot_status")
+    .select("*")
+    .eq("id", 1)
+    .single();
+  if (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("bot_status fetch failed:", error.message);
+    }
+    return null;
+  }
+  return data as BotStatus;
+}
+
+/** Keep bot_status fresh via client polling + Realtime (SSR props alone go stale). */
+export function useBotStatus(initialStatus: BotStatus): BotStatus {
+  const [status, setStatus] = useState(initialStatus);
+
+  const refresh = useCallback(async () => {
+    const next = await fetchBotStatus();
+    if (next) setStatus(next);
+  }, []);
+
+  useEffect(() => {
+    setStatus(initialStatus);
+  }, [initialStatus]);
+
+  useEffect(() => {
+    void refresh();
+    const id = setInterval(() => void refresh(), POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [refresh]);
+
+  useRealtimeRefresh(["bot_status"], () => {
+    void refresh();
+  });
+
+  return status;
+}

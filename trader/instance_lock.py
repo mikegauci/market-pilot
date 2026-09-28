@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+# Unix-only (fcntl). Prevents duplicate main.py processes on macOS/Linux.
 _LOCK_PATH = Path(__file__).resolve().parent / ".trader.lock"
 _lock_file: TextIO | None = None
 

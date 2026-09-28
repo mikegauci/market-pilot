@@ -34,6 +34,7 @@ function formatHeartbeatLabel(lastHeartbeat: string | null, now = Date.now()): s
   }
   if (age < 3600) {
     const minutes = Math.floor(age / 60);
+    if (minutes === 0) return `${age} seconds ago`;
     return minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
   }
   const hours = Math.floor(age / 3600);

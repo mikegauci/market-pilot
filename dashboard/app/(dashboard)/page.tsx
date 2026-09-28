@@ -1,8 +1,7 @@
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
-import { TradingControls } from "@/components/trading-controls";
+import { OverviewStatusSection } from "@/components/overview-status-section";
 import { PortfolioChart } from "@/components/portfolio-chart";
 import { PositionsTable } from "@/components/positions-table";
-import { LiveStatus } from "@/components/live-status";
 import { TradesTable } from "@/components/trades-table";
 import {
   getBotStatus,
@@ -28,12 +27,7 @@ export default async function OverviewPage() {
     <div className="space-y-6">
       <div className="space-y-4">
         <h2 className="text-2xl font-semibold">Overview</h2>
-        {botStatus && (
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <LiveStatus status={botStatus} />
-            <TradingControls status={botStatus} />
-          </div>
-        )}
+        {botStatus && <OverviewStatusSection botStatus={botStatus} />}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

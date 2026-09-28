@@ -66,7 +66,13 @@ class IBKRClient:
 
     def _is_client_id_conflict(self, exc: BaseException) -> bool:
         message = str(exc).lower()
-        return "client id" in message or "326" in message
+        return (
+            "326" in message
+            or "client id" in message
+            or "clientid" in message
+            or "already in use" in message
+            or "may be in use" in message
+        )
 
     def _connect_once(self, client_id: int, timeout: float) -> None:
         if self.is_connected():
@@ -247,8 +253,21 @@ class IBKRClient:
             self._tickers[symbol] = ticker
             logger.debug("Subscribed to market data for %s", symbol)
 
-    def get_quotes(self, symbols: List[str], wait_sec: float = 2.0) -> List[Quote]:
+    def sync_watchlist_subscriptions(self, symbols: List[str]) -> None:
+        """Subscribe to new symbols and cancel market data for removed ones."""
+        target = set(symbols)
+        for symbol in list(self._tickers):
+            if symbol in target:
+                continue
+            ticker = self._tickers.pop(symbol)
+            if self.is_connected():
+                self.ib.cancelMktData(ticker.contract)
+            self._contracts.pop(symbol, None)
+            logger.debug("Unsubscribed from market data for %s", symbol)
         self.subscribe_watchlist(symbols)
+
+    def get_quotes(self, symbols: List[str], wait_sec: float = 2.0) -> List[Quote]:
+        self.sync_watchlist_subscriptions(symbols)
         if wait_sec > 0:
             self.ib.sleep(wait_sec)
 

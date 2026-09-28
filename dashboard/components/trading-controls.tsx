@@ -1,16 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { useLiveBotStatus } from "@/components/bot-status-provider";
 import { setExecutionMode, toggleBot } from "@/lib/actions";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import { getDisplayStatus, getStableDisplayNow } from "@/lib/trader-status";
-import type { BotStatus } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
-
-type Props = {
-  status: BotStatus;
-};
 
 function ToggleSwitch({
   enabled,
@@ -74,10 +68,8 @@ function BrokerConnectionNotice({
   );
 }
 
-export function TradingControls({ status }: Props) {
-  const router = useRouter();
-  const refresh = useCallback(() => router.refresh(), [router]);
-  useRealtimeRefresh(["bot_status"], refresh);
+export function TradingControls() {
+  const status = useLiveBotStatus();
 
   const [botEnabled, setBotEnabled] = useState(status.enabled);
   const [executionMode, setExecutionModeState] = useState(

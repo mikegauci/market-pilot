@@ -29,6 +29,24 @@ _CLOSED_MARKET_LOG_INTERVAL_SEC = 300.0
 _SHUTDOWN_SLEEP_CHUNK_SEC = 0.5
 
 
+def compute_loop_sleep_sec(
+    interval: float,
+    elapsed: float,
+    last_heartbeat_mono: float,
+    now_mono: float,
+    heartbeat_interval_sec: float,
+    track_heartbeat: bool,
+) -> float:
+    """Sleep duration before the next loop; cap so overdue heartbeats run immediately."""
+    sleep_for = max(0.0, interval - elapsed)
+    if not track_heartbeat:
+        return sleep_for
+    next_heartbeat_in = heartbeat_interval_sec - (now_mono - last_heartbeat_mono)
+    if next_heartbeat_in <= 0:
+        return 0.0
+    return min(sleep_for, next_heartbeat_in)
+
+
 def _handle_shutdown(signum: int, _frame: object) -> None:
     global _shutdown_requested
     logger.info("Received signal %s, shutting down...", signum)
@@ -441,14 +459,14 @@ def run() -> int:
             if market_open
             else settings.closed_market_eval_interval_sec
         )
-        sleep_for = max(0.0, interval - elapsed)
-        # Keep heartbeats frequent even when the eval loop is slow (market closed).
-        if db:
-            next_heartbeat_in = settings.heartbeat_interval_sec - (
-                time.monotonic() - last_heartbeat
-            )
-            if next_heartbeat_in > 0:
-                sleep_for = min(sleep_for, next_heartbeat_in)
+        sleep_for = compute_loop_sleep_sec(
+            interval,
+            elapsed,
+            last_heartbeat,
+            time.monotonic(),
+            settings.heartbeat_interval_sec,
+            track_heartbeat=db is not None,
+        )
         if sleep_for > 0 and not _shutdown_requested:
             _interruptible_sleep(sleep_for)
 
