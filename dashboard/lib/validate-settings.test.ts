@@ -20,7 +20,7 @@ const baseFields = {
   take_profit_percentage: "1.5",
   max_hold_minutes: "0",
   min_volume_ratio: "0.5",
-  min_share_price: "50",
+  min_share_price: "20",
   watchlist_core: "AAPL, MSFT",
   benchmark_symbol: "EEM",
   watchlist_dynamic_size: "5",

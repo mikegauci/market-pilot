@@ -148,7 +148,7 @@ class RiskSettings:
     watchlist_jev_rankings: List[JevRankedSymbol] = field(default_factory=list)
     watchlist_screener_ran_at: Optional[datetime] = None
     min_volume_ratio: float = 0.0
-    min_share_price: float = 50.0
+    min_share_price: float = 20.0
     demotion_exits_enabled: bool = True
     demotion_max_hold_ratio: float = 0.5
     demotion_jev_sell_on_loss: bool = True

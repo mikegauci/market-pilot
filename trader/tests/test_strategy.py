@@ -97,7 +97,7 @@ class TestFilters(unittest.TestCase):
         self.assertTrue(result.passed)
 
     def test_rejects_price_below_min_share_price(self) -> None:
-        config = StrategyConfig(min_share_price=50.0, require_price_above_ema20=False)
+        config = StrategyConfig(min_share_price=20.0, require_price_above_ema20=False)
         result = check_entry_filters(_state(price=1.69), config)
         self.assertFalse(result.passed)
         self.assertIn("price_too_low", result.reason)

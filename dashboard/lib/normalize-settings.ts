@@ -30,7 +30,7 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
 
   return {
     ...raw,
-    min_share_price: raw.min_share_price ?? 50,
+    min_share_price: raw.min_share_price ?? 20,
     demotion_exits_enabled: raw.demotion_exits_enabled ?? true,
     demotion_max_hold_ratio: raw.demotion_max_hold_ratio ?? 0.5,
     demotion_jev_sell_on_loss: raw.demotion_jev_sell_on_loss ?? true,

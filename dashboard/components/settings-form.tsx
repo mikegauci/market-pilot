@@ -265,7 +265,7 @@ export function SettingsForm({
   );
   const [maxHoldMinutes, setMaxHoldMinutes] = useState(settings.max_hold_minutes ?? 0);
   const [minVolumeRatio, setMinVolumeRatio] = useState(settings.min_volume_ratio ?? 0);
-  const [minSharePrice, setMinSharePrice] = useState(settings.min_share_price ?? 50);
+  const [minSharePrice, setMinSharePrice] = useState(settings.min_share_price ?? 20);
   const maxHoldHints = getMaxHoldHints(maxHoldMinutes);
   const [selectedProfile, setSelectedProfile] = useState<RiskProfile>(
     resolveRiskProfile(settings.risk_profile),

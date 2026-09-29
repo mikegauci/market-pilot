@@ -381,7 +381,7 @@ class SupabaseRepository:
             take_profit_percentage=float(data.get("take_profit_percentage", 0.015)),
             max_hold_minutes=float(data.get("max_hold_minutes", 0)),
             min_volume_ratio=float(data.get("min_volume_ratio", 0)),
-            min_share_price=float(data.get("min_share_price", 50)),
+            min_share_price=float(data.get("min_share_price", 20)),
             account_capital=float(data.get("account_capital", 1000)),
             risk_sync_equity=risk_sync_equity,
             watchlist=[str(s).upper() for s in watchlist],
