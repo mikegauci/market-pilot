@@ -36,6 +36,7 @@ describe("normalizeSettings", () => {
     expect(normalized?.min_share_price).toBe(20);
     expect(normalized?.min_hold_minutes).toBe(15);
     expect(normalized?.jev_sell_exit_threshold).toBe(0.95);
+    expect(normalized?.reentry_cooldown_minutes).toBe(45);
     expect(normalized?.demotion_exits_enabled).toBe(true);
     expect(normalized?.demotion_max_hold_ratio).toBe(0.5);
     expect(normalized?.demotion_jev_sell_on_loss).toBe(true);

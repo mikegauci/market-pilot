@@ -85,6 +85,13 @@ def min_hold_remaining_minutes(
     return max(0.0, min_hold - held_minutes)
 
 
+def price_between_entry_and_take_profit(trade: TradeRecord, price: float) -> bool:
+    """True when price is above entry but still below the take-profit level."""
+    if trade.entry_price <= 0 or trade.take_profit <= trade.entry_price:
+        return False
+    return trade.entry_price < price < trade.take_profit
+
+
 def jev_sell_exit_allowed(
     trade: TradeRecord,
     risk_settings: RiskSettings,
@@ -97,6 +104,12 @@ def jev_sell_exit_allowed(
 
     if min_hold_remaining_minutes(trade, risk_settings, now=now) > 0:
         return False
+
+    # Let the IBKR limit TP work: do not soft-exit winners that have not reached TP,
+    # unless the symbol was demoted off the watchlist.
+    if price_between_entry_and_take_profit(trade, quote.price):
+        if not is_demoted_symbol(trade.symbol, risk_settings):
+            return False
 
     pnl = (quote.price - trade.entry_price) * trade.quantity
     if pnl >= 0:

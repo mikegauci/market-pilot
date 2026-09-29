@@ -27,6 +27,7 @@ function labelFor(name: string): string {
     max_hold_minutes: "Max hold (minutes)",
     min_hold_minutes: "Min hold (minutes)",
     jev_sell_exit_threshold: "Jev SELL exit (%)",
+    reentry_cooldown_minutes: "Re-entry cooldown (minutes)",
     min_volume_ratio: "Min volume ratio",
     min_share_price: "Min share price ($)",
   };
@@ -45,6 +46,7 @@ export type ParsedSettings = {
   max_hold_minutes: number;
   min_hold_minutes: number;
   jev_sell_exit_threshold: number;
+  reentry_cooldown_minutes: number;
   min_volume_ratio: number;
   min_share_price: number;
   risk_profile: RiskProfile;
@@ -100,6 +102,10 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     formData,
     "jev_sell_exit_threshold",
   );
+  const reentry_cooldown_minutes = parseRequiredNumber(
+    formData,
+    "reentry_cooldown_minutes",
+  );
   const min_volume_ratio = parseRequiredNumber(formData, "min_volume_ratio");
   const min_share_price = parseRequiredNumber(formData, "min_share_price");
 
@@ -132,6 +138,13 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   if (jev_sell_exit_threshold < 0.5) {
     throw new Error("Jev SELL exit (%) must be at least 50");
+  }
+  if (
+    !Number.isInteger(reentry_cooldown_minutes) ||
+    reentry_cooldown_minutes < 0 ||
+    reentry_cooldown_minutes > 480
+  ) {
+    throw new Error("Re-entry cooldown (minutes) must be a whole number from 0 to 480");
   }
   if (min_volume_ratio < 0 || min_volume_ratio > 5) {
     throw new Error("Min volume ratio must be between 0 (off) and 5");
@@ -219,6 +232,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     max_hold_minutes,
     min_hold_minutes,
     jev_sell_exit_threshold,
+    reentry_cooldown_minutes,
     min_volume_ratio,
     min_share_price,
     risk_profile: parseRiskProfile(formData),

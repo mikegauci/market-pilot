@@ -21,6 +21,7 @@ const baseFields = {
   max_hold_minutes: "0",
   min_hold_minutes: "15",
   jev_sell_exit_threshold: "95",
+  reentry_cooldown_minutes: "45",
   min_volume_ratio: "0.5",
   min_share_price: "20",
   watchlist_core: "AAPL, MSFT",

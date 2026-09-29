@@ -48,6 +48,7 @@ def sync_ibkr_exits(
         )
         risk_manager.remove_open_trade(trade.id)
         risk_manager.record_closed_pnl(net_pnl)
+        risk_manager.note_symbol_exit(trade.symbol, now)
         closed_any = True
         logger.info(
             "IBKR exit %s @ $%.2f (%s) PnL $%.2f",
@@ -129,6 +130,7 @@ def close_ibkr_signal_exits(
         )
         risk_manager.remove_open_trade(trade.id)
         risk_manager.record_closed_pnl(net_pnl)
+        risk_manager.note_symbol_exit(trade.symbol, now)
         closed_any = True
         logger.info(
             "IBKR exit %s @ $%.2f (%s) PnL $%.2f",

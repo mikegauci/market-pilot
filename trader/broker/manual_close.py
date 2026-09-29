@@ -115,6 +115,7 @@ def _persist_manual_close(
                 exit_reason=closed.reason,
             )
             risk_manager.remove_open_trade(closed.trade_id)
+            risk_manager.note_symbol_exit(closed.symbol, closed.exit_time)
             db.complete_trade_command(command_id)
             return True
         except Exception as exc:

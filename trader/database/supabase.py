@@ -6,7 +6,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-from typing import Callable, List, Optional, TypeVar
+from typing import Callable, Dict, List, Optional, TypeVar
 
 import httpx
 from supabase import Client, ClientOptions, create_client
@@ -347,7 +347,7 @@ class SupabaseRepository:
                 "minimum_jev_confidence, signal_record_threshold, risk_per_trade, "
                 "max_position_size, max_daily_loss, max_open_positions, "
                 "stop_loss_percentage, take_profit_percentage, max_hold_minutes, "
-                "min_hold_minutes, jev_sell_exit_threshold, "
+                "min_hold_minutes, jev_sell_exit_threshold, reentry_cooldown_minutes, "
                 "min_volume_ratio, min_share_price, "
                 "account_capital, risk_sync_equity, watchlist, watchlist_core, "
                 "watchlist_dynamic_enabled, watchlist_dynamic_size, "
@@ -383,6 +383,7 @@ class SupabaseRepository:
             max_hold_minutes=float(data.get("max_hold_minutes", 0)),
             min_hold_minutes=float(data.get("min_hold_minutes", 15)),
             jev_sell_exit_threshold=float(data.get("jev_sell_exit_threshold", 0.95)),
+            reentry_cooldown_minutes=float(data.get("reentry_cooldown_minutes", 45)),
             min_volume_ratio=float(data.get("min_volume_ratio", 0)),
             min_share_price=float(data.get("min_share_price", 20)),
             account_capital=float(data.get("account_capital", 1000)),
@@ -614,6 +615,34 @@ class SupabaseRepository:
             .execute()
         )
         return [_trade_from_row(row) for row in result.data or []]
+
+    @_db_synchronized
+    def get_recent_symbol_exit_times(
+        self,
+        lookback_minutes: float,
+    ) -> Dict[str, datetime]:
+        """Latest closed-trade exit time per symbol within the lookback window."""
+        if lookback_minutes <= 0:
+            return {}
+        since = datetime.now(timezone.utc) - timedelta(minutes=float(lookback_minutes))
+        result = (
+            self.client.table("trades")
+            .select("symbol, exit_time")
+            .eq("status", "closed")
+            .gte("exit_time", since.isoformat())
+            .order("exit_time", desc=True)
+            .execute()
+        )
+        latest: Dict[str, datetime] = {}
+        for row in result.data or []:
+            symbol = str(row.get("symbol") or "").upper()
+            raw_exit = row.get("exit_time")
+            if not symbol or not raw_exit:
+                continue
+            if symbol in latest:
+                continue
+            latest[symbol] = _parse_timestamp(raw_exit)
+        return latest
 
     @_db_synchronized
     def get_daily_realized_pnl(self) -> float:

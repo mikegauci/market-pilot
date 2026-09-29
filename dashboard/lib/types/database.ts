@@ -26,6 +26,8 @@ export type Settings = {
   min_hold_minutes: number;
   /** Minimum Jev SELL probability (0–1) required to soft-exit an open trade. */
   jev_sell_exit_threshold: number;
+  /** Block new entries in a symbol for this many minutes after an exit (0 = off). */
+  reentry_cooldown_minutes: number;
   /** 0 = off; block entries when 1m volume ratio is below this vs 10-bar average */
   min_volume_ratio: number;
   /** 0 = off; block entries / EM scan picks below this USD share price */

@@ -41,6 +41,7 @@ const RISK_REASONS = new Set([
   "position_too_small",
   "invalid_price",
   "correlation_cap",
+  "reentry_cooldown",
 ]);
 
 const IBKR_PREFIXES = ["ibkr_"];
@@ -56,6 +57,8 @@ const TIER_SKIP_REASONS = new Set([
 export function normalizeSkipReasonKey(reason: string | null | undefined): string | null {
   if (!reason) return null;
   if (reason.startsWith("awaiting_confirmation")) return "awaiting_confirmation";
+  if (reason.startsWith("reentry_cooldown")) return "reentry_cooldown";
+  if (reason.startsWith("correlation_cap")) return "correlation_cap";
   for (const prefix of [...FILTER_PREFIXES, ...IBKR_PREFIXES]) {
     if (reason.startsWith(prefix)) return prefix;
   }
@@ -87,6 +90,7 @@ export function skipReasonLabel(key: string): string {
     position_too_small: "Position too small",
     invalid_price: "Invalid price",
     correlation_cap: "Correlation cap",
+    reentry_cooldown: "Re-entry cooldown",
     ibkr_not_connected: "Broker not connected",
     ibkr_pending_entry_order: "Pending BUY order",
     ibkr_cooldown: "Broker cooldown",

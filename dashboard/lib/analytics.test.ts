@@ -26,6 +26,7 @@ const baseSettings: Settings = {
   max_hold_minutes: 100,
   min_hold_minutes: 15,
   jev_sell_exit_threshold: 0.95,
+  reentry_cooldown_minutes: 45,
   min_volume_ratio: 0,
   min_share_price: 20,
   account_capital: 10000,
