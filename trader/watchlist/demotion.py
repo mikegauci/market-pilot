@@ -58,7 +58,8 @@ def demoted_jev_sell_loss_allowed(
         return False
 
     loss_pct = (trade.entry_price - quote.price) / trade.entry_price
-    return loss_pct <= float(risk_settings.demotion_jev_sell_max_loss_pct)
+    # Align with the configured stop loss — no separate demotion loss cap in practice.
+    return loss_pct <= float(risk_settings.stop_loss_percentage)
 
 
 def jev_sell_exit_allowed(

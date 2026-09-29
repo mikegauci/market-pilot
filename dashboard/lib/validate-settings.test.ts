@@ -74,8 +74,7 @@ describe("parseSettingsForm demotion", () => {
       form({
         ...baseFields,
         watchlist_dynamic_enabled: "on",
-        demotion_max_hold_ratio: "0.5",
-        demotion_jev_sell_max_loss_pct: "2",
+        demotion_hold_policy: "tighten",
       }),
     );
     expect(parsed.demotion_exits_enabled).toBe(false);
@@ -89,16 +88,28 @@ describe("parseSettingsForm demotion", () => {
         ...baseFields,
         watchlist_dynamic_enabled: "on",
         demotion_exits_enabled: "on",
-        demotion_max_hold_ratio: "0.5",
+        demotion_hold_policy: "tighten",
         demotion_jev_sell_on_loss: "on",
-        demotion_jev_sell_max_loss_pct: "2",
         demotion_force_exit: "on",
       }),
     );
     expect(parsed.demotion_exits_enabled).toBe(true);
     expect(parsed.demotion_max_hold_ratio).toBe(0.5);
-    expect(parsed.demotion_jev_sell_max_loss_pct).toBe(0.02);
+    expect(parsed.demotion_jev_sell_max_loss_pct).toBe(0.01);
+    expect(parsed.demotion_jev_sell_on_loss).toBe(false);
     expect(parsed.demotion_force_exit).toBe(true);
+  });
+
+  it("maps demotion hold policy presets to stored ratios", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        watchlist_dynamic_enabled: "on",
+        demotion_exits_enabled: "on",
+        demotion_hold_policy: "keep",
+      }),
+    );
+    expect(parsed.demotion_max_hold_ratio).toBe(1);
   });
 });
 

@@ -14,6 +14,7 @@ import {
   type RiskRecommendationKey,
 } from "@/lib/risk-recommendations";
 import { StrategyIndicatorsCard } from "@/components/strategy-indicators-card";
+import { demotionHoldPolicyLabel } from "@/lib/demotion-presets";
 import type { Settings } from "@/lib/types/database";
 import { formatStrategyPercent } from "@/lib/strategy-recommendations";
 import { formatCurrency, formatPercent } from "@/lib/utils";
@@ -174,8 +175,13 @@ export function SettingsSummary({
             </p>
             {settings.demotion_exits_enabled && (
               <p className="text-xs text-zinc-500">
-                Demotion exits: max-hold ×{settings.demotion_max_hold_ratio ?? 0.5}
-                {settings.demotion_force_exit ? " · force exit on" : ""}
+                Demotion exits:{" "}
+                {settings.demotion_force_exit
+                  ? "force exit when demoted"
+                  : demotionHoldPolicyLabel(settings.demotion_max_hold_ratio)}
+                {!settings.demotion_force_exit && settings.demotion_jev_sell_on_loss
+                  ? " · Jev sell within stop loss"
+                  : ""}
               </p>
             )}
           </>

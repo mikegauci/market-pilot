@@ -158,31 +158,61 @@ export function WatchlistPicker({
         <p className="text-xs text-zinc-500">Add at least one symbol to save settings.</p>
       )}
 
-      <div>
-        <Label htmlFor="watchlist-search" className="sr-only">
-          Search S&amp;P 500
-        </Label>
-        <Input
-          id="watchlist-search"
-          type="search"
-          placeholder="Search S&P 500, or paste comma-separated tickers…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              handleBulkInput(search, () => setSearch(""));
-            }
-          }}
-          onPaste={(e) => {
-            const text = e.clipboardData.getData("text");
-            if (text.includes(",")) {
-              e.preventDefault();
-              addSymbolsFromInput(text, () => setSearch(""));
-            }
-          }}
-          autoComplete="off"
-        />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="watchlist-search">Search S&amp;P 500</Label>
+          <Input
+            id="watchlist-search"
+            type="search"
+            className="mt-1.5"
+            placeholder="Search or paste comma-separated tickers…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleBulkInput(search, () => setSearch(""));
+              }
+            }}
+            onPaste={(e) => {
+              const text = e.clipboardData.getData("text");
+              if (text.includes(",")) {
+                e.preventDefault();
+                addSymbolsFromInput(text, () => setSearch(""));
+              }
+            }}
+            autoComplete="off"
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="watchlist-custom">Custom ticker</Label>
+          <div className="mt-1.5 flex gap-2">
+            <Input
+              id="watchlist-custom"
+              placeholder="e.g. SPY, QQQ"
+              value={customSymbol}
+              onChange={(e) => {
+                setCustomSymbol(e.target.value.toUpperCase());
+                setCustomError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleCustomAdd();
+                }
+              }}
+              autoComplete="off"
+            />
+            <Button
+              type="button"
+              onClick={handleCustomAdd}
+              className="shrink-0 bg-zinc-800 hover:bg-zinc-700"
+            >
+              Add
+            </Button>
+          </div>
+        </div>
       </div>
 
       {search.trim() && search.includes(",") ? (
@@ -209,35 +239,6 @@ export function WatchlistPicker({
           )}
         </ul>
       ) : null}
-
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-[10rem] flex-1">
-          <Label htmlFor="watchlist-custom">Custom ticker</Label>
-          <Input
-            id="watchlist-custom"
-            placeholder="e.g. SPY, QQQ"
-            value={customSymbol}
-            onChange={(e) => {
-              setCustomSymbol(e.target.value.toUpperCase());
-              setCustomError(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleCustomAdd();
-              }
-            }}
-            autoComplete="off"
-          />
-        </div>
-        <Button
-          type="button"
-          onClick={handleCustomAdd}
-          className="shrink-0 bg-zinc-800 hover:bg-zinc-700"
-        >
-          Add
-        </Button>
-      </div>
 
       {customError && <p className="text-xs text-red-400">{customError}</p>}
 

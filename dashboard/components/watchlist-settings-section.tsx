@@ -12,10 +12,17 @@ import {
 } from "@/components/settings-section";
 import type { EmUniverseRow, Settings } from "@/lib/types/database";
 import {
+  DEMOTION_HOLD_OPTIONS,
+  holdPolicyFromRatio,
+  holdPolicyToRatio,
+  type DemotionHoldPolicy,
+} from "@/lib/demotion-presets";
+import {
   formatWatchlistScanStatus,
   resolveEffectiveWatchlist,
   resolveWatchlistScanStatus,
 } from "@/lib/effective-watchlist";
+import { formatStrategyPercent } from "@/lib/strategy-recommendations";
 import { cn, formatDateTimeFull } from "@/lib/utils";
 
 type EmUniverseStats = {
@@ -33,6 +40,14 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
   const [dynamicEnabled, setDynamicEnabled] = useState(
     settings.watchlist_dynamic_enabled ?? true,
   );
+  const [demotionEnabled, setDemotionEnabled] = useState(
+    settings.demotion_exits_enabled ?? true,
+  );
+  const [forceExit, setForceExit] = useState(settings.demotion_force_exit ?? false);
+  const [holdPolicy, setHoldPolicy] = useState<DemotionHoldPolicy>(() =>
+    holdPolicyFromRatio(settings.demotion_max_hold_ratio),
+  );
+  const stopLossLabel = formatStrategyPercent(settings.stop_loss_percentage);
   const emSymbols = emUniverse.topHoldings.map((row) => row.symbol);
   const [chartSymbol, setChartSymbol] = useState<string | undefined>(undefined);
   const chartAnchorRef = useRef<HTMLDivElement>(null);
@@ -138,20 +153,16 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
             name="demotion_exits_enabled"
             value={settings.demotion_exits_enabled ? "on" : "off"}
           />
+          <input type="hidden" name="demotion_hold_policy" value={holdPolicy} />
           <input
             type="hidden"
             name="demotion_max_hold_ratio"
-            value={settings.demotion_max_hold_ratio ?? 0.5}
+            value={holdPolicyToRatio(holdPolicy)}
           />
           <input
             type="hidden"
             name="demotion_jev_sell_on_loss"
             value={settings.demotion_jev_sell_on_loss ? "on" : "off"}
-          />
-          <input
-            type="hidden"
-            name="demotion_jev_sell_max_loss_pct"
-            value={(settings.demotion_jev_sell_max_loss_pct ?? 0.02) * 100}
           />
           <input
             type="hidden"
@@ -172,65 +183,87 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
             <input
               type="checkbox"
               name="demotion_exits_enabled"
-              defaultChecked={settings.demotion_exits_enabled ?? true}
+              checked={demotionEnabled}
+              onChange={(e) => setDemotionEnabled(e.target.checked)}
               className="mt-0.5 rounded border-zinc-700"
             />
             <span className="text-xs">Enable demotion exit rules</span>
           </label>
-          <SettingsFieldGroup>
-            <SettingsField
-              id="demotion_max_hold_ratio"
-              label="Demoted max-hold ratio"
-              description="Fraction of max hold for demoted positions (0.5 = half; 0 = exit at next check)."
-            >
-              <Input
-                id="demotion_max_hold_ratio"
-                name="demotion_max_hold_ratio"
-                type="number"
-                min={0}
-                max={1}
-                step={0.05}
-                defaultValue={settings.demotion_max_hold_ratio ?? 0.5}
-              />
-            </SettingsField>
-            <SettingsField
-              id="demotion_jev_sell_max_loss_pct"
-              label="Demoted Jev sell max loss (%)"
-              description="Allow Jev SELL on demoted names while loss is within this %."
-            >
-              <Input
-                id="demotion_jev_sell_max_loss_pct"
-                name="demotion_jev_sell_max_loss_pct"
-                type="number"
-                min={0}
-                max={25}
-                step={0.1}
-                defaultValue={(settings.demotion_jev_sell_max_loss_pct ?? 0.02) * 100}
-              />
-            </SettingsField>
-          </SettingsFieldGroup>
-          <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-200">
-            <input
-              type="checkbox"
-              name="demotion_jev_sell_on_loss"
-              defaultChecked={settings.demotion_jev_sell_on_loss ?? true}
-              className="mt-0.5 rounded border-zinc-700"
-            />
-            <span className="text-xs">
-              Allow Jev SELL on demoted positions even when underwater (within max loss)
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-200">
-            <input
-              type="checkbox"
-              name="demotion_force_exit"
-              defaultChecked={settings.demotion_force_exit ?? false}
-              className="mt-0.5 rounded border-zinc-700"
-            />
-            <span className="text-xs">
-              Force market exit when a position is demoted (off by default)
-            </span>
-          </label>
+
+          {demotionEnabled && (
+            <>
+              <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-200">
+                <input
+                  type="checkbox"
+                  name="demotion_force_exit"
+                  checked={forceExit}
+                  onChange={(e) => setForceExit(e.target.checked)}
+                  className="mt-0.5 rounded border-zinc-700"
+                />
+                <span className="text-xs">
+                  Force market exit when a position is demoted
+                </span>
+              </label>
+
+              {forceExit ? (
+                <>
+                  <input type="hidden" name="demotion_hold_policy" value={holdPolicy} />
+                  <p className="text-xs text-zinc-500">
+                    Demoted positions are closed at market on the next eval cycle. Max-hold
+                    and Jev rules below do not apply.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <fieldset className="space-y-2">
+                    <legend className="text-xs font-medium text-zinc-300">
+                      When demoted, how long can the position stay open?
+                    </legend>
+                    {DEMOTION_HOLD_OPTIONS.map((option) => (
+                      <label
+                        key={option.id}
+                        className={cn(
+                          "flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-sm transition-colors",
+                          holdPolicy === option.id
+                            ? "border-emerald-800/60 bg-emerald-950/20"
+                            : "border-zinc-800/60 bg-zinc-950/20 hover:border-zinc-700",
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="demotion_hold_policy"
+                          value={option.id}
+                          checked={holdPolicy === option.id}
+                          onChange={() => setHoldPolicy(option.id)}
+                          className="mt-0.5"
+                        />
+                        <span>
+                          <span className="text-xs font-medium text-zinc-200">
+                            {option.label}
+                          </span>
+                          <span className="mt-0.5 block text-xs font-normal text-zinc-500">
+                            {option.description}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-200">
+                    <input
+                      type="checkbox"
+                      name="demotion_jev_sell_on_loss"
+                      defaultChecked={settings.demotion_jev_sell_on_loss ?? true}
+                      className="mt-0.5 rounded border-zinc-700"
+                    />
+                    <span className="text-xs">
+                      Allow Jev SELL on demoted positions when underwater (within your{" "}
+                      {stopLossLabel} stop loss)
+                    </span>
+                  </label>
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
 
