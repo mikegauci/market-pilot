@@ -347,6 +347,7 @@ class SupabaseRepository:
                 "minimum_jev_confidence, signal_record_threshold, risk_per_trade, "
                 "max_position_size, max_daily_loss, max_open_positions, "
                 "stop_loss_percentage, take_profit_percentage, max_hold_minutes, "
+                "min_hold_minutes, jev_sell_exit_threshold, "
                 "min_volume_ratio, min_share_price, "
                 "account_capital, risk_sync_equity, watchlist, watchlist_core, "
                 "watchlist_dynamic_enabled, watchlist_dynamic_size, "
@@ -380,6 +381,8 @@ class SupabaseRepository:
             stop_loss_percentage=float(data.get("stop_loss_percentage", 0.01)),
             take_profit_percentage=float(data.get("take_profit_percentage", 0.015)),
             max_hold_minutes=float(data.get("max_hold_minutes", 0)),
+            min_hold_minutes=float(data.get("min_hold_minutes", 15)),
+            jev_sell_exit_threshold=float(data.get("jev_sell_exit_threshold", 0.95)),
             min_volume_ratio=float(data.get("min_volume_ratio", 0)),
             min_share_price=float(data.get("min_share_price", 20)),
             account_capital=float(data.get("account_capital", 1000)),

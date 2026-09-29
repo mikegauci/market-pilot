@@ -409,15 +409,19 @@ def run() -> int:
         settings.strategy_config,
         min_volume_ratio=risk_settings.min_volume_ratio,
         min_share_price=risk_settings.min_share_price,
+        jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
     )
     confirmation_tracker = ConfirmationTracker(strategy_config.confirmation_cycles)
     logger.info(
         "Strategy filters: min confidence from settings, margin %.0f%%, "
-        "confirmation %sx, max hold %.0fm (dashboard), min volume ratio %.2f, "
+        "confirmation %sx, max hold %.0fm (dashboard), min hold %.0fm, "
+        "Jev SELL exit >= %.0f%%, min volume ratio %.2f, "
         "min share price $%.2f (dashboard)",
         strategy_config.min_buy_hold_margin * 100,
         strategy_config.confirmation_cycles,
         risk_settings.max_hold_minutes,
+        risk_settings.min_hold_minutes,
+        strategy_config.jev_sell_exit_threshold * 100,
         risk_settings.min_volume_ratio,
         risk_settings.min_share_price,
     )
@@ -728,6 +732,7 @@ def run() -> int:
                         settings.strategy_config,
                         min_volume_ratio=risk_settings.min_volume_ratio,
                         min_share_price=risk_settings.min_share_price,
+                        jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
                     )
                     last_settings_sync = now_mono
 
@@ -1041,6 +1046,7 @@ def run() -> int:
                             settings.strategy_config,
                             min_volume_ratio=risk_settings.min_volume_ratio,
                             min_share_price=risk_settings.min_share_price,
+                            jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
                         )
                         entry_filter = check_entry_filters(state, entry_strategy)
                         if not entry_filter.passed:

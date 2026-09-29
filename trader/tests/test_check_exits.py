@@ -22,6 +22,7 @@ def _risk_settings() -> RiskSettings:
         account_capital=10_000.0,
         risk_sync_equity=None,
         watchlist=["META", "NVDA"],
+        min_hold_minutes=0.0,
     )
 
 
@@ -121,6 +122,29 @@ class TestCheckExits(unittest.TestCase):
     def test_jev_sell_exit_allowed_at_breakeven(self) -> None:
         self.manager.open_trades = [_trade()]
         quotes = {"META": Quote(symbol="META", price=746.73, bid=None, ask=None, spread=None)}
+
+        self.assertTrue(self.manager.can_jev_sell_exit("META", quotes))
+
+    def test_jev_sell_exit_blocked_during_min_hold(self) -> None:
+        settings = _risk_settings()
+        settings.min_hold_minutes = 15.0
+        self.manager.update_settings(settings)
+
+        entry_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+        self.manager.open_trades = [_trade(entry_time=entry_time)]
+        quotes = {"META": Quote(symbol="META", price=760.0, bid=None, ask=None, spread=None)}
+
+        self.assertFalse(self.manager.can_jev_sell_exit("META", quotes))
+        self.assertIsNone(self.manager.check_jev_exit("META", quotes))
+
+    def test_jev_sell_exit_allowed_after_min_hold(self) -> None:
+        settings = _risk_settings()
+        settings.min_hold_minutes = 15.0
+        self.manager.update_settings(settings)
+
+        entry_time = datetime.now(timezone.utc) - timedelta(minutes=20)
+        self.manager.open_trades = [_trade(entry_time=entry_time)]
+        quotes = {"META": Quote(symbol="META", price=760.0, bid=None, ask=None, spread=None)}
 
         self.assertTrue(self.manager.can_jev_sell_exit("META", quotes))
 

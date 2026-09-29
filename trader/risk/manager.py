@@ -6,7 +6,11 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, List, Optional
 
-from watchlist.demotion import is_demoted_symbol, jev_sell_exit_allowed
+from watchlist.demotion import (
+    is_demoted_symbol,
+    jev_sell_exit_allowed,
+    min_hold_remaining_minutes,
+)
 
 from models.types import (
     ClosedTrade,
@@ -254,6 +258,15 @@ class RiskManager:
 
         if jev_sell_exit_allowed(trade, self.settings, quote):
             return True
+
+        remaining = min_hold_remaining_minutes(trade, self.settings)
+        if log_skip and remaining > 0:
+            logger.info(
+                "Filter: skipping Jev SELL exit for %s — min hold (%.1fm left)",
+                symbol,
+                remaining,
+            )
+            return False
 
         pnl = (quote.price - trade.entry_price) * trade.quantity
         if log_skip and pnl < 0:

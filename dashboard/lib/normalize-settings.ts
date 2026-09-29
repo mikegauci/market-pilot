@@ -1,9 +1,11 @@
 import type { Settings } from "@/lib/types/database";
 
-/** Row shape from Supabase before demotion columns existed or were selected. */
+/** Row shape from Supabase before newer columns existed or were selected. */
 export type SettingsRow = Omit<
   Settings,
   | "min_share_price"
+  | "min_hold_minutes"
+  | "jev_sell_exit_threshold"
   | "demotion_exits_enabled"
   | "demotion_max_hold_ratio"
   | "demotion_jev_sell_on_loss"
@@ -14,6 +16,8 @@ export type SettingsRow = Omit<
     Pick<
       Settings,
       | "min_share_price"
+      | "min_hold_minutes"
+      | "jev_sell_exit_threshold"
       | "demotion_exits_enabled"
       | "demotion_max_hold_ratio"
       | "demotion_jev_sell_on_loss"
@@ -31,6 +35,8 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
   return {
     ...raw,
     min_share_price: raw.min_share_price ?? 20,
+    min_hold_minutes: raw.min_hold_minutes ?? 15,
+    jev_sell_exit_threshold: raw.jev_sell_exit_threshold ?? 0.95,
     demotion_exits_enabled: raw.demotion_exits_enabled ?? true,
     demotion_max_hold_ratio: raw.demotion_max_hold_ratio ?? 0.5,
     demotion_jev_sell_on_loss: raw.demotion_jev_sell_on_loss ?? true,

@@ -11,9 +11,16 @@ function effectiveBenchmark(settings: Settings): string {
   return (settings.benchmark_symbol || "EEM").toUpperCase();
 }
 
+function untradeableBenchmarks(settings: Settings): Set<string> {
+  const symbols = new Set<string>([effectiveBenchmark(settings)]);
+  const configured = (settings.benchmark_symbol || "").toUpperCase();
+  if (configured) symbols.add(configured);
+  return symbols;
+}
+
 function filterStaleCoreFromSaved(settings: Settings, saved: string[]): string[] {
   const core = new Set(resolveWatchlistCore(settings));
-  const benchmark = effectiveBenchmark(settings);
+  const blocked = untradeableBenchmarks(settings);
   const dynamicSize = Math.max(0, settings.watchlist_dynamic_size ?? 5);
   const rankedTop = new Set(
     (settings.watchlist_jev_rankings ?? [])
@@ -24,8 +31,8 @@ function filterStaleCoreFromSaved(settings: Settings, saved: string[]): string[]
   for (const raw of saved) {
     const symbol = raw.toUpperCase();
     if (!symbol) continue;
-    if (symbol === benchmark) {
-      filtered.push(symbol);
+    // Benchmark is for headwind/context only — never keep it as a tradable name.
+    if (blocked.has(symbol)) {
       continue;
     }
     if (core.has(symbol) && !rankedTop.has(symbol)) {
@@ -34,6 +41,11 @@ function filterStaleCoreFromSaved(settings: Settings, saved: string[]): string[]
     filtered.push(symbol);
   }
   return filtered;
+}
+
+function stripBenchmark(settings: Settings, symbols: string[]): string[] {
+  const blocked = untradeableBenchmarks(settings);
+  return symbols.filter((symbol) => !blocked.has(symbol.toUpperCase()));
 }
 
 export type WatchlistScanStatus =
@@ -78,17 +90,19 @@ export function formatPredictingWatchlistHeadline(status: WatchlistScanStatus): 
 /** Match trader resolve_trading_watchlist (open positions merged at runtime in the bot). */
 export function resolveEffectiveWatchlist(settings: Settings): string[] {
   if (!settings.watchlist_dynamic_enabled) {
-    return resolveWatchlistCore(settings);
+    return stripBenchmark(settings, resolveWatchlistCore(settings));
   }
   if (!settings.watchlist_screener_ran_at) {
-    return resolveWatchlistCore(settings);
+    return stripBenchmark(settings, resolveWatchlistCore(settings));
   }
   const saved = (settings.watchlist ?? [])
     .map((symbol) => symbol.toUpperCase())
     .filter(Boolean);
   if (!saved.length) {
-    return resolveWatchlistCore(settings);
+    return stripBenchmark(settings, resolveWatchlistCore(settings));
   }
   const filtered = filterStaleCoreFromSaved(settings, saved);
-  return filtered.length ? filtered : resolveWatchlistCore(settings);
+  return filtered.length
+    ? filtered
+    : stripBenchmark(settings, resolveWatchlistCore(settings));
 }

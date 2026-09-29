@@ -32,28 +32,42 @@ def resolve_watchlist_core(risk_settings: RiskSettings) -> List[str]:
     return [str(s).upper() for s in risk_settings.watchlist if str(s).strip()]
 
 
-def _merge_symbol_lists(benchmark: str, *groups: Sequence[str]) -> List[str]:
+def _merge_symbol_lists(*groups: Sequence[str]) -> List[str]:
     merged: List[str] = []
     for group in groups:
         for raw in group:
             symbol = str(raw).upper()
             if symbol and symbol not in merged:
                 merged.append(symbol)
-    bench = benchmark.upper()
-    if bench and bench not in merged:
-        merged.append(bench)
     return merged
+
+
+def untradeable_benchmark_symbols(risk_settings: RiskSettings) -> set[str]:
+    """Benchmarks used for context/headwind — never treat as entry symbols."""
+    symbols = {effective_benchmark(risk_settings)}
+    configured = str(risk_settings.benchmark_symbol or "").upper()
+    if configured:
+        symbols.add(configured)
+    return {symbol for symbol in symbols if symbol}
+
+
+def strip_benchmark_symbol(
+    symbols: Sequence[str],
+    risk_settings: RiskSettings,
+) -> List[str]:
+    """Remove benchmark symbols from tradable lists (kept for quotes/headwind only)."""
+    blocked = untradeable_benchmark_symbols(risk_settings)
+    return [symbol for symbol in symbols if symbol.upper() not in blocked]
 
 
 def merge_core_watchlist(
     risk_settings: RiskSettings,
     open_symbols: Sequence[str],
 ) -> List[str]:
-    """Always-on core (+ open positions + benchmark). Used when dynamic is off or as fallback."""
-    return _merge_symbol_lists(
-        effective_benchmark(risk_settings),
-        resolve_watchlist_core(risk_settings),
-        open_symbols,
+    """Always-on core (+ open positions). Used when dynamic is off or as fallback."""
+    return strip_benchmark_symbol(
+        _merge_symbol_lists(resolve_watchlist_core(risk_settings), open_symbols),
+        risk_settings,
     )
 
 
@@ -62,11 +76,10 @@ def merge_dynamic_watchlist(
     dynamic_symbols: Sequence[str],
     open_symbols: Sequence[str],
 ) -> List[str]:
-    """Top-N EM scan picks only (+ open + benchmark). Does not include always-on core."""
-    return _merge_symbol_lists(
-        effective_benchmark(risk_settings),
-        dynamic_symbols,
-        open_symbols,
+    """Top-N EM scan picks only (+ open). Does not include always-on core or benchmark."""
+    return strip_benchmark_symbol(
+        _merge_symbol_lists(dynamic_symbols, open_symbols),
+        risk_settings,
     )
 
 
@@ -76,7 +89,6 @@ def _filter_stale_core_from_saved(
 ) -> List[str]:
     """Drop always-on core symbols from a pre-dynamic-only union still stored in DB."""
     core = set(resolve_watchlist_core(risk_settings))
-    benchmark = effective_benchmark(risk_settings)
     dynamic_size = max(0, int(risk_settings.watchlist_dynamic_size))
     ranked_top = {
         item.symbol.upper()
@@ -87,8 +99,8 @@ def _filter_stale_core_from_saved(
         symbol = str(raw).upper()
         if not symbol:
             continue
-        if symbol == benchmark:
-            filtered.append(symbol)
+        # Benchmark is for headwind/context only — never keep it as a tradable name.
+        if symbol in untradeable_benchmark_symbols(risk_settings):
             continue
         if symbol in core and symbol not in ranked_top:
             continue
@@ -98,21 +110,23 @@ def _filter_stale_core_from_saved(
 
 def resolve_base_watchlist(risk_settings: RiskSettings) -> List[str]:
     if not risk_settings.watchlist_dynamic_enabled:
-        return resolve_watchlist_core(risk_settings)
+        return strip_benchmark_symbol(resolve_watchlist_core(risk_settings), risk_settings)
     if risk_settings.watchlist_screener_ran_at is None:
-        return resolve_watchlist_core(risk_settings)
+        return strip_benchmark_symbol(resolve_watchlist_core(risk_settings), risk_settings)
     saved = [str(symbol).upper() for symbol in risk_settings.watchlist if str(symbol).strip()]
     if not saved:
-        return resolve_watchlist_core(risk_settings)
+        return strip_benchmark_symbol(resolve_watchlist_core(risk_settings), risk_settings)
     filtered = _filter_stale_core_from_saved(risk_settings, saved)
-    return filtered if filtered else resolve_watchlist_core(risk_settings)
+    if filtered:
+        return filtered
+    return strip_benchmark_symbol(resolve_watchlist_core(risk_settings), risk_settings)
 
 
 def resolve_trading_watchlist(
     risk_settings: RiskSettings,
     open_symbols: Sequence[str] = (),
 ) -> List[str]:
-    """Trading watchlist: base symbols plus any open positions (benchmark added in main)."""
+    """Trading watchlist: base symbols plus any open positions (benchmark excluded)."""
     base = resolve_base_watchlist(risk_settings)
     if not open_symbols:
         return base
@@ -121,7 +135,7 @@ def resolve_trading_watchlist(
         symbol = str(raw).upper()
         if symbol and symbol not in merged:
             merged.append(symbol)
-    return merged
+    return strip_benchmark_symbol(merged, risk_settings)
 
 
 def apply_screener_result_to_risk_settings(

@@ -25,6 +25,8 @@ function labelFor(name: string): string {
     stop_loss_percentage: "Stop loss (%)",
     take_profit_percentage: "Take profit (%)",
     max_hold_minutes: "Max hold (minutes)",
+    min_hold_minutes: "Min hold (minutes)",
+    jev_sell_exit_threshold: "Jev SELL exit (%)",
     min_volume_ratio: "Min volume ratio",
     min_share_price: "Min share price ($)",
   };
@@ -41,6 +43,8 @@ export type ParsedSettings = {
   stop_loss_percentage: number;
   take_profit_percentage: number;
   max_hold_minutes: number;
+  min_hold_minutes: number;
+  jev_sell_exit_threshold: number;
   min_volume_ratio: number;
   min_share_price: number;
   risk_profile: RiskProfile;
@@ -91,6 +95,11 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   const stop_loss_percentage = parseStrategyPercent(formData, "stop_loss_percentage");
   const take_profit_percentage = parseStrategyPercent(formData, "take_profit_percentage");
   const max_hold_minutes = parseRequiredNumber(formData, "max_hold_minutes");
+  const min_hold_minutes = parseRequiredNumber(formData, "min_hold_minutes");
+  const jev_sell_exit_threshold = parseConfidencePercent(
+    formData,
+    "jev_sell_exit_threshold",
+  );
   const min_volume_ratio = parseRequiredNumber(formData, "min_volume_ratio");
   const min_share_price = parseRequiredNumber(formData, "min_share_price");
 
@@ -114,6 +123,15 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   if (!Number.isInteger(max_hold_minutes) || max_hold_minutes < 0 || max_hold_minutes > 480) {
     throw new Error("Max hold (minutes) must be a whole number from 0 to 480");
+  }
+  if (!Number.isInteger(min_hold_minutes) || min_hold_minutes < 0 || min_hold_minutes > 480) {
+    throw new Error("Min hold (minutes) must be a whole number from 0 to 480");
+  }
+  if (max_hold_minutes > 0 && min_hold_minutes > max_hold_minutes) {
+    throw new Error("Min hold (minutes) must be at or below max hold when max hold is on");
+  }
+  if (jev_sell_exit_threshold < 0.5) {
+    throw new Error("Jev SELL exit (%) must be at least 50");
   }
   if (min_volume_ratio < 0 || min_volume_ratio > 5) {
     throw new Error("Min volume ratio must be between 0 (off) and 5");
@@ -199,6 +217,8 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     stop_loss_percentage,
     take_profit_percentage,
     max_hold_minutes,
+    min_hold_minutes,
+    jev_sell_exit_threshold,
     min_volume_ratio,
     min_share_price,
     risk_profile: parseRiskProfile(formData),
