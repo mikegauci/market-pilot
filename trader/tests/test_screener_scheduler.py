@@ -10,6 +10,7 @@ from watchlist.screener_scheduler import (
     EMWatchlistScheduler,
     ScreenerJobContext,
     backfill_watchlist_symbols,
+    quotes_from_minute_bars,
 )
 
 
@@ -184,6 +185,43 @@ class TestScreenerScheduler(unittest.TestCase):
                     scheduler._run_screener(job)
         job.db.update_effective_watchlist_fallback.assert_not_called()
         job.db.update_effective_watchlist.assert_not_called()
+
+    def test_quotes_from_minute_bars_uses_last_close(self) -> None:
+        from market.bar_aggregator import MinuteBarStore
+
+        store = MinuteBarStore(["BABA"])
+        store.get("BABA").record_point(
+            datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc),
+            42.5,
+        )
+        quotes = quotes_from_minute_bars(store, ["BABA", "MISSING"])
+        self.assertEqual(quotes[0].symbol, "BABA")
+        self.assertEqual(quotes[0].price, 42.5)
+        self.assertEqual(quotes[1].symbol, "MISSING")
+        self.assertIsNone(quotes[1].price)
+
+    def test_ibkr_screener_does_not_call_get_quotes(self) -> None:
+        scheduler = EMWatchlistScheduler()
+        job = _job(had_scan=False)
+        job.settings = Settings(data_source=DataSource.IBKR)
+        get_quotes = MagicMock(return_value=[])
+        job.get_quotes = get_quotes
+        job.minute_bars = MagicMock()
+        job.minute_bars.get.return_value.closes.return_value = [10.0]
+        job.minute_bars.get.return_value.bar_count.return_value = 30
+
+        with patch(
+            "watchlist.screener_scheduler.load_em_universe",
+            return_value=["BABA"],
+        ):
+            with patch.object(scheduler, "_cache_ready", return_value=True):
+                with patch(
+                    "watchlist.screener_scheduler.run_jev_universe_scan",
+                    return_value=(["BABA", "EEM"], []),
+                ):
+                    scheduler._run_screener(job)
+
+        get_quotes.assert_not_called()
 
 
 if __name__ == "__main__":

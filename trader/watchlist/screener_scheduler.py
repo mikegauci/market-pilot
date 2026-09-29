@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import time
@@ -39,8 +40,18 @@ MIN_INTRADAY_BARS = 30
 BACKFILL_CLIENT_ID_OFFSET = 100
 
 
+def _ensure_thread_event_loop() -> None:
+    """ib_insync needs an asyncio loop in the calling thread (not only the main thread)."""
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+
 def _connect_backfill_ibkr(settings: Settings) -> IBKRClient:
     """Dedicated IB session for background bar backfill (separate client id + event loop)."""
+    _ensure_thread_event_loop()
     client = IBKRClient(
         host=settings.ibkr_host,
         port=settings.ibkr_port,
@@ -50,6 +61,22 @@ def _connect_backfill_ibkr(settings: Settings) -> IBKRClient:
     )
     client.connect()
     return client
+
+
+def quotes_from_minute_bars(
+    minute_bars: MinuteBarStore,
+    symbols: Sequence[str],
+) -> List[Quote]:
+    """Build quotes from seeded minute bars — safe off the IBKR main thread."""
+    quotes: List[Quote] = []
+    for symbol in symbols:
+        key = symbol.upper()
+        closes = minute_bars.get(key).closes()
+        price = closes[-1] if closes else None
+        quotes.append(
+            Quote(symbol=key, price=price, bid=None, ask=None, spread=None)
+        )
+    return quotes
 
 
 def backfill_watchlist_symbols(
@@ -312,14 +339,18 @@ class EMWatchlistScheduler:
                 for symbol in scan_symbols:
                     if job.minute_bars.get(symbol).bar_count() == 0:
                         job.mock.seed_symbol_minute_bars(job.minute_bars, symbol)
+                # Mock quotes are thread-safe; IBKR's ib_insync client is not.
+                quotes = job.get_quotes(scan_symbols)
             else:
                 for symbol in scan_symbols:
                     job.bar_store.seed_minute_aggregator(
                         job.minute_bars.get(symbol),
                         symbol,
                     )
+                # Do not call the main IBKR client from this worker thread —
+                # cancelMktData/reqMktData need that connection's event loop.
+                quotes = quotes_from_minute_bars(job.minute_bars, scan_symbols)
 
-            quotes = job.get_quotes(scan_symbols)
             quotes_by_symbol = {quote.symbol: quote for quote in quotes}
             for quote in quotes:
                 job.minute_bars.record(quote)

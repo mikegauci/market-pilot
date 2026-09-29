@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from functools import wraps
+from typing import Callable, List, Optional, TypeVar
 
 from supabase import Client, create_client
 
@@ -34,6 +36,19 @@ MAX_EM_UNIVERSE_SIZE = 80
 
 # Failure backoff so a bad Finnhub/DB cycle does not wait the full refresh interval.
 GENERAL_NEWS_FAILURE_BACKOFF_SEC = 60.0
+
+F = TypeVar("F", bound=Callable[..., object])
+
+
+def _db_synchronized(method: F) -> F:
+    """Serialize httpx/PostgREST access — the sync client is not thread-safe."""
+
+    @wraps(method)
+    def wrapper(self: "SupabaseRepository", *args: object, **kwargs: object) -> object:
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper  # type: ignore[return-value]
 
 
 # Postgres may return variable fractional digits (e.g. .99074); Python 3.9 needs 6.
@@ -96,9 +111,11 @@ class SupabaseRepository:
         if not url or not service_role_key:
             raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required")
         self.client: Client = create_client(url, service_role_key)
+        self._lock = threading.RLock()
         self._cached_risk_sync_equity: Optional[float] = None
         self._known_position_symbols: Optional[set[str]] = None
 
+    @_db_synchronized
     def update_bot_status(self, status: BotStatusUpdate) -> None:
         payload = {
             "enabled": status.enabled,
@@ -112,6 +129,7 @@ class SupabaseRepository:
         }
         self.client.table("bot_status").update(payload).eq("id", 1).execute()
 
+    @_db_synchronized
     def insert_portfolio_snapshot(
         self,
         account: AccountSummary,
@@ -128,6 +146,7 @@ class SupabaseRepository:
         }
         self.client.table("portfolio_history").insert(payload).execute()
 
+    @_db_synchronized
     def _replace_positions(self, rows: List[dict], current_symbols: set[str]) -> None:
         if self._known_position_symbols is None:
             existing = self.client.table("positions").select("symbol").execute()
@@ -144,6 +163,7 @@ class SupabaseRepository:
             self.client.table("positions").upsert(rows, on_conflict="symbol").execute()
         self._known_position_symbols = current_symbols
 
+    @_db_synchronized
     def upsert_positions(self, positions: List[Position]) -> None:
         now = datetime.now(timezone.utc).isoformat()
         rows = [
@@ -161,6 +181,7 @@ class SupabaseRepository:
         ]
         self._replace_positions(rows, {position.symbol for position in positions})
 
+    @_db_synchronized
     def insert_market_snapshots(self, quotes: List[Quote]) -> None:
         if not quotes:
             return
@@ -180,6 +201,7 @@ class SupabaseRepository:
         ]
         self.client.table("market_snapshots").insert(rows).execute()
 
+    @_db_synchronized
     def get_bot_control(
         self,
         fallback_execution_mode: ExecutionMode = ExecutionMode.IBKR,
@@ -208,6 +230,7 @@ class SupabaseRepository:
                 execution_mode=fallback_execution_mode,
             )
 
+    @_db_synchronized
     def mark_trader_offline(
         self,
         enabled: bool,
@@ -227,6 +250,7 @@ class SupabaseRepository:
         }
         self.client.table("bot_status").update(payload).eq("id", 1).execute()
 
+    @_db_synchronized
     def get_settings(self) -> StrategySettings:
         risk = self.get_risk_settings()
         return StrategySettings(
@@ -256,6 +280,7 @@ class SupabaseRepository:
             )
         return rankings
 
+    @_db_synchronized
     def get_risk_settings(self) -> RiskSettings:
         result = (
             self.client.table("settings")
@@ -320,6 +345,7 @@ class SupabaseRepository:
             demotion_force_exit=bool(data.get("demotion_force_exit", False)),
         )
 
+    @_db_synchronized
     def update_effective_watchlist(
         self,
         watchlist: List[str],
@@ -354,6 +380,7 @@ class SupabaseRepository:
         except Exception as exc:
             logger.warning("Failed to log screener history: %s", exc)
 
+    @_db_synchronized
     def update_effective_watchlist_fallback(self, watchlist: List[str]) -> None:
         """Persist always-on core fallback after a failed dynamic scan."""
         now = datetime.now(timezone.utc).isoformat()
@@ -365,6 +392,7 @@ class SupabaseRepository:
         }
         self.client.table("settings").update(payload).eq("id", 1).execute()
 
+    @_db_synchronized
     def get_em_universe_symbols(self, tradable_only: bool = True) -> List[str]:
         query = (
             self.client.table("em_universe")
@@ -382,6 +410,7 @@ class SupabaseRepository:
                 symbols.append(symbol)
         return symbols
 
+    @_db_synchronized
     def set_em_universe_tradable(self, symbol: str, tradable: bool) -> None:
         self.client.table("em_universe").update(
             {
@@ -390,6 +419,7 @@ class SupabaseRepository:
             }
         ).eq("symbol", symbol.upper()).execute()
 
+    @_db_synchronized
     def get_bars(self, symbol: str, bar_size: str) -> List[Bar]:
         result = (
             self.client.table("symbol_bars")
@@ -416,6 +446,7 @@ class SupabaseRepository:
             )
         return bars
 
+    @_db_synchronized
     def upsert_bars(self, bars: List[Bar]) -> None:
         if not bars:
             return
@@ -439,6 +470,7 @@ class SupabaseRepository:
                 on_conflict="symbol,bar_size,ts",
             ).execute()
 
+    @_db_synchronized
     def get_last_fetched_at(self, symbol: str, bar_size: str) -> Optional[datetime]:
         try:
             result = (
@@ -466,6 +498,7 @@ class SupabaseRepository:
             return None
         return _parse_timestamp(last_fetched_at)
 
+    @_db_synchronized
     def set_last_fetched_at(
         self,
         symbol: str,
@@ -482,6 +515,7 @@ class SupabaseRepository:
             on_conflict="symbol,bar_size",
         ).execute()
 
+    @_db_synchronized
     def maybe_advance_risk_baseline(
         self,
         current_equity: float,
@@ -507,6 +541,7 @@ class SupabaseRepository:
         )
         return True
 
+    @_db_synchronized
     def get_open_trades(self) -> List[TradeRecord]:
         result = (
             self.client.table("trades")
@@ -517,6 +552,7 @@ class SupabaseRepository:
         )
         return [_trade_from_row(row) for row in result.data or []]
 
+    @_db_synchronized
     def get_daily_realized_pnl(self) -> float:
         today = datetime.now(timezone.utc).date().isoformat()
         result = (
@@ -532,6 +568,7 @@ class SupabaseRepository:
                 total += float(row["net_pnl"])
         return total
 
+    @_db_synchronized
     def get_total_realized_pnl(self) -> float:
         result = (
             self.client.table("trades")
@@ -545,6 +582,7 @@ class SupabaseRepository:
                 total += float(row["net_pnl"])
         return total
 
+    @_db_synchronized
     def insert_trade(self, trade: TradeRecord) -> str:
         now = datetime.now(timezone.utc).isoformat()
         payload = {
@@ -572,6 +610,7 @@ class SupabaseRepository:
         self.client.table("trades").insert(payload).execute()
         return trade.id
 
+    @_db_synchronized
     def update_trade_ibkr_bracket(self, trade: TradeRecord) -> None:
         now = datetime.now(timezone.utc).isoformat()
         payload = {
@@ -584,6 +623,7 @@ class SupabaseRepository:
         }
         self.client.table("trades").update(payload).eq("id", trade.id).execute()
 
+    @_db_synchronized
     def close_trade(
         self,
         trade_id: str,
@@ -611,6 +651,7 @@ class SupabaseRepository:
             payload["exit_reason"] = exit_reason
         self.client.table("trades").update(payload).eq("id", trade_id).execute()
 
+    @_db_synchronized
     def sync_positions_from_trades(
         self,
         open_trades: List[TradeRecord],
@@ -640,6 +681,7 @@ class SupabaseRepository:
             )
         self._replace_positions(rows, {trade.symbol for trade in open_trades})
 
+    @_db_synchronized
     def _sync_positions(
         self,
         quotes: List[Quote],
@@ -652,6 +694,7 @@ class SupabaseRepository:
         elif open_trades is not None:
             self.sync_positions_from_trades(open_trades, quotes)
 
+    @_db_synchronized
     def _write_portfolio_snapshot(
         self,
         *,
@@ -663,6 +706,7 @@ class SupabaseRepository:
         elif simulated_portfolio is not None:
             self.insert_simulated_portfolio(simulated_portfolio)
 
+    @_db_synchronized
     def write_portfolio_state(
         self,
         quotes: List[Quote],
@@ -683,6 +727,7 @@ class SupabaseRepository:
             open_trades=open_trades,
         )
 
+    @_db_synchronized
     def write_heartbeat(
         self,
         status: BotStatusUpdate,
@@ -709,6 +754,7 @@ class SupabaseRepository:
             self.insert_market_snapshots(quotes)
         self.update_bot_status(status)
 
+    @_db_synchronized
     def insert_simulated_portfolio(self, portfolio: SimulatedPortfolio) -> None:
         payload = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -720,6 +766,7 @@ class SupabaseRepository:
         }
         self.client.table("portfolio_history").insert(payload).execute()
 
+    @_db_synchronized
     def insert_prediction(
         self,
         state: MarketState,
@@ -740,6 +787,7 @@ class SupabaseRepository:
         }
         self.client.table("predictions").insert(payload).execute()
 
+    @_db_synchronized
     def upsert_market_news(self, rows: List[dict], *, keep: int = 100) -> int:
         if not rows:
             return 0
@@ -759,6 +807,7 @@ class SupabaseRepository:
             self.client.table("market_news").delete().in_("id", stale_ids).execute()
         return len(deduped)
 
+    @_db_synchronized
     def reclaim_stale_trade_commands(self, stale_after_sec: float = 120.0) -> int:
         cutoff = (
             datetime.now(timezone.utc) - timedelta(seconds=stale_after_sec)
@@ -772,6 +821,7 @@ class SupabaseRepository:
         )
         return len(result.data or [])
 
+    @_db_synchronized
     def get_pending_trade_commands(self) -> List[dict]:
         result = (
             self.client.table("trade_commands")
@@ -783,6 +833,7 @@ class SupabaseRepository:
         )
         return list(result.data or [])
 
+    @_db_synchronized
     def claim_trade_command(self, command_id: str) -> bool:
         now = datetime.now(timezone.utc).isoformat()
         result = (
@@ -794,18 +845,21 @@ class SupabaseRepository:
         )
         return bool(result.data)
 
+    @_db_synchronized
     def complete_trade_command(self, command_id: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
         self.client.table("trade_commands").update(
             {"status": "completed", "processed_at": now, "error": None}
         ).eq("id", command_id).execute()
 
+    @_db_synchronized
     def fail_trade_command(self, command_id: str, error: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
         self.client.table("trade_commands").update(
             {"status": "failed", "processed_at": now, "error": error[:500]}
         ).eq("id", command_id).execute()
 
+    @_db_synchronized
     def record_error(
         self,
         message: str,
