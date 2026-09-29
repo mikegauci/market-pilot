@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getMarketStatus, type MarketStatus } from "@/lib/market-hours";
 import { getTradeModeCopy } from "@/lib/trade-mode";
 import { getDisplayStatus, getStableDisplayNow } from "@/lib/trader-status";
@@ -18,6 +18,8 @@ export function StatusBadges({
   const [mounted, setMounted] = useState(false);
   const [display, setDisplay] = useState(() => getDisplayStatus(status, stableNow));
   const [market, setMarket] = useState<MarketStatus | null>(null);
+  const statusRef = useRef(status);
+  statusRef.current = status;
 
   useEffect(() => {
     setMounted(true);
@@ -25,15 +27,29 @@ export function StatusBadges({
 
   useEffect(() => {
     if (!mounted) return;
+    setDisplay(getDisplayStatus(status));
+    setMarket(getMarketStatus());
+  }, [
+    mounted,
+    status.enabled,
+    status.ibkr_connected,
+    status.jev_connected,
+    status.last_heartbeat,
+    status.last_error,
+    status.trading_mode,
+    status.execution_mode,
+  ]);
 
-    const update = () => {
-      setDisplay(getDisplayStatus(status));
+  useEffect(() => {
+    if (!mounted) return;
+
+    const tick = () => {
+      setDisplay(getDisplayStatus(statusRef.current));
       setMarket(getMarketStatus());
     };
-    update();
-    const id = setInterval(update, 1000);
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [status, mounted]);
+  }, [mounted]);
 
   return (
     <StatusPanel

@@ -1,6 +1,5 @@
 import { OverviewStats } from "@/components/overview-stats";
-import { PortfolioChart } from "@/components/portfolio-chart";
-import { PositionsTable } from "@/components/positions-table";
+import { PositionsGrid } from "@/components/positions-grid";
 import { SettingsSummary } from "@/components/settings-summary";
 import { TradesTable } from "@/components/trades-table";
 import {
@@ -8,7 +7,6 @@ import {
   getBotStatus,
   getLatestPortfolio,
   getOpenTrades,
-  getPortfolioHistory,
   getPositions,
   getRecentTrades,
   getSettings,
@@ -18,7 +16,6 @@ export default async function OverviewPage() {
   const [
     botStatus,
     portfolio,
-    history,
     positions,
     openTrades,
     tradeCommands,
@@ -27,7 +24,6 @@ export default async function OverviewPage() {
   ] = await Promise.all([
     getBotStatus(),
     getLatestPortfolio(),
-    getPortfolioHistory(24),
     getPositions(),
     getOpenTrades(),
     getActiveTradeCommands(),
@@ -49,10 +45,8 @@ export default async function OverviewPage() {
     <div className="space-y-6">
       <h2 className="text-xl font-semibold sm:text-2xl">Overview</h2>
 
-      <OverviewStats portfolio={portfolio} positions={positions} currency={currency} />
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <PortfolioChart data={history} currency={currency} />
+      <div className="grid grid-cols-1 gap-4 items-stretch sm:grid-cols-2">
+        <OverviewStats portfolio={portfolio} positions={positions} currency={currency} />
         {settings && (
           <SettingsSummary
             settings={settings}
@@ -63,7 +57,7 @@ export default async function OverviewPage() {
         )}
       </div>
 
-      <PositionsTable
+      <PositionsGrid
         positions={positions}
         openTrades={openTrades}
         tradeCommands={tradeCommands}
@@ -82,6 +76,7 @@ export default async function OverviewPage() {
           }
         }
       />
+
       <TradesTable
         trades={trades}
         tradeCommands={tradeCommands}
@@ -89,6 +84,7 @@ export default async function OverviewPage() {
         showCloseAction
         showSignalColumn
         showViewAllLink
+        showChartExpand={false}
         title="Recent Trades"
       />
     </div>

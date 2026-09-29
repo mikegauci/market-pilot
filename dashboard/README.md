@@ -29,12 +29,15 @@ Open [http://localhost:3000](http://localhost:3000) and sign in.
 
 | Route | Description |
 |---|---|
-| `/` | Overview — equity, P&L, bot toggle, positions, recent trades |
+| `/` | Overview — equity, P&L, open positions with charts, recent trades |
 | `/predictions` | Latest Jev predictions with live updates |
-| `/trades` | Full trade history (open / closed) |
+| `/trades` | Full trade history (open / closed) with expandable charts |
+| `/strategy` | Strategy guide — indicators, filters, and decision flow |
 | `/settings` | Risk and strategy settings |
 
-## Trading controls (Overview)
+## Trading controls (sidebar)
+
+Auto-trading and system status live in the **sidebar on every page** (not only Overview).
 
 | Control | Supabase field | Effect |
 |---------|----------------|--------|

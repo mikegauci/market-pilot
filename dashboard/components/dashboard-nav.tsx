@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Activity, Layers, LineChart, LogOut, Settings, TrendingUp } from "lucide-react";
 import { LiveStatus } from "@/components/live-status";
 import { Logo } from "@/components/logo";
+import { useOpenPositionsCount } from "@/components/open-positions-count-provider";
 import { TradingControls } from "@/components/trading-controls";
 import { signOut } from "@/lib/actions";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,18 @@ type DashboardNavContentProps = {
   onNavigate?: () => void;
   logoSize?: "sm" | "md";
 };
+
+function OpenPositionsBadge() {
+  const count = useOpenPositionsCount();
+
+  if (count === 0) return null;
+
+  return (
+    <span className="ml-auto rounded-full bg-blue-900/80 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-blue-300">
+      {count}
+    </span>
+  );
+}
 
 export function DashboardNavContent({
   onNavigate,
@@ -64,7 +77,10 @@ export function DashboardNavContent({
             className={navLinkClass(href)}
           >
             <Icon className="h-4 w-4 shrink-0" />
-            {label}
+            <span className="flex min-w-0 flex-1 items-center gap-2">
+              {label}
+              {href === "/" ? <OpenPositionsBadge /> : null}
+            </span>
           </Link>
         ))}
 
@@ -97,13 +113,5 @@ export function DashboardNavContent({
         Sign out
       </button>
     </div>
-  );
-}
-
-export function DashboardNav() {
-  return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900/50 p-4">
-      <DashboardNavContent />
-    </aside>
   );
 }

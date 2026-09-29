@@ -35,17 +35,6 @@ export async function getLatestPortfolio(): Promise<PortfolioSnapshot | null> {
   return data as PortfolioSnapshot | null;
 }
 
-export async function getPortfolioHistory(hours = 24): Promise<PortfolioSnapshot[]> {
-  const supabase = await createClient();
-  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-  const { data } = await supabase
-    .from("portfolio_history")
-    .select("*")
-    .gte("timestamp", since)
-    .order("timestamp", { ascending: true });
-  return (data ?? []) as PortfolioSnapshot[];
-}
-
 export async function getPositions(): Promise<Position[]> {
   const supabase = await createClient();
   const { data } = await supabase.from("positions").select("*").order("symbol");

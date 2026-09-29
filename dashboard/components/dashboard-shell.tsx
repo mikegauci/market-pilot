@@ -9,6 +9,7 @@ import {
   getDashboardPageTitle,
 } from "@/components/dashboard-nav";
 import { Logo } from "@/components/logo";
+import { OpenPositionsCountProvider } from "@/components/open-positions-count-provider";
 import type { BotStatus } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
@@ -46,52 +47,54 @@ export function DashboardShell({ children, botStatus }: DashboardShellProps) {
 
   return (
     <BotStatusProvider initialStatus={botStatus}>
-    <div className="flex min-h-screen">
-      <aside className="hidden w-64 shrink-0 flex min-h-screen flex-col overflow-y-auto border-r border-zinc-800 bg-zinc-900/50 p-4 lg:flex">
-        <DashboardNavContent />
-      </aside>
+      <OpenPositionsCountProvider>
+        <div className="flex min-h-screen">
+          <aside className="hidden w-64 shrink-0 flex min-h-screen flex-col overflow-y-auto border-r border-zinc-800 bg-zinc-900/50 p-4 lg:flex">
+            <DashboardNavContent />
+          </aside>
 
-      <div
-        className={cn(
-          "fixed inset-0 z-40 bg-black/60 transition-opacity duration-200 lg:hidden",
-          mobileOpen ? "opacity-100" : "pointer-events-none opacity-0",
-        )}
-        aria-hidden={!mobileOpen}
-        onClick={closeMobile}
-      />
+          <div
+            className={cn(
+              "fixed inset-0 z-40 bg-black/60 transition-opacity duration-200 lg:hidden",
+              mobileOpen ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+            aria-hidden={!mobileOpen}
+            onClick={closeMobile}
+          />
 
-      <aside
-        id="mobile-nav-drawer"
-        aria-hidden={!mobileOpen}
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-y-auto border-r border-zinc-800 bg-zinc-900 p-4 transition-transform duration-200 ease-out lg:hidden",
-          mobileOpen ? "translate-x-0" : "-translate-x-full",
-        )}
-      >
-        <DashboardNavContent onNavigate={closeMobile} />
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur lg:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileOpen((open) => !open)}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
-            aria-expanded={mobileOpen}
-            aria-controls="mobile-nav-drawer"
+          <aside
+            id="mobile-nav-drawer"
+            aria-hidden={!mobileOpen}
+            className={cn(
+              "fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-y-auto border-r border-zinc-800 bg-zinc-900 p-4 transition-transform duration-200 ease-out lg:hidden",
+              mobileOpen ? "translate-x-0" : "-translate-x-full",
+            )}
           >
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-zinc-100">{pageTitle}</p>
-          </div>
-          <Logo size="sm" />
-        </header>
+            <DashboardNavContent onNavigate={closeMobile} />
+          </aside>
 
-        <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-8">{children}</main>
-      </div>
-    </div>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-zinc-800 bg-zinc-950/95 px-4 py-3 backdrop-blur lg:hidden">
+              <button
+                type="button"
+                onClick={() => setMobileOpen((open) => !open)}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                aria-label={mobileOpen ? "Close menu" : "Open menu"}
+                aria-expanded={mobileOpen}
+                aria-controls="mobile-nav-drawer"
+              >
+                {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-zinc-100">{pageTitle}</p>
+              </div>
+              <Logo size="sm" />
+            </header>
+
+            <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-8">{children}</main>
+          </div>
+        </div>
+      </OpenPositionsCountProvider>
     </BotStatusProvider>
   );
 }

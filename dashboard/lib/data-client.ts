@@ -128,21 +128,6 @@ export async function fetchLatestPortfolio(): Promise<PortfolioSnapshot | null> 
   return data as PortfolioSnapshot | null;
 }
 
-export async function fetchPortfolioHistory(hours = 24): Promise<PortfolioSnapshot[]> {
-  const supabase = createClient();
-  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
-    .from("portfolio_history")
-    .select("*")
-    .gte("timestamp", since)
-    .order("timestamp", { ascending: true });
-  if (error) {
-    logFetchError("portfolio_history", error.message);
-    return [];
-  }
-  return (data ?? []) as PortfolioSnapshot[];
-}
-
 export async function fetchSymbolBars(
   symbol: string,
   barSize = "5 mins",

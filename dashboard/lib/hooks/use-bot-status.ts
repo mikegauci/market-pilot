@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { initialDataChanged } from "@/lib/hooks/use-live-query";
 import { createClient } from "@/lib/supabase/client";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
 import type { BotStatus } from "@/lib/types/database";
@@ -26,6 +27,7 @@ export async function fetchBotStatus(): Promise<BotStatus | null> {
 /** Keep bot_status fresh via client polling + Realtime (SSR props alone go stale). */
 export function useBotStatus(initialStatus: BotStatus): BotStatus {
   const [status, setStatus] = useState(initialStatus);
+  const syncedInitialRef = useRef(initialStatus);
 
   const refresh = useCallback(async () => {
     const next = await fetchBotStatus();
@@ -33,6 +35,10 @@ export function useBotStatus(initialStatus: BotStatus): BotStatus {
   }, []);
 
   useEffect(() => {
+    if (!initialDataChanged(syncedInitialRef.current, initialStatus)) {
+      return;
+    }
+    syncedInitialRef.current = initialStatus;
     setStatus(initialStatus);
   }, [initialStatus]);
 

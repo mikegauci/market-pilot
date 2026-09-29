@@ -1,6 +1,15 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { requestClosePosition } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 
@@ -24,22 +33,21 @@ export function ClosePositionButton({
   size = "sm",
 }: Props) {
   const [isPending, startTransition] = useTransition();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const disabled = !traderOnline || pending || isPending;
   const label = pending || isPending ? "Closing…" : failed ? "Retry close" : "Close";
+  const closingInFlight = isPending;
 
-  function handleClick() {
-    if (disabled) return;
-    const confirmed = window.confirm(
-      `Close ${symbol} at market?\n\nThe trader will cancel bracket orders (if any) and submit a market sell.`,
-    );
-    if (!confirmed) return;
-
+  function handleConfirm() {
+    setActionError(null);
     startTransition(async () => {
       try {
         await requestClosePosition(tradeId);
+        setDialogOpen(false);
       } catch (err) {
-        window.alert(err instanceof Error ? err.message : "Failed to request close");
+        setActionError(err instanceof Error ? err.message : "Failed to request close");
       }
     });
   }
@@ -48,7 +56,11 @@ export function ClosePositionButton({
     <div className="flex flex-col items-start gap-1">
       <Button
         type="button"
-        onClick={handleClick}
+        onClick={() => {
+          if (disabled) return;
+          setActionError(null);
+          setDialogOpen(true);
+        }}
         disabled={disabled}
         title={
           !traderOnline
@@ -70,6 +82,34 @@ export function ClosePositionButton({
           {errorMessage}
         </span>
       ) : null}
+
+      <AlertDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        dismissible={!closingInFlight}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle>Close {symbol} at market?</AlertDialogTitle>
+          <AlertDialogDescription>
+            The trader will cancel bracket orders (if any) and submit a market sell.
+          </AlertDialogDescription>
+          {actionError ? (
+            <p className="text-sm text-red-400">{actionError}</p>
+          ) : null}
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => setDialogOpen(false)} disabled={closingInFlight}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleConfirm}
+            disabled={closingInFlight}
+            className="bg-red-900/80 hover:bg-red-800"
+          >
+            {closingInFlight ? "Closing…" : "Close position"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialog>
     </div>
   );
 }

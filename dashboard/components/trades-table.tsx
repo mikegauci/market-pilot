@@ -26,6 +26,7 @@ type Props = {
   showCloseAction?: boolean;
   showSignalColumn?: boolean;
   showViewAllLink?: boolean;
+  showChartExpand?: boolean;
   title?: string;
   recentLimit?: number;
 };
@@ -38,6 +39,7 @@ export function TradesTable({
   showCloseAction = false,
   showSignalColumn = false,
   showViewAllLink = false,
+  showChartExpand = true,
   title = "Trades",
   recentLimit = 10,
 }: Props) {
@@ -83,7 +85,10 @@ export function TradesTable({
   }
 
   const colCount =
-    8 + (showSignalColumn ? 1 : 0) + (showCloseAction ? 1 : 0);
+    7 +
+    (showChartExpand ? 1 : 0) +
+    (showSignalColumn ? 1 : 0) +
+    (showCloseAction ? 1 : 0);
 
   return (
     <Card>
@@ -121,7 +126,7 @@ export function TradesTable({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-zinc-800 text-left text-zinc-500">
-                <th className="pb-2 w-8" />
+                {showChartExpand ? <th className="pb-2 w-8" /> : null}
                 <th className="pb-2 pr-3">Symbol</th>
                 <th className="pb-2 pr-3">Mode</th>
                 <th className="pb-2 pr-3">Status</th>
@@ -129,7 +134,9 @@ export function TradesTable({
                 <th className="pb-2 pr-3">Exit</th>
                 <th className="pb-2 pr-3">Qty</th>
                 <th className="pb-2 pr-3">SL / TP</th>
-                {showSignalColumn ? <th className="pb-2 pr-3">Signal</th> : null}
+                {showSignalColumn ? (
+                  <th className="hidden pb-2 pr-3 sm:table-cell">Signal</th>
+                ) : null}
                 <th className="pb-2 pr-3">PnL</th>
                 {showCloseAction ? <th className="pb-2">Action</th> : null}
               </tr>
@@ -145,20 +152,22 @@ export function TradesTable({
                 return (
                   <Fragment key={t.id}>
                   <tr className="border-b border-zinc-800/50">
-                    <td className="py-2">
-                      <button
-                        type="button"
-                        onClick={() => toggleExpanded(t.id)}
-                        className="text-zinc-500 hover:text-zinc-300"
-                        aria-label={isExpanded ? "Collapse chart" : "Expand chart"}
-                      >
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4" />
-                        )}
-                      </button>
-                    </td>
+                    {showChartExpand ? (
+                      <td className="py-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(t.id)}
+                          className="text-zinc-500 hover:text-zinc-300"
+                          aria-label={isExpanded ? "Collapse chart" : "Expand chart"}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </button>
+                      </td>
+                    ) : null}
                     <td className="py-2 pr-3 font-medium">{t.symbol}</td>
                     <td className="py-2 pr-3">
                       <Badge
@@ -201,7 +210,7 @@ export function TradesTable({
                       {formatCurrency(t.stop_loss)} / {formatCurrency(t.take_profit)}
                     </td>
                     {showSignalColumn ? (
-                      <td className="py-2 pr-3">
+                      <td className="hidden py-2 pr-3 sm:table-cell">
                         {t.jev_buy_probability != null ? (
                           <span className="text-emerald-400">
                             BUY {formatPercent(t.jev_buy_probability)}
@@ -235,7 +244,7 @@ export function TradesTable({
                       </td>
                     ) : null}
                   </tr>
-                  {isExpanded && (
+                  {showChartExpand && isExpanded && (
                     <tr className="border-b border-zinc-800/50 bg-zinc-900/40">
                       <td />
                       <td colSpan={colCount - 1} className="py-3 pr-3">
