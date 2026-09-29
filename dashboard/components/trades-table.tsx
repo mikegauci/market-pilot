@@ -85,7 +85,7 @@ export function TradesTable({
   }
 
   const colCount =
-    7 +
+    6 +
     (showChartExpand ? 1 : 0) +
     (showSignalColumn ? 1 : 0) +
     (showCloseAction ? 1 : 0);
@@ -128,12 +128,10 @@ export function TradesTable({
               <tr className="border-b border-zinc-800 text-left text-zinc-500">
                 {showChartExpand ? <th className="pb-2 w-8" /> : null}
                 <th className="pb-2 pr-3">Symbol</th>
-                <th className="pb-2 pr-3">Mode</th>
                 <th className="pb-2 pr-3">Status</th>
                 <th className="pb-2 pr-3">Entry</th>
                 <th className="pb-2 pr-3">Exit</th>
                 <th className="pb-2 pr-3">Qty</th>
-                <th className="pb-2 pr-3">SL / TP</th>
                 {showSignalColumn ? (
                   <th className="hidden pb-2 pr-3 sm:table-cell">Signal</th>
                 ) : null}
@@ -172,17 +170,6 @@ export function TradesTable({
                     <td className="py-2 pr-3">
                       <Badge
                         className={
-                          t.execution_mode === "ibkr"
-                            ? "bg-orange-900 text-orange-300"
-                            : "bg-zinc-800 text-zinc-400"
-                        }
-                      >
-                        {t.execution_mode ?? "ibkr"}
-                      </Badge>
-                    </td>
-                    <td className="py-2 pr-3">
-                      <Badge
-                        className={
                           t.status === "open"
                             ? "bg-blue-900 text-blue-300"
                             : "bg-zinc-800 text-zinc-400"
@@ -206,9 +193,6 @@ export function TradesTable({
                       )}
                     </td>
                     <td className="py-2 pr-3">{t.quantity}</td>
-                    <td className="py-2 pr-3 text-xs text-zinc-400">
-                      {formatCurrency(t.stop_loss)} / {formatCurrency(t.take_profit)}
-                    </td>
                     {showSignalColumn ? (
                       <td className="hidden py-2 pr-3 sm:table-cell">
                         {t.jev_buy_probability != null ? (
