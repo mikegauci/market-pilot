@@ -4,7 +4,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Protocol, Sequence
+from typing import Callable, Dict, List, Optional, Protocol, Sequence
 
 from typing import TYPE_CHECKING
 
@@ -38,6 +38,40 @@ class TrendChanges:
     change_1d: Optional[float] = None
     change_5d: Optional[float] = None
     change_1w: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class BackfillSymbolResult:
+    symbol: str
+    status: str
+    daily_bars: int = 0
+    intraday_bars: int = 0
+    message: str = ""
+
+    @property
+    def refreshed(self) -> bool:
+        return self.status == "refreshed"
+
+
+@dataclass(frozen=True)
+class BackfillSummary:
+    results: List[BackfillSymbolResult]
+
+    @property
+    def total(self) -> int:
+        return len(self.results)
+
+    @property
+    def refreshed(self) -> int:
+        return sum(1 for item in self.results if item.refreshed)
+
+    @property
+    def unqualified_symbols(self) -> List[str]:
+        return [item.symbol for item in self.results if item.status == "unqualified"]
+
+    @property
+    def no_bars_symbols(self) -> List[str]:
+        return [item.symbol for item in self.results if item.status == "no_bars"]
 
 
 class BarRepository(Protocol):
@@ -172,23 +206,38 @@ class BarStore:
         fetcher: object,
         *,
         force: bool = False,
-    ) -> bool:
-        """Fetch missing bar sizes from IBKR and persist. Returns True if any fetch ran."""
+    ) -> BackfillSymbolResult:
+        """Fetch missing bar sizes from IBKR and persist."""
         from broker.ibkr import IBKRClient
 
-        if not isinstance(fetcher, IBKRClient) or not fetcher.is_connected():
-            return False
-
         symbol = symbol.upper()
-        fetched = False
-        now = datetime.now(timezone.utc)
+        if not isinstance(fetcher, IBKRClient) or not fetcher.is_connected():
+            return BackfillSymbolResult(symbol, "disconnected", message="IBKR not connected")
 
-        if force or self.needs_daily_refresh(symbol, now):
+        if not fetcher.can_trade_symbol(symbol):
+            return BackfillSymbolResult(
+                symbol,
+                "unqualified",
+                message="Could not qualify as SMART/USD",
+            )
+
+        now = datetime.now(timezone.utc)
+        needs_daily = force or self.needs_daily_refresh(symbol, now)
+        needs_intraday = force or self.needs_intraday_refresh(symbol, now)
+        if not needs_daily and not needs_intraday:
+            return BackfillSymbolResult(symbol, "skipped_fresh", message="Cache still fresh")
+
+        daily_count = 0
+        intraday_count = 0
+        fetched = False
+
+        if needs_daily:
             daily = fetcher.fetch_historical_bars(
                 symbol,
                 duration=self.daily_duration,
                 bar_size=BAR_SIZE_DAILY,
             )
+            daily_count = len(daily)
             if daily:
                 self.repository.upsert_bars(daily)
                 self.invalidate_trend_cache(symbol)
@@ -202,12 +251,13 @@ class BarStore:
             if self.backfill_pacing_sec > 0:
                 time.sleep(min(self.backfill_pacing_sec, 5.0))
 
-        if force or self.needs_intraday_refresh(symbol, now):
+        if needs_intraday:
             intraday = fetcher.fetch_historical_bars(
                 symbol,
                 duration=self.intraday_duration,
                 bar_size=BAR_SIZE_INTRADAY,
             )
+            intraday_count = len(intraday)
             if intraday:
                 self.repository.upsert_bars(intraday)
                 self.repository.set_last_fetched_at(symbol, BAR_SIZE_INTRADAY, now)
@@ -218,7 +268,20 @@ class BarStore:
                     symbol,
                 )
 
-        return fetched
+        if fetched:
+            return BackfillSymbolResult(
+                symbol,
+                "refreshed",
+                daily_bars=daily_count,
+                intraday_bars=intraday_count,
+            )
+        return BackfillSymbolResult(
+            symbol,
+            "no_bars",
+            daily_bars=daily_count,
+            intraday_bars=intraday_count,
+            message="IBKR returned no bars",
+        )
 
     def backfill_universe(
         self,
@@ -227,15 +290,17 @@ class BarStore:
         *,
         force: bool = False,
         pacing_sec: Optional[float] = None,
-    ) -> int:
-        """Paced backfill for many symbols. Returns count of symbols fetched."""
-        import time
-
+        on_progress: Optional[Callable[[BackfillSymbolResult, int, int], None]] = None,
+    ) -> BackfillSummary:
+        """Paced backfill for many symbols."""
         delay = pacing_sec if pacing_sec is not None else self.backfill_pacing_sec
-        count = 0
+        results: List[BackfillSymbolResult] = []
+        total = len(symbols)
         for index, symbol in enumerate(symbols):
-            if self.backfill_symbol(symbol, fetcher, force=force):
-                count += 1
-            if index < len(symbols) - 1 and delay > 0:
+            result = self.backfill_symbol(symbol, fetcher, force=force)
+            results.append(result)
+            if on_progress is not None:
+                on_progress(result, index + 1, total)
+            if index < total - 1 and delay > 0:
                 time.sleep(delay)
-        return count
+        return BackfillSummary(results=results)

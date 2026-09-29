@@ -85,15 +85,21 @@ class EMWatchlistScheduler:
                         "Starting paced EM bar backfill for %s symbols",
                         len(universe),
                     )
-                    count = bar_store.backfill_universe(
+                    summary = bar_store.backfill_universe(
                         list(universe),
                         ibkr,
                         pacing_sec=settings.bar_backfill_pacing_sec,
                     )
                     logger.info(
-                        "EM bar backfill complete — refreshed %s symbol(s)",
-                        count,
+                        "EM bar backfill complete — refreshed %s/%s symbol(s)",
+                        summary.refreshed,
+                        summary.total,
                     )
+                    if summary.unqualified_symbols:
+                        logger.warning(
+                            "Unqualified during backfill: %s",
+                            ", ".join(summary.unqualified_symbols),
+                        )
                 finally:
                     self._backfill_done.set()
 

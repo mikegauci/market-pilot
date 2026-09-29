@@ -298,13 +298,27 @@ class IBKRClient:
         return self._resolve_app_symbol(contract) == symbol
 
     def _ensure_contract(self, symbol: str) -> Stock:
-        if symbol not in self._contracts:
-            contract = Stock(to_ibkr_symbol(symbol), "SMART", "USD")
-            qualified = self.ib.qualifyContracts(contract)
-            if not qualified:
-                raise RuntimeError(f"Could not qualify contract for {symbol}")
-            self._contracts[symbol] = qualified[0]
+        contract = self._try_ensure_contract(symbol)
+        if contract is None:
+            raise RuntimeError(f"Could not qualify contract for {symbol}")
+        return contract
+
+    @_ibkr_synchronized
+    def _try_ensure_contract(self, symbol: str) -> Optional[Stock]:
+        symbol = symbol.upper()
+        if symbol in self._contracts:
+            return self._contracts[symbol]
+        contract = Stock(to_ibkr_symbol(symbol), "SMART", "USD")
+        qualified = self.ib.qualifyContracts(contract)
+        if not qualified:
+            return None
+        self._contracts[symbol] = qualified[0]
         return self._contracts[symbol]
+
+    @_ibkr_synchronized
+    def can_trade_symbol(self, symbol: str) -> bool:
+        """Return True when symbol qualifies as SMART/USD on IBKR."""
+        return self._try_ensure_contract(symbol) is not None
 
     @_ibkr_synchronized
     def subscribe_watchlist(self, symbols: List[str]) -> None:
@@ -675,7 +689,11 @@ class IBKRClient:
         if not self.is_connected():
             return []
 
-        contract = self._ensure_contract(symbol)
+        contract = self._try_ensure_contract(symbol)
+        if contract is None:
+            logger.warning("Skipping historical bars for %s — contract not qualified", symbol)
+            return []
+
         raw_bars = self.ib.reqHistoricalData(
             contract,
             endDateTime="",

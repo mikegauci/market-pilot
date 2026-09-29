@@ -7,13 +7,22 @@ from market.bars import BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, Bar, BarStore
 
 
 class FakeIBKR(IBKRClient):
-    def __init__(self, bars_by_call: list[list[Bar]]) -> None:
+    def __init__(
+        self,
+        bars_by_call: list[list[Bar]],
+        *,
+        unqualified: set[str] | None = None,
+    ) -> None:
         super().__init__("127.0.0.1", 4002, 99)
         self._bars_by_call = list(bars_by_call)
+        self._unqualified = {symbol.upper() for symbol in (unqualified or set())}
         self._connected = True
 
     def is_connected(self) -> bool:
         return self._connected
+
+    def can_trade_symbol(self, symbol: str) -> bool:
+        return symbol.upper() not in self._unqualified
 
     def fetch_historical_bars(self, symbol, duration="1 W", bar_size=BAR_SIZE_DAILY, use_rth=True):
         if self._bars_by_call:
@@ -49,9 +58,9 @@ class BackfillMetadataTests(unittest.TestCase):
         store = BarStore(repo, backfill_pacing_sec=0)
         fetcher = FakeIBKR([[], []])
 
-        fetched = store.backfill_symbol("NU", fetcher, force=True)
+        result = store.backfill_symbol("NU", fetcher, force=True)
 
-        self.assertFalse(fetched)
+        self.assertEqual(result.status, "no_bars")
         self.assertNotIn(("NU", BAR_SIZE_DAILY), repo.meta)
         self.assertNotIn(("NU", BAR_SIZE_INTRADAY), repo.meta)
 
@@ -66,11 +75,45 @@ class BackfillMetadataTests(unittest.TestCase):
             ]
         )
 
-        fetched = store.backfill_symbol("NU", fetcher, force=True)
+        result = store.backfill_symbol("NU", fetcher, force=True)
 
-        self.assertTrue(fetched)
+        self.assertEqual(result.status, "refreshed")
         self.assertIn(("NU", BAR_SIZE_DAILY), repo.meta)
         self.assertIn(("NU", BAR_SIZE_INTRADAY), repo.meta)
+
+    def test_unqualified_symbol_does_not_crash(self) -> None:
+        repo = InMemoryBarRepo()
+        store = BarStore(repo, backfill_pacing_sec=0)
+        fetcher = FakeIBKR([], unqualified={"PHOJY"})
+
+        result = store.backfill_symbol("PHOJY", fetcher, force=True)
+
+        self.assertEqual(result.status, "unqualified")
+        self.assertNotIn(("PHOJY", BAR_SIZE_DAILY), repo.meta)
+
+    def test_backfill_universe_continues_after_unqualified(self) -> None:
+        repo = InMemoryBarRepo()
+        store = BarStore(repo, backfill_pacing_sec=0)
+        now = datetime.now(timezone.utc)
+        fetcher = FakeIBKR(
+            [
+                [Bar("NU", BAR_SIZE_DAILY, now, 10, 10, 10, 10, 100)],
+                [Bar("NU", BAR_SIZE_INTRADAY, now, 10, 10, 10, 10, 100)],
+            ],
+            unqualified={"PHOJY"},
+        )
+        progress: list[str] = []
+
+        summary = store.backfill_universe(
+            ["PHOJY", "NU"],
+            fetcher,
+            force=True,
+            on_progress=lambda result, index, total: progress.append(result.symbol),
+        )
+
+        self.assertEqual(summary.refreshed, 1)
+        self.assertEqual(summary.unqualified_symbols, ["PHOJY"])
+        self.assertEqual(progress, ["PHOJY", "NU"])
 
 
 if __name__ == "__main__":

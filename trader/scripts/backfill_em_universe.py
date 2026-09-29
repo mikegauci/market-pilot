@@ -18,8 +18,26 @@ if str(TRADER_ROOT) not in sys.path:
 from broker.ibkr import IBKRClient
 from config import load_settings
 from database.supabase import SupabaseRepository
-from market.bars import BarStore
+from market.bars import BackfillSymbolResult, BarStore
 from watchlist.universe import load_em_universe
+
+
+def _format_progress(result: BackfillSymbolResult, index: int, total: int) -> str:
+    prefix = f"[{index}/{total}] {result.symbol}"
+    if result.status == "refreshed":
+        return (
+            f"{prefix} — refreshed "
+            f"(daily={result.daily_bars}, intraday={result.intraday_bars})"
+        )
+    if result.status == "skipped_fresh":
+        return f"{prefix} — skipped (cache fresh)"
+    if result.status == "unqualified":
+        return f"{prefix} — SKIP unqualified ({result.message})"
+    if result.status == "no_bars":
+        return f"{prefix} — no bars returned ({result.message})"
+    if result.status == "disconnected":
+        return f"{prefix} — SKIP ({result.message})"
+    return f"{prefix} — {result.status}"
 
 
 def main() -> int:
@@ -41,6 +59,11 @@ def main() -> int:
     )
     universe = load_em_universe(db=db, path=settings.resolved_em_universe_path)
 
+    print(
+        f"Backfilling {len(universe)} EM symbol(s) via IBKR "
+        f"({settings.ibkr_host}:{settings.ibkr_port})..."
+    )
+
     ibkr = IBKRClient(
         host=settings.ibkr_host,
         port=settings.ibkr_port,
@@ -50,17 +73,34 @@ def main() -> int:
     )
     ibkr.connect()
     try:
-        count = bar_store.backfill_universe(
+
+        def _on_progress(result: BackfillSymbolResult, index: int, total: int) -> None:
+            print(_format_progress(result, index, total), flush=True)
+            if result.status == "unqualified":
+                db.set_em_universe_tradable(result.symbol, False)
+
+        summary = bar_store.backfill_universe(
             universe,
             ibkr,
             force=args.force,
             pacing_sec=settings.bar_backfill_pacing_sec,
+            on_progress=_on_progress,
         )
     finally:
         if ibkr.is_connected():
             ibkr.ib.disconnect()
 
-    print(f"Backfill complete — refreshed {count}/{len(universe)} symbols")
+    skipped_fresh = sum(1 for item in summary.results if item.status == "skipped_fresh")
+    print(
+        f"\nBackfill complete — refreshed {summary.refreshed}/{summary.total}, "
+        f"skipped fresh {skipped_fresh}, "
+        f"unqualified {len(summary.unqualified_symbols)}, "
+        f"no bars {len(summary.no_bars_symbols)}"
+    )
+    if summary.unqualified_symbols:
+        print(f"Unqualified: {', '.join(summary.unqualified_symbols)}")
+    if summary.no_bars_symbols:
+        print(f"No bars: {', '.join(summary.no_bars_symbols)}")
     return 0
 
 
