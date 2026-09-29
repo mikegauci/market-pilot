@@ -1,3 +1,4 @@
+import { MarketConditionCard } from "@/components/market-condition-card";
 import { OverviewStats } from "@/components/overview-stats";
 import { PositionsGrid } from "@/components/positions-grid";
 import { SettingsSummary } from "@/components/settings-summary";
@@ -6,6 +7,8 @@ import {
   getActiveTradeCommands,
   getBotStatus,
   getLatestPortfolio,
+  getLatestPredictionsBySymbol,
+  getMarketNews,
   getOpenTrades,
   getPositions,
   getRecentTrades,
@@ -21,6 +24,8 @@ export default async function OverviewPage() {
     tradeCommands,
     trades,
     settings,
+    predictions,
+    news,
   ] = await Promise.all([
     getBotStatus(),
     getLatestPortfolio(),
@@ -29,6 +34,8 @@ export default async function OverviewPage() {
     getActiveTradeCommands(),
     getRecentTrades(10),
     getSettings(),
+    getLatestPredictionsBySymbol(),
+    getMarketNews(80),
   ]);
 
   const currency = portfolio?.currency ?? "USD";
@@ -45,8 +52,13 @@ export default async function OverviewPage() {
     <div className="space-y-6">
       <h2 className="text-xl font-semibold sm:text-2xl">Overview</h2>
 
-      <div className="grid grid-cols-1 gap-4 items-stretch sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 items-stretch sm:grid-cols-2 xl:grid-cols-3">
         <OverviewStats portfolio={portfolio} positions={positions} currency={currency} />
+        <MarketConditionCard
+          predictions={predictions}
+          news={news}
+          settings={settings}
+        />
         {settings && (
           <SettingsSummary
             settings={settings}
