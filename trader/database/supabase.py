@@ -754,15 +754,32 @@ class SupabaseRepository:
         elif open_trades is not None:
             self.sync_positions_from_trades(open_trades, quotes)
 
+    @staticmethod
+    def _unrealized_pnl_from_positions(
+        positions: Optional[List[Position]],
+    ) -> float:
+        if not positions:
+            return 0.0
+        return sum(float(p.unrealized_pnl or 0.0) for p in positions)
+
     @_db_synchronized
     def _write_portfolio_snapshot(
         self,
         *,
         account: Optional[AccountSummary] = None,
         simulated_portfolio: Optional[SimulatedPortfolio] = None,
+        unrealized_pnl: float = 0.0,
     ) -> None:
         if account is not None:
-            self.insert_portfolio_snapshot(account)
+            # IBKR account summary has equity/cash only — derive P&L from trades
+            # plus open-position unrealized, matching the simulated path.
+            daily_pnl = self.get_daily_realized_pnl() + unrealized_pnl
+            total_pnl = self.get_total_realized_pnl() + unrealized_pnl
+            self.insert_portfolio_snapshot(
+                account,
+                daily_pnl=daily_pnl,
+                total_pnl=total_pnl,
+            )
         elif simulated_portfolio is not None:
             self.insert_simulated_portfolio(simulated_portfolio)
 
@@ -780,6 +797,7 @@ class SupabaseRepository:
         self._write_portfolio_snapshot(
             account=account,
             simulated_portfolio=simulated_portfolio,
+            unrealized_pnl=self._unrealized_pnl_from_positions(ibkr_positions),
         )
         self._sync_positions(
             quotes,
@@ -804,6 +822,7 @@ class SupabaseRepository:
             self._write_portfolio_snapshot(
                 account=account,
                 simulated_portfolio=simulated_portfolio,
+                unrealized_pnl=self._unrealized_pnl_from_positions(ibkr_positions),
             )
         self._sync_positions(
             quotes,
