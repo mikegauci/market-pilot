@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, patch
 
 from config import Settings
 from models.types import DataSource, RiskSettings
-from watchlist.screener_scheduler import EMWatchlistScheduler, ScreenerJobContext
+from watchlist.screener_scheduler import (
+    EMWatchlistScheduler,
+    ScreenerJobContext,
+    backfill_watchlist_symbols,
+)
 
 
 def _job(*, had_scan: bool = False) -> ScreenerJobContext:
@@ -48,6 +52,69 @@ def _job(*, had_scan: bool = False) -> ScreenerJobContext:
 
 
 class TestScreenerScheduler(unittest.TestCase):
+    def test_backfill_watchlist_symbols_uses_main_ibkr(self) -> None:
+        settings = Settings(data_source=DataSource.IBKR)
+        bar_store = MagicMock()
+        bar_store.symbols_needing_backfill.return_value = ["AMD", "NVDA"]
+        ibkr = MagicMock()
+        ibkr.is_connected.return_value = True
+
+        backfill_watchlist_symbols(settings, bar_store, ibkr, ["AMD", "NVDA", "AMD"])
+
+        bar_store.symbols_needing_backfill.assert_called_once_with(["AMD", "NVDA"])
+        bar_store.backfill_universe.assert_called_once_with(
+            ["AMD", "NVDA"],
+            ibkr,
+            pacing_sec=settings.bar_backfill_pacing_sec,
+        )
+
+    def test_backfill_watchlist_symbols_skips_when_cache_fresh(self) -> None:
+        settings = Settings(data_source=DataSource.IBKR)
+        bar_store = MagicMock()
+        bar_store.symbols_needing_backfill.return_value = []
+        ibkr = MagicMock()
+        ibkr.is_connected.return_value = True
+
+        backfill_watchlist_symbols(settings, bar_store, ibkr, ["AMD", "NVDA"])
+
+        bar_store.backfill_universe.assert_not_called()
+
+    def test_start_em_backfill_excludes_watchlist_symbols(self) -> None:
+        scheduler = EMWatchlistScheduler()
+        settings = Settings(data_source=DataSource.IBKR, em_backfill_on_startup=True)
+        bar_store = MagicMock()
+        ibkr = MagicMock()
+        ibkr.is_connected.return_value = True
+
+        with patch(
+            "watchlist.screener_scheduler._connect_backfill_ibkr",
+            return_value=MagicMock(is_connected=MagicMock(return_value=True)),
+        ) as connect_mock:
+            scheduler.start_em_backfill(
+                settings,
+                bar_store,
+                ibkr,
+                ["ATAT", "AMD"],
+                exclude_symbols=["AMD", "NVDA"],
+            )
+            scheduler._backfill_thread.join(timeout=2)
+
+        connect_mock.assert_called_once_with(settings)
+        bar_store.backfill_universe.assert_called_once()
+        self.assertEqual(bar_store.backfill_universe.call_args.args[0], ["ATAT"])
+
+    def test_start_em_backfill_skipped_when_disabled(self) -> None:
+        scheduler = EMWatchlistScheduler()
+        settings = Settings(data_source=DataSource.IBKR, em_backfill_on_startup=False)
+        bar_store = MagicMock()
+        ibkr = MagicMock()
+        ibkr.is_connected.return_value = True
+
+        scheduler.start_em_backfill(settings, bar_store, ibkr, ["ATAT"])
+
+        self.assertTrue(scheduler._backfill_done.is_set())
+        bar_store.backfill_universe.assert_not_called()
+
     def test_cache_not_ready_does_not_persist_fallback(self) -> None:
         scheduler = EMWatchlistScheduler()
         job = _job(had_scan=False)

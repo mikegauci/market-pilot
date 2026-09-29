@@ -200,6 +200,23 @@ class BarStore:
         last = _ensure_utc(last)
         return (now - last) >= timedelta(hours=4)
 
+    def needs_backfill(self, symbol: str, now: Optional[datetime] = None) -> bool:
+        symbol = symbol.upper()
+        return self.needs_daily_refresh(symbol, now) or self.needs_intraday_refresh(
+            symbol, now
+        )
+
+    def symbols_needing_backfill(
+        self,
+        symbols: Sequence[str],
+        now: Optional[datetime] = None,
+    ) -> List[str]:
+        return [
+            symbol.upper()
+            for symbol in symbols
+            if symbol and self.needs_backfill(symbol.upper(), now)
+        ]
+
     def backfill_symbol(
         self,
         symbol: str,
@@ -301,6 +318,10 @@ class BarStore:
             results.append(result)
             if on_progress is not None:
                 on_progress(result, index + 1, total)
-            if index < total - 1 and delay > 0:
+            if (
+                index < total - 1
+                and delay > 0
+                and result.status not in ("skipped_fresh", "unqualified", "disconnected")
+            ):
                 time.sleep(delay)
         return BackfillSummary(results=results)

@@ -36,6 +36,63 @@ SCREENER_FAILURE_BACKOFF_SEC = 300.0
 MIN_SCORED_RATIO = 0.25
 CACHE_COVERAGE_RATIO = 0.70
 MIN_INTRADAY_BARS = 30
+BACKFILL_CLIENT_ID_OFFSET = 100
+
+
+def _connect_backfill_ibkr(settings: Settings) -> IBKRClient:
+    """Dedicated IB session for background bar backfill (separate client id + event loop)."""
+    client = IBKRClient(
+        host=settings.ibkr_host,
+        port=settings.ibkr_port,
+        client_id=settings.ibkr_client_id + BACKFILL_CLIENT_ID_OFFSET,
+        account=settings.ibkr_account,
+        market_data_type=settings.ibkr_market_data_type,
+    )
+    client.connect()
+    return client
+
+
+def backfill_watchlist_symbols(
+    settings: Settings,
+    bar_store: BarStore,
+    ibkr: IBKRClient,
+    symbols: Sequence[str],
+) -> None:
+    """Backfill watchlist/core symbols on the main thread (ib_insync needs its event loop)."""
+    priority = list(dict.fromkeys(s.upper() for s in symbols if s))
+    if not priority:
+        return
+    if settings.data_source != DataSource.IBKR or not ibkr.is_connected():
+        return
+
+    stale = bar_store.symbols_needing_backfill(priority)
+    if not stale:
+        logger.info(
+            "Watchlist bar cache fresh — skipping backfill (%s symbols)",
+            len(priority),
+        )
+        return
+
+    logger.info(
+        "Starting paced watchlist bar backfill for %s/%s symbol(s)",
+        len(stale),
+        len(priority),
+    )
+    summary = bar_store.backfill_universe(
+        stale,
+        ibkr,
+        pacing_sec=settings.bar_backfill_pacing_sec,
+    )
+    logger.info(
+        "Watchlist bar backfill complete — refreshed %s/%s symbol(s)",
+        summary.refreshed,
+        len(stale),
+    )
+    if summary.unqualified_symbols:
+        logger.warning(
+            "Unqualified during watchlist backfill: %s",
+            ", ".join(summary.unqualified_symbols),
+        )
 
 
 @dataclass
@@ -72,17 +129,29 @@ class EMWatchlistScheduler:
         self._backoff_until_mono = 0.0
         self._pending_result: Optional[ScreenerResult] = None
 
-    def start_backfill(
+    def start_em_backfill(
         self,
         settings: Settings,
         bar_store: BarStore,
         ibkr: IBKRClient,
-        universe: Sequence[str],
+        em_universe: Sequence[str],
+        *,
+        exclude_symbols: Sequence[str] = (),
     ) -> None:
+        if settings.data_source != DataSource.IBKR or not ibkr.is_connected():
+            self._backfill_done.set()
+            return
         if not settings.em_backfill_on_startup:
             self._backfill_done.set()
             return
-        if settings.data_source != DataSource.IBKR or not ibkr.is_connected():
+
+        excluded = {s.upper() for s in exclude_symbols if s}
+        em_symbols = list(
+            dict.fromkeys(
+                s.upper() for s in em_universe if s and s.upper() not in excluded
+            )
+        )
+        if not em_symbols:
             self._backfill_done.set()
             return
 
@@ -91,27 +160,36 @@ class EMWatchlistScheduler:
                 return
 
             def _worker() -> None:
+                backfill_ibkr: Optional[IBKRClient] = None
                 try:
+                    backfill_ibkr = _connect_backfill_ibkr(settings)
                     logger.info(
-                        "Starting paced EM bar backfill for %s symbols",
-                        len(universe),
+                        "Starting paced EM bar backfill for %s symbol(s)",
+                        len(em_symbols),
                     )
-                    summary = bar_store.backfill_universe(
-                        list(universe),
-                        ibkr,
+                    em_summary = bar_store.backfill_universe(
+                        em_symbols,
+                        backfill_ibkr,
                         pacing_sec=settings.bar_backfill_pacing_sec,
                     )
                     logger.info(
                         "EM bar backfill complete — refreshed %s/%s symbol(s)",
-                        summary.refreshed,
-                        summary.total,
+                        em_summary.refreshed,
+                        em_summary.total,
                     )
-                    if summary.unqualified_symbols:
+                    if em_summary.unqualified_symbols:
                         logger.warning(
-                            "Unqualified during backfill: %s",
-                            ", ".join(summary.unqualified_symbols),
+                            "Unqualified during EM backfill: %s",
+                            ", ".join(em_summary.unqualified_symbols),
                         )
+                except Exception as exc:
+                    logger.exception("EM bar backfill failed: %s", exc)
                 finally:
+                    if backfill_ibkr is not None and backfill_ibkr.is_connected():
+                        try:
+                            backfill_ibkr.ib.disconnect()
+                        except Exception:
+                            pass
                     self._backfill_done.set()
 
             self._backfill_thread = threading.Thread(

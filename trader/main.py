@@ -56,9 +56,14 @@ from watchlist.demotion import effective_max_hold_minutes
 from watchlist.jev_screener import (
     apply_screener_result_to_risk_settings,
     effective_benchmark,
+    merge_core_watchlist,
     resolve_trading_watchlist,
 )
-from watchlist.screener_scheduler import EMWatchlistScheduler, ScreenerJobContext
+from watchlist.screener_scheduler import (
+    EMWatchlistScheduler,
+    ScreenerJobContext,
+    backfill_watchlist_symbols,
+)
 from watchlist.universe import load_em_universe
 
 logger = logging.getLogger(__name__)
@@ -439,15 +444,30 @@ def run() -> int:
                 settings.ibkr_port,
                 _ibkr_market_data_mode,
             )
+            priority_symbols = merge_core_watchlist(risk_settings, [])
+            backfill_watchlist_symbols(
+                settings, bar_store, ibkr, priority_symbols
+            )
+            for symbol in priority_symbols:
+                bar_store.seed_minute_aggregator(
+                    minute_bars.get(symbol), symbol
+                )
+            em_universe: List[str] = []
             if risk_settings.watchlist_dynamic_enabled:
                 try:
                     em_universe = _load_em_universe(settings, db)
-                    em_scheduler.start_backfill(
-                        settings, bar_store, ibkr, em_universe
+                    em_scheduler.start_em_backfill(
+                        settings,
+                        bar_store,
+                        ibkr,
+                        em_universe,
+                        exclude_symbols=priority_symbols,
                     )
                 except (FileNotFoundError, ValueError) as exc:
                     logger.warning("EM backfill skipped: %s", exc)
                     em_scheduler.mark_backfill_unavailable()
+            else:
+                em_scheduler.mark_backfill_unavailable()
         else:
             logger.warning("IBKR unavailable — falling back to mock market data")
     else:
