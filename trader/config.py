@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     strategy_max_correlated_positions: int = 2
     strategy_warmup_min_1m_bars: int = 15
     strategy_min_news_sentiment: float = -0.3
+    strategy_min_volume_ratio: float = 0.0
     strategy_news_block_tags: str = "downgrade,lawsuit,sec_investigation,guidance_cut,layoffs"
     strategy_block_on_earnings: bool = False
 
@@ -230,6 +231,7 @@ class Settings(BaseSettings):
             max_correlated_positions=self.strategy_max_correlated_positions,
             warmup_min_1m_bars=self.strategy_warmup_min_1m_bars,
             min_news_sentiment=self.strategy_min_news_sentiment,
+            min_volume_ratio=self.strategy_min_volume_ratio,
             news_block_tags=tuple(
                 tag.strip()
                 for tag in self.strategy_news_block_tags.split(",")

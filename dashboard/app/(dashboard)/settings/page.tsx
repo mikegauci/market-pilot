@@ -1,4 +1,5 @@
 import { SettingsForm } from "@/components/settings-form";
+import { StrategyIndicatorsCard } from "@/components/strategy-indicators-card";
 import { WatchlistCharts } from "@/components/watchlist-charts";
 import { resolveBaselineEquity } from "@/lib/risk-recommendations";
 import { getEmUniverseStats, getLatestPortfolio, getSettings } from "@/lib/queries";
@@ -25,6 +26,7 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold sm:text-2xl">Settings</h2>
+      <StrategyIndicatorsCard benchmarkSymbol={settings.benchmark_symbol ?? "EEM"} />
       <WatchlistCharts symbols={settings.watchlist} />
       <SettingsForm
         settings={settings}

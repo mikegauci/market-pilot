@@ -13,6 +13,7 @@ import {
   type RiskProfile,
   type RiskRecommendationKey,
 } from "@/lib/risk-recommendations";
+import { StrategyIndicatorsCard } from "@/components/strategy-indicators-card";
 import type { Settings } from "@/lib/types/database";
 import { formatStrategyPercent } from "@/lib/strategy-recommendations";
 import { formatCurrency, formatPercent } from "@/lib/utils";
@@ -163,6 +164,10 @@ export function SettingsSummary({
             {settings.watchlist_dynamic_size ?? 5} · benchmark {settings.benchmark_symbol ?? "EEM"}
           </p>
         )}
+        <StrategyIndicatorsCard
+          compact
+          benchmarkSymbol={settings.benchmark_symbol ?? "EEM"}
+        />
       </div>
     </Card>
   );

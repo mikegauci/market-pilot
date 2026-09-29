@@ -25,7 +25,6 @@ def _state(**overrides: object) -> MarketState:
     base = dict(
         symbol="NVDA",
         price=100.0,
-        change_1m=0.1,
         change_5m=0.2,
         change_15m=0.3,
         volume_ratio=1.2,

@@ -23,6 +23,13 @@ def check_entry_filters(state: MarketState, config: StrategyConfig) -> FilterRes
     if state.rsi is not None and state.rsi > config.max_rsi:
         return FilterResult(False, f"rsi_overbought ({state.rsi:.1f})")
 
+    if config.min_volume_ratio > 0 and state.volume_ratio is not None:
+        if state.volume_ratio < config.min_volume_ratio:
+            return FilterResult(
+                False,
+                f"volume_too_low ({state.volume_ratio:.2f} < {config.min_volume_ratio:.2f})",
+            )
+
     if config.require_price_above_ema20 and state.ema_20 is not None:
         if state.price <= state.ema_20:
             return FilterResult(False, "price_below_ema20")

@@ -47,7 +47,6 @@ def _volume_ratio_from_bars(volumes: list[int], window: int = 10) -> Optional[fl
 
 @dataclass(frozen=True)
 class IntradayIndicators:
-    change_1m: Optional[float]
     change_5m: Optional[float]
     change_15m: Optional[float]
     volume_ratio: Optional[float]
@@ -63,7 +62,6 @@ def compute_intraday_from_bars(
     closes = aggregator.closes(live_price=live_price)
     volumes = aggregator.volumes()
     return IntradayIndicators(
-        change_1m=aggregator.change_pct(1, live_price=live_price),
         change_5m=aggregator.change_pct(5, live_price=live_price),
         change_15m=aggregator.change_pct(15, live_price=live_price),
         volume_ratio=_volume_ratio_from_bars(volumes),
@@ -93,7 +91,6 @@ def build_market_state(
     return MarketState(
         symbol=quote.symbol,
         price=quote.price,
-        change_1m=intraday.change_1m,
         change_5m=intraday.change_5m,
         change_15m=intraday.change_15m,
         volume_ratio=intraday.volume_ratio,

@@ -72,7 +72,6 @@ class BotControl:
 class MarketState:
     symbol: str
     price: float
-    change_1m: Optional[float]
     change_5m: Optional[float]
     change_15m: Optional[float]
     volume_ratio: Optional[float]

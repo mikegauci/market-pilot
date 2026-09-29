@@ -20,7 +20,6 @@ def _state(**overrides: object) -> MarketState:
     base = dict(
         symbol="NVDA",
         price=100.0,
-        change_1m=0.1,
         change_5m=0.2,
         change_15m=0.3,
         volume_ratio=1.2,
@@ -79,6 +78,16 @@ class TestFilters(unittest.TestCase):
     def test_rejects_price_below_ema20(self) -> None:
         result = check_entry_filters(_state(price=97.0, ema_20=98.0), StrategyConfig())
         self.assertFalse(result.passed)
+
+    def test_rejects_low_volume_when_enabled(self) -> None:
+        config = StrategyConfig(min_volume_ratio=0.5)
+        result = check_entry_filters(_state(volume_ratio=0.3), config)
+        self.assertFalse(result.passed)
+        self.assertIn("volume_too_low", result.reason)
+
+    def test_volume_filter_off_by_default(self) -> None:
+        result = check_entry_filters(_state(volume_ratio=0.1), StrategyConfig())
+        self.assertTrue(result.passed)
 
     def test_correlation_cap(self) -> None:
         trades = [
