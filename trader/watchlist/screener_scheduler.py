@@ -16,13 +16,17 @@ from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
 from market.hours import is_us_regular_session_open
 from market.mock import MockMarketProvider
-from models.types import DataSource, Quote, RiskSettings
+from models.types import DataSource, JevRankedSymbol, Quote, RiskSettings
 from news.client import NewsService
 from strategy.config import StrategyConfig
 from watchlist.jev_screener import (
+    apply_screener_result_to_risk_settings,
     effective_benchmark,
+    merge_core_watchlist,
+    merge_dynamic_watchlist,
     run_jev_universe_scan,
     screener_due,
+    top_dynamic_symbols,
 )
 from watchlist.universe import load_em_universe
 
@@ -32,6 +36,13 @@ SCREENER_FAILURE_BACKOFF_SEC = 300.0
 MIN_SCORED_RATIO = 0.25
 CACHE_COVERAGE_RATIO = 0.70
 MIN_INTRADAY_BARS = 30
+
+
+@dataclass
+class ScreenerResult:
+    watchlist: List[str]
+    rankings: List[JevRankedSymbol]
+    screener_ran_at: Optional[datetime]
 
 
 @dataclass
@@ -59,7 +70,7 @@ class EMWatchlistScheduler:
         self._backfill_thread: Optional[threading.Thread] = None
         self._backfill_done = threading.Event()
         self._backoff_until_mono = 0.0
-        self._pending_watchlist: Optional[List[str]] = None
+        self._pending_result: Optional[ScreenerResult] = None
 
     def start_backfill(
         self,
@@ -110,11 +121,11 @@ class EMWatchlistScheduler:
             )
             self._backfill_thread.start()
 
-    def take_completed_watchlist(self) -> Optional[List[str]]:
+    def take_completed_screener_result(self) -> Optional[ScreenerResult]:
         with self._state_lock:
-            watchlist = self._pending_watchlist
-            self._pending_watchlist = None
-            return watchlist
+            result = self._pending_result
+            self._pending_result = None
+            return result
 
     def mark_backfill_unavailable(self) -> None:
         """Signal that startup backfill will not run (skip cache gate waiting)."""
@@ -170,7 +181,35 @@ class EMWatchlistScheduler:
         )
         return False
 
+    def _publish_screener_result(self, job: ScreenerJobContext, result: ScreenerResult) -> None:
+        apply_screener_result_to_risk_settings(
+            job.risk_settings,
+            watchlist=result.watchlist,
+            rankings=result.rankings,
+            screener_ran_at=result.screener_ran_at,
+        )
+        with self._state_lock:
+            self._pending_result = result
+
+    def _persist_core_fallback(self, job: ScreenerJobContext, reason: str) -> None:
+        persisted = merge_core_watchlist(job.risk_settings, [])
+        trading = merge_core_watchlist(job.risk_settings, job.open_symbols)
+        job.db.update_effective_watchlist_fallback(persisted)
+        result = ScreenerResult(
+            watchlist=trading,
+            rankings=[],
+            screener_ran_at=None,
+        )
+        self._publish_screener_result(job, result)
+        logger.warning(
+            "Jev scan failed — using always-on core fallback (%s): %s",
+            reason,
+            ", ".join(trading),
+        )
+
     def _run_screener(self, job: ScreenerJobContext) -> None:
+        had_successful_scan = job.risk_settings.watchlist_screener_ran_at is not None
+
         try:
             universe = load_em_universe(
                 db=job.db,
@@ -178,6 +217,8 @@ class EMWatchlistScheduler:
             )
         except (FileNotFoundError, ValueError) as exc:
             logger.warning("EM universe unavailable — skipping Jev screener: %s", exc)
+            if not had_successful_scan:
+                self._persist_core_fallback(job, "universe unavailable")
             self._backoff_until_mono = time.monotonic() + SCREENER_FAILURE_BACKOFF_SEC
             return
 
@@ -221,24 +262,33 @@ class EMWatchlistScheduler:
             scored_ratio = len(rankings) / max(len(scan_symbols), 1)
             if scored_ratio < MIN_SCORED_RATIO:
                 logger.warning(
-                    "Jev scan scored too few symbols (%s/%s) — will retry later",
+                    "Jev scan scored too few symbols (%s/%s)",
                     len(rankings),
                     len(scan_symbols),
                 )
+                if not had_successful_scan:
+                    self._persist_core_fallback(job, "too few scored symbols")
+                self._backoff_until_mono = time.monotonic() + SCREENER_FAILURE_BACKOFF_SEC
                 return
 
-            job.db.update_effective_watchlist(effective, rankings)
-            job.risk_settings.watchlist = effective
-            job.risk_settings.watchlist_jev_rankings = rankings
-            job.risk_settings.watchlist_screener_ran_at = datetime.now(timezone.utc)
-
-            with self._state_lock:
-                self._pending_watchlist = effective
+            dynamic_size = max(0, int(job.risk_settings.watchlist_dynamic_size))
+            dynamic_symbols = top_dynamic_symbols(rankings, benchmark, dynamic_size)
+            persisted = merge_dynamic_watchlist(job.risk_settings, dynamic_symbols, [])
+            ran_at = datetime.now(timezone.utc)
+            job.db.update_effective_watchlist(persisted, rankings)
+            result = ScreenerResult(
+                watchlist=effective,
+                rankings=rankings,
+                screener_ran_at=ran_at,
+            )
+            self._publish_screener_result(job, result)
 
             logger.info(
                 "Jev universe scan persisted — effective watchlist: %s",
-                ", ".join(effective),
+                ", ".join(persisted),
             )
         except Exception as exc:
             logger.exception("Jev universe screener failed: %s", exc)
+            if not had_successful_scan:
+                self._persist_core_fallback(job, str(exc))
             self._backoff_until_mono = time.monotonic() + SCREENER_FAILURE_BACKOFF_SEC

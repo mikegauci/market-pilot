@@ -32,23 +32,108 @@ def resolve_watchlist_core(risk_settings: RiskSettings) -> List[str]:
     return [str(s).upper() for s in risk_settings.watchlist if str(s).strip()]
 
 
-def merge_effective_watchlist(
+def _merge_symbol_lists(benchmark: str, *groups: Sequence[str]) -> List[str]:
+    merged: List[str] = []
+    for group in groups:
+        for raw in group:
+            symbol = str(raw).upper()
+            if symbol and symbol not in merged:
+                merged.append(symbol)
+    bench = benchmark.upper()
+    if bench and bench not in merged:
+        merged.append(bench)
+    return merged
+
+
+def merge_core_watchlist(
+    risk_settings: RiskSettings,
+    open_symbols: Sequence[str],
+) -> List[str]:
+    """Always-on core (+ open positions + benchmark). Used when dynamic is off or as fallback."""
+    return _merge_symbol_lists(
+        effective_benchmark(risk_settings),
+        resolve_watchlist_core(risk_settings),
+        open_symbols,
+    )
+
+
+def merge_dynamic_watchlist(
     risk_settings: RiskSettings,
     dynamic_symbols: Sequence[str],
     open_symbols: Sequence[str],
 ) -> List[str]:
+    """Top-N EM scan picks only (+ open + benchmark). Does not include always-on core."""
+    return _merge_symbol_lists(
+        effective_benchmark(risk_settings),
+        dynamic_symbols,
+        open_symbols,
+    )
+
+
+def _filter_stale_core_from_saved(
+    risk_settings: RiskSettings,
+    saved: Sequence[str],
+) -> List[str]:
+    """Drop always-on core symbols from a pre-dynamic-only union still stored in DB."""
+    core = set(resolve_watchlist_core(risk_settings))
     benchmark = effective_benchmark(risk_settings)
+    dynamic_size = max(0, int(risk_settings.watchlist_dynamic_size))
+    ranked_top = {
+        item.symbol.upper()
+        for item in (risk_settings.watchlist_jev_rankings or [])[:dynamic_size]
+    }
+    filtered: List[str] = []
+    for raw in saved:
+        symbol = str(raw).upper()
+        if not symbol:
+            continue
+        if symbol == benchmark:
+            filtered.append(symbol)
+            continue
+        if symbol in core and symbol not in ranked_top:
+            continue
+        filtered.append(symbol)
+    return filtered
+
+
+def _resolve_trading_watchlist_base(risk_settings: RiskSettings) -> List[str]:
+    if not risk_settings.watchlist_dynamic_enabled:
+        return resolve_watchlist_core(risk_settings)
+    if risk_settings.watchlist_screener_ran_at is None:
+        return resolve_watchlist_core(risk_settings)
+    saved = [str(symbol).upper() for symbol in risk_settings.watchlist if str(symbol).strip()]
+    if not saved:
+        return resolve_watchlist_core(risk_settings)
+    filtered = _filter_stale_core_from_saved(risk_settings, saved)
+    return filtered if filtered else resolve_watchlist_core(risk_settings)
+
+
+def resolve_trading_watchlist(
+    risk_settings: RiskSettings,
+    open_symbols: Sequence[str] = (),
+) -> List[str]:
+    """Trading watchlist: base symbols plus any open positions (benchmark added in main)."""
+    base = _resolve_trading_watchlist_base(risk_settings)
+    if not open_symbols:
+        return base
     merged: List[str] = []
-    for raw in (
-        resolve_watchlist_core(risk_settings)
-        + list(dynamic_symbols)
-        + list(open_symbols)
-        + [benchmark]
-    ):
+    for raw in list(base) + list(open_symbols):
         symbol = str(raw).upper()
         if symbol and symbol not in merged:
             merged.append(symbol)
     return merged
+
+
+def apply_screener_result_to_risk_settings(
+    risk_settings: RiskSettings,
+    *,
+    watchlist: Sequence[str],
+    rankings: Sequence[JevRankedSymbol],
+    screener_ran_at: Optional[datetime],
+) -> None:
+    risk_settings.watchlist = [str(symbol).upper() for symbol in watchlist if str(symbol).strip()]
+    risk_settings.watchlist_jev_rankings = list(rankings)
+    risk_settings.watchlist_screener_ran_at = screener_ran_at
 
 
 def _fetch_universe_predictions(
@@ -73,6 +158,22 @@ def _fetch_universe_predictions(
             except Exception as exc:
                 logger.error("Jev universe scan failed for %s: %s", symbol, exc)
     return predictions
+
+
+def top_dynamic_symbols(
+    rankings: Sequence[JevRankedSymbol],
+    benchmark: str,
+    dynamic_size: int,
+) -> List[str]:
+    symbols: List[str] = []
+    benchmark_key = benchmark.upper()
+    for item in rankings:
+        if item.symbol.upper() == benchmark_key:
+            continue
+        symbols.append(item.symbol)
+        if len(symbols) >= max(0, dynamic_size):
+            break
+    return symbols
 
 
 def rank_predictions(predictions: Dict[str, JevPrediction]) -> List[JevRankedSymbol]:
@@ -158,14 +259,8 @@ def run_jev_universe_scan(
     rankings = rank_predictions(predictions)
 
     dynamic_size = max(0, int(risk_settings.watchlist_dynamic_size))
-    dynamic_symbols: List[str] = []
-    for item in rankings:
-        if item.symbol.upper() == benchmark:
-            continue
-        dynamic_symbols.append(item.symbol)
-        if len(dynamic_symbols) >= dynamic_size:
-            break
-    effective = merge_effective_watchlist(risk_settings, dynamic_symbols, open_symbols)
+    dynamic_symbols = top_dynamic_symbols(rankings, benchmark, dynamic_size)
+    effective = merge_dynamic_watchlist(risk_settings, dynamic_symbols, open_symbols)
 
     logger.info(
         "Jev universe scan complete — %s/%s scored, top dynamic: %s",

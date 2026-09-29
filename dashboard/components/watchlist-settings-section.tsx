@@ -11,6 +11,11 @@ import {
   SettingsFieldGroup,
 } from "@/components/settings-section";
 import type { EmUniverseRow, Settings } from "@/lib/types/database";
+import {
+  formatWatchlistScanStatus,
+  resolveEffectiveWatchlist,
+  resolveWatchlistScanStatus,
+} from "@/lib/effective-watchlist";
 import { cn, formatDateTimeFull } from "@/lib/utils";
 
 type EmUniverseStats = {
@@ -34,6 +39,9 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
 
   const coreDefault =
     settings.watchlist_core?.length ? settings.watchlist_core : settings.watchlist;
+  const effectiveWatchlist = resolveEffectiveWatchlist(settings);
+  const scanStatus = resolveWatchlistScanStatus(settings);
+  const fallbackLabel = dynamicEnabled ? "Fallback symbols" : "Always-on symbols";
 
   function selectChartSymbol(symbol: string) {
     setChartSymbol(symbol.toUpperCase());
@@ -57,28 +65,38 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
             <span className="font-medium">Enable Jev dynamic EM watchlist</span>
             <span className="mt-1 block text-xs font-normal text-zinc-500">
               {dynamicEnabled
-                ? "After Save, the trader merges always-on symbols with top-N Jev picks on each scan (see interval below). The effective list below updates after the next scan — not when you toggle this box."
+                ? "After Save, the trader trades top-N EM picks from each successful scan (see interval below). Fallback symbols apply only until the first successful scan, or if that first scan fails. Later scan failures keep the last good list."
                 : "Bot watches only your always-on symbols. Save to apply."}
             </span>
           </span>
         </label>
       </div>
 
-      <WatchlistPicker
-        inputName="watchlist_core"
-        defaultValue={coreDefault}
-        fieldLabel="Always-on symbols"
-      />
-      <FieldDescription title="Always-on EM symbols. Jev merges these with its top dynamic picks when dynamic mode is enabled.">
-        Core symbols that stay on the watchlist even when Jev adds dynamic picks.
-      </FieldDescription>
+      <div className={cn(dynamicEnabled && "opacity-75")}>
+        <WatchlistPicker
+          inputName="watchlist_core"
+          defaultValue={coreDefault}
+          fieldLabel={fallbackLabel}
+        />
+        <FieldDescription
+          title={
+            dynamicEnabled
+              ? "Fallback when dynamic is on and no successful scan yet, or the first scan fails."
+              : "Required when dynamic mode is off."
+          }
+        >
+          {dynamicEnabled
+            ? "Not traded after a successful scan — kept here in case the first scan fails or dynamic mode is turned off."
+            : "Symbols the bot watches when dynamic mode is off."}
+        </FieldDescription>
+      </div>
 
       <SettingsFieldGroup className={cn(!dynamicEnabled && "opacity-60")}>
         <SettingsField
           id="watchlist_dynamic_size"
           label="Dynamic top-N"
-          description="Extra symbols Jev adds per universe scan."
-          descriptionTitle="How many extra symbols Jev adds from each universe scan."
+          description="EM symbols the trader watches after each successful scan."
+          descriptionTitle="How many top-ranked EM symbols replace the always-on list after each scan."
         >
           <Input
             id="watchlist_dynamic_size"
@@ -115,12 +133,22 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
 
       <div>
         <p className="text-sm font-medium text-zinc-200">Effective watchlist</p>
-        <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-          {settings.watchlist.join(", ") || "—"}
+        <p className="mt-1 text-xs text-zinc-500">
+          {scanStatus.mode === "last_scan" ? (
+            <>
+              Using last scan ({formatDateTimeFull(scanStatus.ranAt)}
+              ) — failed rescans keep this list until the next success.
+            </>
+          ) : (
+            formatWatchlistScanStatus(scanStatus)
+          )}
         </p>
-        <FieldDescription title="Effective symbols the bot watches right now (updated by Jev when dynamic mode is on).">
-          From last save and trader state — save and wait for the next Jev scan to refresh when
-          dynamic mode is on.
+        <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+          {effectiveWatchlist.join(", ") || "—"}
+        </p>
+        <FieldDescription title="Symbols the trader evaluates now (plus open positions and EEM at runtime).">
+          Dynamic top-N after a successful scan; always-on fallback only before the first
+          successful scan or if that first scan fails.
         </FieldDescription>
       </div>
 
@@ -128,7 +156,7 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
         <p className="text-sm font-medium text-zinc-200">Intraday charts</p>
         <WatchlistCharts
           nested
-          symbols={settings.watchlist}
+          symbols={effectiveWatchlist}
           extraSymbols={emSymbols}
           selectedSymbol={chartSymbol}
           onSelectedSymbolChange={setChartSymbol}

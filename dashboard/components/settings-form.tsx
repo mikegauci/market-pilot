@@ -500,7 +500,7 @@ export function SettingsForm({
 
       <SettingsSection
         title="Watchlist"
-        description="Always-on symbols, optional Jev dynamic EM scan, and intraday charts."
+        description="Fallback symbols or dynamic EM top-N after each successful Jev scan, plus intraday charts."
       >
         <WatchlistSettingsSection settings={settings} emUniverse={emUniverse} />
       </SettingsSection>

@@ -6,7 +6,15 @@ from datetime import datetime, timedelta, timezone
 from market.bar_aggregator import MinuteBarStore
 from market.bars import Bar, BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, BarStore, compute_trend_changes
 from models.types import JevPrediction, JevRankedSymbol, RiskSettings
-from watchlist.jev_screener import merge_effective_watchlist, rank_predictions, screener_due
+from watchlist.jev_screener import (
+    _filter_stale_core_from_saved,
+    merge_core_watchlist,
+    merge_dynamic_watchlist,
+    rank_predictions,
+    resolve_trading_watchlist,
+    screener_due,
+    top_dynamic_symbols,
+)
 
 
 class InMemoryBarRepo:
@@ -31,6 +39,28 @@ class InMemoryBarRepo:
         self.meta[(symbol.upper(), bar_size)] = fetched_at
 
 
+def _base_settings(**overrides) -> RiskSettings:
+    defaults = dict(
+        minimum_jev_confidence=0.8,
+        signal_record_threshold=0.5,
+        risk_per_trade=1.0,
+        max_position_size=100.0,
+        max_daily_loss=10.0,
+        max_open_positions=2,
+        stop_loss_percentage=0.01,
+        take_profit_percentage=0.02,
+        max_hold_minutes=0.0,
+        account_capital=1000.0,
+        risk_sync_equity=None,
+        watchlist=["OLD"],
+        watchlist_core=["NVDA", "AAPL", "EEM"],
+        watchlist_dynamic_enabled=True,
+        benchmark_symbol="EEM",
+    )
+    defaults.update(overrides)
+    return RiskSettings(**defaults)
+
+
 class TestJevScreener(unittest.TestCase):
     def test_rank_predictions_orders_by_buy_then_margin(self) -> None:
         predictions = {
@@ -41,30 +71,80 @@ class TestJevScreener(unittest.TestCase):
         ranked = rank_predictions(predictions)
         self.assertEqual([item.symbol for item in ranked[:3]], ["CCC", "BBB", "AAA"])
 
-    def test_merge_effective_watchlist_dedupes(self) -> None:
-        settings = RiskSettings(
-            minimum_jev_confidence=0.8,
-            signal_record_threshold=0.5,
-            risk_per_trade=1.0,
-            max_position_size=100.0,
-            max_daily_loss=10.0,
-            max_open_positions=2,
-            stop_loss_percentage=0.01,
-            take_profit_percentage=0.02,
-            max_hold_minutes=0.0,
-            account_capital=1000.0,
-            risk_sync_equity=None,
-            watchlist=["OLD"],
-            watchlist_core=["EEM", "VALE"],
-            watchlist_dynamic_enabled=True,
-            benchmark_symbol="EEM",
-        )
-        merged = merge_effective_watchlist(
+    def test_top_dynamic_symbols_skips_benchmark(self) -> None:
+        rankings = [
+            JevRankedSymbol("EEM", 0.9, 0.05, 0.05, 1),
+            JevRankedSymbol("BABA", 0.85, 0.1, 0.05, 2),
+            JevRankedSymbol("VALE", 0.8, 0.15, 0.05, 3),
+        ]
+        self.assertEqual(top_dynamic_symbols(rankings, "EEM", 2), ["BABA", "VALE"])
+
+    def test_merge_dynamic_watchlist_excludes_core(self) -> None:
+        settings = _base_settings()
+        merged = merge_dynamic_watchlist(
             settings,
             dynamic_symbols=["BABA", "VALE"],
             open_symbols=["NU"],
         )
-        self.assertEqual(merged, ["EEM", "VALE", "BABA", "NU"])
+        self.assertEqual(merged, ["BABA", "VALE", "NU", "EEM"])
+        self.assertNotIn("NVDA", merged)
+        self.assertNotIn("AAPL", merged)
+
+    def test_merge_core_watchlist_includes_core_and_open(self) -> None:
+        settings = _base_settings()
+        merged = merge_core_watchlist(settings, open_symbols=["NU"])
+        self.assertEqual(merged, ["NVDA", "AAPL", "EEM", "NU"])
+
+    def test_filter_stale_core_from_saved(self) -> None:
+        settings = _base_settings(
+            watchlist_jev_rankings=[
+                JevRankedSymbol("BABA", 0.9, 0.05, 0.05, 1),
+                JevRankedSymbol("VALE", 0.85, 0.1, 0.05, 2),
+            ],
+        )
+        filtered = _filter_stale_core_from_saved(
+            settings,
+            ["NVDA", "AAPL", "BABA", "VALE", "EEM"],
+        )
+        self.assertEqual(filtered, ["BABA", "VALE", "EEM"])
+
+    def test_resolve_trading_watchlist_dynamic_off_uses_core(self) -> None:
+        settings = _base_settings(
+            watchlist_dynamic_enabled=False,
+            watchlist=["BABA", "VALE"],
+        )
+        self.assertEqual(resolve_trading_watchlist(settings), ["NVDA", "AAPL", "EEM"])
+
+    def test_resolve_trading_watchlist_dynamic_on_before_scan_uses_core(self) -> None:
+        settings = _base_settings(
+            watchlist=["BABA", "VALE"],
+            watchlist_screener_ran_at=None,
+        )
+        self.assertEqual(resolve_trading_watchlist(settings), ["NVDA", "AAPL", "EEM"])
+
+    def test_resolve_trading_watchlist_strips_stale_union(self) -> None:
+        settings = _base_settings(
+            watchlist=["NVDA", "AAPL", "BABA", "VALE", "EEM"],
+            watchlist_screener_ran_at=datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc),
+            watchlist_jev_rankings=[
+                JevRankedSymbol("BABA", 0.9, 0.05, 0.05, 1),
+                JevRankedSymbol("VALE", 0.85, 0.1, 0.05, 2),
+            ],
+        )
+        self.assertEqual(
+            resolve_trading_watchlist(settings),
+            ["BABA", "VALE", "EEM"],
+        )
+
+    def test_resolve_trading_watchlist_merges_open_positions(self) -> None:
+        settings = _base_settings(
+            watchlist=["BABA", "VALE", "EEM"],
+            watchlist_screener_ran_at=datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(
+            resolve_trading_watchlist(settings, ["NU"]),
+            ["BABA", "VALE", "EEM", "NU"],
+        )
 
     def test_screener_due_respects_refresh_interval(self) -> None:
         now = datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc)

@@ -1,0 +1,82 @@
+import type { JevRanking, Settings } from "@/lib/types/database";
+
+function resolveWatchlistCore(settings: Settings): string[] {
+  const core = settings.watchlist_core?.length
+    ? settings.watchlist_core
+    : settings.watchlist;
+  return core.map((symbol) => symbol.toUpperCase()).filter(Boolean);
+}
+
+function effectiveBenchmark(settings: Settings): string {
+  return (settings.benchmark_symbol || "EEM").toUpperCase();
+}
+
+function filterStaleCoreFromSaved(settings: Settings, saved: string[]): string[] {
+  const core = new Set(resolveWatchlistCore(settings));
+  const benchmark = effectiveBenchmark(settings);
+  const dynamicSize = Math.max(0, settings.watchlist_dynamic_size ?? 5);
+  const rankedTop = new Set(
+    (settings.watchlist_jev_rankings ?? [])
+      .slice(0, dynamicSize)
+      .map((row: JevRanking) => row.symbol.toUpperCase()),
+  );
+  const filtered: string[] = [];
+  for (const raw of saved) {
+    const symbol = raw.toUpperCase();
+    if (!symbol) continue;
+    if (symbol === benchmark) {
+      filtered.push(symbol);
+      continue;
+    }
+    if (core.has(symbol) && !rankedTop.has(symbol)) {
+      continue;
+    }
+    filtered.push(symbol);
+  }
+  return filtered;
+}
+
+export type WatchlistScanStatus =
+  | { mode: "always_on" }
+  | { mode: "waiting_first_scan" }
+  | { mode: "last_scan"; ranAt: string };
+
+/** Human-readable status for the effective watchlist section. */
+export function resolveWatchlistScanStatus(settings: Settings): WatchlistScanStatus {
+  if (!settings.watchlist_dynamic_enabled) {
+    return { mode: "always_on" };
+  }
+  if (!settings.watchlist_screener_ran_at) {
+    return { mode: "waiting_first_scan" };
+  }
+  return { mode: "last_scan", ranAt: settings.watchlist_screener_ran_at };
+}
+
+export function formatWatchlistScanStatus(status: WatchlistScanStatus): string {
+  switch (status.mode) {
+    case "always_on":
+      return "Using always-on symbols only (dynamic mode off).";
+    case "waiting_first_scan":
+      return "Waiting for first scan — using always-on fallback until a scan succeeds.";
+    case "last_scan":
+      return `Using last scan — failed rescans keep this list until the next success.`;
+  }
+}
+
+/** Match trader resolve_trading_watchlist (open positions merged at runtime in the bot). */
+export function resolveEffectiveWatchlist(settings: Settings): string[] {
+  if (!settings.watchlist_dynamic_enabled) {
+    return resolveWatchlistCore(settings);
+  }
+  if (!settings.watchlist_screener_ran_at) {
+    return resolveWatchlistCore(settings);
+  }
+  const saved = (settings.watchlist ?? [])
+    .map((symbol) => symbol.toUpperCase())
+    .filter(Boolean);
+  if (!saved.length) {
+    return resolveWatchlistCore(settings);
+  }
+  const filtered = filterStaleCoreFromSaved(settings, saved);
+  return filtered.length ? filtered : resolveWatchlistCore(settings);
+}

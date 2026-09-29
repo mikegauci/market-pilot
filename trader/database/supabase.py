@@ -330,6 +330,17 @@ class SupabaseRepository:
         }
         self.client.table("settings").update(payload).eq("id", 1).execute()
 
+    def update_effective_watchlist_fallback(self, watchlist: List[str]) -> None:
+        """Persist always-on core fallback after a failed dynamic scan."""
+        now = datetime.now(timezone.utc).isoformat()
+        payload = {
+            "watchlist": watchlist,
+            "watchlist_jev_rankings": [],
+            "watchlist_screener_ran_at": None,
+            "updated_at": now,
+        }
+        self.client.table("settings").update(payload).eq("id", 1).execute()
+
     def get_em_universe_symbols(self, tradable_only: bool = True) -> List[str]:
         query = (
             self.client.table("em_universe")

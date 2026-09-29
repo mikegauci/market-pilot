@@ -47,7 +47,11 @@ from strategy.signals import (
     signal_tier,
     trade_skip_reason_from_tier,
 )
-from watchlist.jev_screener import effective_benchmark
+from watchlist.jev_screener import (
+    apply_screener_result_to_risk_settings,
+    effective_benchmark,
+    resolve_trading_watchlist,
+)
 from watchlist.screener_scheduler import EMWatchlistScheduler, ScreenerJobContext
 from watchlist.universe import load_em_universe
 
@@ -337,7 +341,7 @@ def run() -> int:
         return 1
 
     risk_settings = db.get_risk_settings()
-    watchlist = risk_settings.watchlist or settings.watchlist_symbols
+    watchlist = resolve_trading_watchlist(risk_settings) or settings.watchlist_symbols
     benchmark_symbol = effective_benchmark(risk_settings)
     all_symbols = _all_symbols(watchlist, benchmark_symbol)
     em_scheduler = EMWatchlistScheduler()
@@ -515,16 +519,25 @@ def run() -> int:
                     risk_settings = db.get_risk_settings()
                     last_settings_sync = now_mono
 
-                watchlist = risk_settings.watchlist or settings.watchlist_symbols
                 benchmark_symbol = effective_benchmark(risk_settings)
                 open_symbols = (
                     [t.symbol for t in risk_manager.open_trades]
                     if risk_manager
                     else []
                 )
-                completed_watchlist = em_scheduler.take_completed_watchlist()
-                if completed_watchlist:
-                    watchlist = completed_watchlist
+                watchlist = (
+                    resolve_trading_watchlist(risk_settings, open_symbols)
+                    or settings.watchlist_symbols
+                )
+                screener_result = em_scheduler.take_completed_screener_result()
+                if screener_result is not None:
+                    watchlist = screener_result.watchlist
+                    apply_screener_result_to_risk_settings(
+                        risk_settings,
+                        watchlist=screener_result.watchlist,
+                        rankings=screener_result.rankings,
+                        screener_ran_at=screener_result.screener_ran_at,
+                    )
                 if jev is not None and risk_settings.watchlist_dynamic_enabled:
                     em_scheduler.maybe_start_screener(
                         ScreenerJobContext(
@@ -548,7 +561,7 @@ def run() -> int:
                     list(dict.fromkeys(watchlist + open_symbols)),
                     benchmark_symbol,
                 )
-                if completed_watchlist:
+                if screener_result is not None:
                     all_symbols = _apply_watchlist_update(
                         watchlist,
                         benchmark_symbol,
