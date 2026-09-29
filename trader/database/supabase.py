@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 import re
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Callable, List, Optional, TypeVar
 
-from supabase import Client, create_client
+import httpx
+from supabase import Client, ClientOptions, create_client
 
 from risk.recommendations import should_advance_baseline
 
@@ -37,7 +39,32 @@ MAX_EM_UNIVERSE_SIZE = 80
 # Failure backoff so a bad Finnhub/DB cycle does not wait the full refresh interval.
 GENERAL_NEWS_FAILURE_BACKOFF_SEC = 60.0
 
+# Transient macOS/httpx failures (EAGAIN / Errno 35) under concurrent load.
+_DB_TRANSIENT_RETRIES = 3
+_DB_TRANSIENT_BACKOFF_SEC = 0.05
+
 F = TypeVar("F", bound=Callable[..., object])
+
+
+def _is_transient_db_error(exc: BaseException) -> bool:
+    if isinstance(
+        exc,
+        (
+            httpx.ReadError,
+            httpx.WriteError,
+            httpx.ConnectError,
+            httpx.RemoteProtocolError,
+            httpx.ReadTimeout,
+            httpx.ConnectTimeout,
+        ),
+    ):
+        return True
+    message = str(exc).lower()
+    return (
+        "resource temporarily unavailable" in message
+        or "errno 35" in message
+        or "connection reset" in message
+    )
 
 
 def _db_synchronized(method: F) -> F:
@@ -45,10 +72,37 @@ def _db_synchronized(method: F) -> F:
 
     @wraps(method)
     def wrapper(self: "SupabaseRepository", *args: object, **kwargs: object) -> object:
-        with self._lock:
-            return method(self, *args, **kwargs)
+        last_exc: Optional[BaseException] = None
+        for attempt in range(1, _DB_TRANSIENT_RETRIES + 1):
+            try:
+                with self._lock:
+                    return method(self, *args, **kwargs)
+            except Exception as exc:
+                last_exc = exc
+                if attempt >= _DB_TRANSIENT_RETRIES or not _is_transient_db_error(exc):
+                    raise
+                delay = _DB_TRANSIENT_BACKOFF_SEC * (2 ** (attempt - 1))
+                logger.warning(
+                    "Transient Supabase error on %s (attempt %s/%s): %s — retrying in %.2fs",
+                    method.__name__,
+                    attempt,
+                    _DB_TRANSIENT_RETRIES,
+                    exc,
+                    delay,
+                )
+                time.sleep(delay)
+        assert last_exc is not None
+        raise last_exc
 
     return wrapper  # type: ignore[return-value]
+
+
+def _build_supabase_http_client() -> httpx.Client:
+    """HTTP/1.1 only — HTTP/2 multiplex + ib_insync often yields Errno 35 on macOS."""
+    return httpx.Client(
+        http2=False,
+        timeout=httpx.Timeout(60.0, connect=15.0),
+    )
 
 
 # Postgres may return variable fractional digits (e.g. .99074); Python 3.9 needs 6.
@@ -110,7 +164,12 @@ class SupabaseRepository:
     def __init__(self, url: str, service_role_key: str) -> None:
         if not url or not service_role_key:
             raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required")
-        self.client: Client = create_client(url, service_role_key)
+        self._http = _build_supabase_http_client()
+        self.client: Client = create_client(
+            url,
+            service_role_key,
+            options=ClientOptions(httpx_client=self._http),
+        )
         self._lock = threading.RLock()
         self._cached_risk_sync_equity: Optional[float] = None
         self._known_position_symbols: Optional[set[str]] = None

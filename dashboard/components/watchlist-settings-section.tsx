@@ -18,6 +18,7 @@ import {
   type DemotionHoldPolicy,
 } from "@/lib/demotion-presets";
 import {
+  formatPredictingWatchlistHeadline,
   formatWatchlistScanStatus,
   resolveEffectiveWatchlist,
   resolveWatchlistScanStatus,
@@ -56,7 +57,9 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
     settings.watchlist_core?.length ? settings.watchlist_core : settings.watchlist;
   const effectiveWatchlist = resolveEffectiveWatchlist(settings);
   const scanStatus = resolveWatchlistScanStatus(settings);
+  const predictingHeadline = formatPredictingWatchlistHeadline(scanStatus);
   const fallbackLabel = dynamicEnabled ? "Fallback symbols" : "Always-on symbols";
+  const showFallbackCollapsed = dynamicEnabled && scanStatus.mode === "last_scan";
 
   function selectChartSymbol(symbol: string) {
     setChartSymbol(symbol.toUpperCase());
@@ -87,22 +90,61 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
         </label>
       </div>
 
-      <div className={cn(dynamicEnabled && "opacity-75")}>
-        <WatchlistPicker
-          inputName="watchlist_core"
-          defaultValue={coreDefault}
-          fieldLabel={fallbackLabel}
-        />
-        <FieldDescription
-          title={
-            dynamicEnabled
-              ? "Fallback when dynamic is on and no successful scan yet, or the first scan fails."
-              : "Required when dynamic mode is off."
-          }
-        >
-          {dynamicEnabled
-            ? "Not traded after a successful scan — kept here in case the first scan fails or dynamic mode is turned off."
-            : "Symbols the bot watches when dynamic mode is off."}
+      <div
+        className={cn(
+          "rounded-lg border p-3",
+          scanStatus.mode === "last_scan"
+            ? "border-emerald-800/50 bg-emerald-950/20"
+            : "border-amber-800/40 bg-amber-950/15",
+        )}
+      >
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-sm font-medium text-zinc-100">{predictingHeadline}</p>
+          <span
+            className={cn(
+              "rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide",
+              scanStatus.mode === "last_scan"
+                ? "bg-emerald-900/50 text-emerald-300"
+                : scanStatus.mode === "waiting_first_scan"
+                  ? "bg-amber-900/50 text-amber-200"
+                  : "bg-zinc-800 text-zinc-300",
+            )}
+          >
+            {scanStatus.mode === "last_scan"
+              ? "Dynamic scan"
+              : scanStatus.mode === "waiting_first_scan"
+                ? "Fallback"
+                : "Always-on"}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-zinc-500">
+          {scanStatus.mode === "last_scan" ? (
+            <>
+              Last successful scan {formatDateTimeFull(scanStatus.ranAt)}. Failed rescans keep
+              this list until the next success. Open positions are added at runtime.
+            </>
+          ) : (
+            formatWatchlistScanStatus(scanStatus)
+          )}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {effectiveWatchlist.length ? (
+            effectiveWatchlist.map((symbol) => (
+              <button
+                key={symbol}
+                type="button"
+                onClick={() => selectChartSymbol(symbol)}
+                className="rounded border border-zinc-700/80 bg-zinc-950/60 px-2 py-1 font-mono text-xs text-zinc-200 hover:border-emerald-700/60 hover:text-emerald-300"
+              >
+                {symbol}
+              </button>
+            ))
+          ) : (
+            <span className="text-xs text-zinc-500">—</span>
+          )}
+        </div>
+        <FieldDescription title="Symbols Jev evaluates for entries right now (plus open positions and EEM at runtime).">
+          This is the live predicting watchlist — not the fallback editor below.
         </FieldDescription>
       </div>
 
@@ -267,26 +309,37 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
         </div>
       )}
 
-      <div>
-        <p className="text-sm font-medium text-zinc-200">Effective watchlist</p>
-        <p className="mt-1 text-xs text-zinc-500">
-          {scanStatus.mode === "last_scan" ? (
-            <>
-              Using last scan ({formatDateTimeFull(scanStatus.ranAt)}
-              ) — failed rescans keep this list until the next success.
-            </>
-          ) : (
-            formatWatchlistScanStatus(scanStatus)
-          )}
-        </p>
-        <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-          {effectiveWatchlist.join(", ") || "—"}
-        </p>
-        <FieldDescription title="Symbols the trader evaluates now (plus open positions and EEM at runtime).">
-          Dynamic top-N after a successful scan; always-on fallback only before the first
-          successful scan or if that first scan fails.
-        </FieldDescription>
-      </div>
+      {showFallbackCollapsed ? (
+        <SettingsCollapsible summary={`${fallbackLabel} (not currently traded)`}>
+          <WatchlistPicker
+            inputName="watchlist_core"
+            defaultValue={coreDefault}
+            fieldLabel={fallbackLabel}
+          />
+          <FieldDescription title="Used only before the first successful scan, if that first scan fails, or if dynamic mode is turned off.">
+            Not traded while a successful dynamic scan is active.
+          </FieldDescription>
+        </SettingsCollapsible>
+      ) : (
+        <div className={cn(dynamicEnabled && "opacity-75")}>
+          <WatchlistPicker
+            inputName="watchlist_core"
+            defaultValue={coreDefault}
+            fieldLabel={fallbackLabel}
+          />
+          <FieldDescription
+            title={
+              dynamicEnabled
+                ? "Fallback when dynamic is on and no successful scan yet, or the first scan fails."
+                : "Required when dynamic mode is off."
+            }
+          >
+            {dynamicEnabled
+              ? "Currently in use until the first successful EM scan lands."
+              : "Symbols the bot watches when dynamic mode is off."}
+          </FieldDescription>
+        </div>
+      )}
 
       <div ref={chartAnchorRef}>
         <p className="text-sm font-medium text-zinc-200">Intraday charts</p>

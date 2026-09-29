@@ -63,6 +63,18 @@ export function formatWatchlistScanStatus(status: WatchlistScanStatus): string {
   }
 }
 
+/** Short label for the live predicting panel. */
+export function formatPredictingWatchlistHeadline(status: WatchlistScanStatus): string {
+  switch (status.mode) {
+    case "always_on":
+      return "Predicting on always-on symbols";
+    case "waiting_first_scan":
+      return "Predicting on fallback symbols";
+    case "last_scan":
+      return "Predicting on dynamic EM watchlist";
+  }
+}
+
 /** Match trader resolve_trading_watchlist (open positions merged at runtime in the bot). */
 export function resolveEffectiveWatchlist(settings: Settings): string[] {
   if (!settings.watchlist_dynamic_enabled) {

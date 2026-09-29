@@ -4,7 +4,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Dict, List, Optional, Protocol, Sequence
+from typing import Callable, Dict, List, Optional, Protocol, Sequence, Tuple
 
 from typing import TYPE_CHECKING
 
@@ -141,12 +141,41 @@ class BarStore:
         self.intraday_duration = intraday_duration
         self.backfill_pacing_sec = backfill_pacing_sec
         self._trend_cache: Dict[str, TrendChanges] = {}
+        self._bar_cache: Dict[Tuple[str, str], List[Bar]] = {}
+
+    def _cache_key(self, symbol: str, bar_size: str) -> Tuple[str, str]:
+        return (symbol.upper(), bar_size)
+
+    def _get_cached_bars(self, symbol: str, bar_size: str) -> List[Bar]:
+        key = self._cache_key(symbol, bar_size)
+        cached = self._bar_cache.get(key)
+        if cached is not None:
+            return cached
+        bars = self.repository.get_bars(symbol.upper(), bar_size)
+        self._bar_cache[key] = bars
+        return bars
+
+    def invalidate_bar_cache(
+        self,
+        symbol: Optional[str] = None,
+        bar_size: Optional[str] = None,
+    ) -> None:
+        if symbol is None:
+            self._bar_cache.clear()
+            return
+        symbol_key = symbol.upper()
+        if bar_size is None:
+            for key in list(self._bar_cache):
+                if key[0] == symbol_key:
+                    self._bar_cache.pop(key, None)
+            return
+        self._bar_cache.pop(self._cache_key(symbol_key, bar_size), None)
 
     def get_daily_bars(self, symbol: str) -> List[Bar]:
-        return self.repository.get_bars(symbol.upper(), BAR_SIZE_DAILY)
+        return self._get_cached_bars(symbol, BAR_SIZE_DAILY)
 
     def get_intraday_bars(self, symbol: str) -> List[Bar]:
-        return self.repository.get_bars(symbol.upper(), BAR_SIZE_INTRADAY)
+        return self._get_cached_bars(symbol, BAR_SIZE_INTRADAY)
 
     def get_trend_changes(self, symbol: str) -> TrendChanges:
         key = symbol.upper()
@@ -258,6 +287,7 @@ class BarStore:
             if daily:
                 self.repository.upsert_bars(daily)
                 self.invalidate_trend_cache(symbol)
+                self.invalidate_bar_cache(symbol, BAR_SIZE_DAILY)
                 self.repository.set_last_fetched_at(symbol, BAR_SIZE_DAILY, now)
                 fetched = True
             else:
@@ -277,6 +307,7 @@ class BarStore:
             intraday_count = len(intraday)
             if intraday:
                 self.repository.upsert_bars(intraday)
+                self.invalidate_bar_cache(symbol, BAR_SIZE_INTRADAY)
                 self.repository.set_last_fetched_at(symbol, BAR_SIZE_INTRADAY, now)
                 fetched = True
             else:

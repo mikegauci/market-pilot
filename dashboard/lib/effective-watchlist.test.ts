@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatPredictingWatchlistHeadline,
   formatWatchlistScanStatus,
   resolveEffectiveWatchlist,
   resolveWatchlistScanStatus,
@@ -87,6 +88,15 @@ describe("resolveEffectiveWatchlist", () => {
     );
     expect(formatWatchlistScanStatus({ mode: "last_scan", ranAt: "2026-01-10T15:00:00Z" })).toContain(
       "Using last scan",
+    );
+  });
+
+  it("formats predicting headline", () => {
+    expect(formatPredictingWatchlistHeadline({ mode: "waiting_first_scan" })).toContain(
+      "fallback",
+    );
+    expect(formatPredictingWatchlistHeadline({ mode: "last_scan", ranAt: "2026-01-10T15:00:00Z" })).toContain(
+      "dynamic EM",
     );
   });
 });
