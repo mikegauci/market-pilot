@@ -1,17 +1,17 @@
 export const RISK_PROFILES = {
   low: {
     risk_per_trade: 0.0015,
-    max_position_size: 0.0075,
+    max_position_size: 0.00375,
     max_daily_loss: 0.0075,
   },
   medium: {
     risk_per_trade: 0.0025,
-    max_position_size: 0.01,
+    max_position_size: 0.005,
     max_daily_loss: 0.01,
   },
   high: {
     risk_per_trade: 0.004,
-    max_position_size: 0.015,
+    max_position_size: 0.0075,
     max_daily_loss: 0.015,
   },
 } as const;

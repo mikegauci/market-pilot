@@ -3,7 +3,7 @@ from __future__ import annotations
 # Medium profile only — dashboard owns Low/Medium/High presets; trader uses saved dollar amounts.
 RISK_RECOMMENDATIONS = {
     "risk_per_trade": 0.0025,
-    "max_position_size": 0.01,
+    "max_position_size": 0.005,
     "max_daily_loss": 0.01,
 }
 

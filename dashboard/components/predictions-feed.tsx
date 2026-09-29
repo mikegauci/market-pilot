@@ -1,12 +1,19 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { PredictionIndicators } from "@/components/prediction-indicators";
+import { SortableTh } from "@/components/sortable-th";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
-import { PredictionIndicators } from "@/components/prediction-indicators";
 import { fetchPredictions } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
+import {
+  compareNumber,
+  compareString,
+  useTableSort,
+  type SortDir,
+} from "@/lib/hooks/use-table-sort";
 import {
   hasNewsSignal,
   sentimentClass,
@@ -24,24 +31,32 @@ type SortKey =
   | "hold_probability"
   | "sell_probability"
   | "trade_created";
-type SortDir = "asc" | "desc";
 
-function comparePredictions(a: Prediction, b: Prediction, key: SortKey): number {
+function comparePredictions(
+  a: Prediction,
+  b: Prediction,
+  key: SortKey,
+  dir: SortDir,
+): number {
   switch (key) {
     case "timestamp":
-      return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      return compareNumber(
+        new Date(a.timestamp).getTime(),
+        new Date(b.timestamp).getTime(),
+        dir,
+      );
     case "symbol":
-      return a.symbol.localeCompare(b.symbol);
+      return compareString(a.symbol, b.symbol, dir);
     case "price":
-      return a.price - b.price;
+      return compareNumber(a.price, b.price, dir);
     case "buy_probability":
-      return a.buy_probability - b.buy_probability;
+      return compareNumber(a.buy_probability, b.buy_probability, dir);
     case "hold_probability":
-      return a.hold_probability - b.hold_probability;
+      return compareNumber(a.hold_probability, b.hold_probability, dir);
     case "sell_probability":
-      return a.sell_probability - b.sell_probability;
+      return compareNumber(a.sell_probability, b.sell_probability, dir);
     case "trade_created":
-      return Number(a.trade_created) - Number(b.trade_created);
+      return compareNumber(Number(a.trade_created), Number(b.trade_created), dir);
   }
 }
 
@@ -162,8 +177,6 @@ export function PredictionsFeed({
   limit?: number;
 }) {
   const [symbolFilter, setSymbolFilter] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("timestamp");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [expandedId, setExpandedId] = useState<string | null>(initialExpandedId);
 
   const loadPredictions = useCallback(() => fetchPredictions(limit), [limit]);
@@ -187,27 +200,27 @@ export function PredictionsFeed({
     }
   }, [symbols, symbolFilter]);
 
-  const filtered = symbolFilter
-    ? livePredictions.filter((p) => p.symbol === symbolFilter)
-    : livePredictions;
+  const filtered = useMemo(
+    () =>
+      symbolFilter
+        ? livePredictions.filter((p) => p.symbol === symbolFilter)
+        : livePredictions,
+    [livePredictions, symbolFilter],
+  );
 
-  const sorted = useMemo(() => {
-    const list = [...filtered];
-    list.sort((a, b) => {
-      const cmp = comparePredictions(a, b, sortKey);
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-    return list;
-  }, [filtered, sortKey, sortDir]);
+  const compare = useCallback(comparePredictions, []);
+  const initialDirForKey = useCallback(
+    (key: SortKey) => (key === "symbol" ? "asc" : "desc") as const,
+    [],
+  );
 
-  function handleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir(key === "symbol" ? "asc" : "desc");
-    }
-  }
+  const { sorted, sortKey, sortDir, handleSort } = useTableSort({
+    items: filtered,
+    defaultKey: "timestamp",
+    defaultDir: "desc",
+    compare,
+    initialDirForKey,
+  });
 
   function toggleExpanded(id: string) {
     setExpandedId((current) => (current === id ? null : id));
@@ -238,38 +251,57 @@ export function PredictionsFeed({
             <thead>
               <tr className="border-b border-zinc-800 text-left text-zinc-500">
                 <th className="pb-2 pr-2 w-8" />
-                {(
-                  [
-                    ["Time", "timestamp"],
-                    ["Symbol", "symbol"],
-                    ["Price", "price"],
-                    ["BUY", "buy_probability"],
-                    ["HOLD", "hold_probability"],
-                    ["SELL", "sell_probability"],
-                    ["News", null],
-                    ["Outcome", "trade_created"],
-                  ] as const
-                ).map(([label, key], i, arr) => (
-                  <th key={label} className={`pb-2 ${i < arr.length - 1 ? "pr-3" : ""}`}>
-                    {key ? (
-                      <button
-                        type="button"
-                        onClick={() => handleSort(key)}
-                        className="inline-flex items-center gap-1 hover:text-zinc-300"
-                      >
-                        {label}
-                        {sortKey === key &&
-                          (sortDir === "asc" ? (
-                            <ArrowUp className="h-3 w-3" />
-                          ) : (
-                            <ArrowDown className="h-3 w-3" />
-                          ))}
-                      </button>
-                    ) : (
-                      label
-                    )}
-                  </th>
-                ))}
+                <SortableTh
+                  label="Time"
+                  columnKey="timestamp"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Symbol"
+                  columnKey="symbol"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Price"
+                  columnKey="price"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="BUY"
+                  columnKey="buy_probability"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="HOLD"
+                  columnKey="hold_probability"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="SELL"
+                  columnKey="sell_probability"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <th className="pb-2 pr-3">News</th>
+                <SortableTh
+                  label="Outcome"
+                  columnKey="trade_created"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                  className="pb-2"
+                />
               </tr>
             </thead>
             <tbody>

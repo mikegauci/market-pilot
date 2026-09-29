@@ -86,7 +86,7 @@ export function PositionsGrid({
                     </p>
                   </div>
                   <p
-                    className={`shrink-0 text-sm font-medium ${
+                    className={`shrink-0 text-xl font-semibold tabular-nums ${
                       pnl >= 0 ? "text-emerald-400" : "text-red-400"
                     }`}
                   >

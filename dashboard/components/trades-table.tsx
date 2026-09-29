@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { ClosePositionButton } from "@/components/close-position-button";
+import { SortableTh } from "@/components/sortable-th";
 import { SymbolChartPanel } from "@/components/symbol-chart-panel";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -14,9 +15,45 @@ import {
   fetchRecentTrades,
 } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
+import {
+  compareNullableNumber,
+  compareNullableTime,
+  compareNumber,
+  compareString,
+  useTableSort,
+  type SortDir,
+} from "@/lib/hooks/use-table-sort";
 import { useTraderOnline } from "@/lib/hooks/use-trader-online";
 import type { BotStatus, Trade, TradeCommand } from "@/lib/types/database";
 import { formatCurrency, formatDateTime, formatPercent } from "@/lib/utils";
+
+type SortKey =
+  | "symbol"
+  | "status"
+  | "entry"
+  | "exit"
+  | "quantity"
+  | "signal"
+  | "pnl";
+
+function compareTrades(a: Trade, b: Trade, key: SortKey, dir: SortDir): number {
+  switch (key) {
+    case "symbol":
+      return compareString(a.symbol, b.symbol, dir);
+    case "status":
+      return compareString(a.status, b.status, dir);
+    case "entry":
+      return compareNullableTime(a.entry_time, b.entry_time, dir);
+    case "exit":
+      return compareNullableTime(a.exit_time, b.exit_time, dir);
+    case "quantity":
+      return compareNumber(a.quantity, b.quantity, dir);
+    case "signal":
+      return compareNullableNumber(a.jev_buy_probability, b.jev_buy_probability, dir);
+    case "pnl":
+      return compareNullableNumber(a.net_pnl, b.net_pnl, dir);
+  }
+}
 
 type Props = {
   trades: Trade[];
@@ -77,8 +114,25 @@ export function TradesTable({
     return map;
   }, [liveCommands]);
 
-  const filtered =
-    filter === "all" ? liveTrades : liveTrades.filter((t) => t.status === filter);
+  const filtered = useMemo(
+    () =>
+      filter === "all" ? liveTrades : liveTrades.filter((t) => t.status === filter),
+    [filter, liveTrades],
+  );
+
+  const compare = useCallback(compareTrades, []);
+  const initialDirForKey = useCallback(
+    (key: SortKey) => (key === "symbol" || key === "status" ? "asc" : "desc") as const,
+    [],
+  );
+
+  const { sorted, sortKey, sortDir, handleSort } = useTableSort({
+    items: filtered,
+    defaultKey: "entry",
+    defaultDir: "desc",
+    compare,
+    initialDirForKey,
+  });
 
   function toggleExpanded(id: string) {
     setExpandedId((current) => (current === id ? null : id));
@@ -127,20 +181,63 @@ export function TradesTable({
             <thead>
               <tr className="border-b border-zinc-800 text-left text-zinc-500">
                 {showChartExpand ? <th className="pb-2 w-8" /> : null}
-                <th className="pb-2 pr-3">Symbol</th>
-                <th className="pb-2 pr-3">Status</th>
-                <th className="pb-2 pr-3">Entry</th>
-                <th className="pb-2 pr-3">Exit</th>
-                <th className="pb-2 pr-3">Qty</th>
+                <SortableTh
+                  label="Symbol"
+                  columnKey="symbol"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Status"
+                  columnKey="status"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Entry"
+                  columnKey="entry"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Exit"
+                  columnKey="exit"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Qty"
+                  columnKey="quantity"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
                 {showSignalColumn ? (
-                  <th className="hidden pb-2 pr-3 sm:table-cell">Signal</th>
+                  <SortableTh
+                    label="Signal"
+                    columnKey="signal"
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                    className="hidden pb-2 pr-3 sm:table-cell"
+                  />
                 ) : null}
-                <th className="pb-2 pr-3">PnL</th>
+                <SortableTh
+                  label="PnL"
+                  columnKey="pnl"
+                  sortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
                 {showCloseAction ? <th className="pb-2">Action</th> : null}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((t) => {
+              {sorted.map((t) => {
                 const command = commandByTradeId.get(t.id);
                 const pending =
                   command?.status === "pending" || command?.status === "processing";

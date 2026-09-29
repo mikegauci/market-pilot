@@ -228,7 +228,7 @@ Set `risk_profile` to `low`, `medium`, or `high` in the dashboard; Apply fills d
 
 | Column | Suggested | Purpose |
 |---|---|---|
-| `max_position_size` | 10000 | ~1% notional per trade |
+| `max_position_size` | 5000 | ~0.5% notional per trade |
 | `max_open_positions` | 5 | Max concurrent positions |
 | `risk_per_trade` | 2500 | ~0.25% risk per trade |
 | `max_daily_loss` | 10000 | ~1% daily stop |

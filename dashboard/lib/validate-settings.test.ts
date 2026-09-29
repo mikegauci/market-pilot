@@ -13,7 +13,7 @@ const baseFields = {
   minimum_jev_confidence: "85",
   signal_record_threshold: "75",
   risk_per_trade: "2500",
-  max_position_size: "10000",
+  max_position_size: "5000",
   max_daily_loss: "10000",
   max_open_positions: "5",
   stop_loss_percentage: "1",
