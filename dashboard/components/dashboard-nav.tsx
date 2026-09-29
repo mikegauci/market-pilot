@@ -2,9 +2,19 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, BarChart3, Layers, LineChart, LogOut, Settings, TrendingUp } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  Layers,
+  LineChart,
+  LogOut,
+  Newspaper,
+  Settings,
+  TrendingUp,
+} from "lucide-react";
 import { LiveStatus } from "@/components/live-status";
 import { Logo } from "@/components/logo";
+import { NavEquity } from "@/components/nav-equity";
 import { useOpenPositionsCount } from "@/components/open-positions-count-provider";
 import { TradingControls } from "@/components/trading-controls";
 import { signOut } from "@/lib/actions";
@@ -14,6 +24,7 @@ export const dashboardNavLinks = [
   { href: "/", label: "Overview", icon: LineChart },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/predictions", label: "Predictions", icon: Activity },
+  { href: "/news", label: "News", icon: Newspaper },
   { href: "/trades", label: "Trades", icon: TrendingUp },
   { href: "/strategy", label: "Strategy", icon: Layers },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -66,10 +77,11 @@ export function DashboardNavContent({
     <div className="flex min-h-full flex-col">
       <div className="mb-6">
         <Logo size={logoSize} />
-        <p className="mt-2 text-xs text-zinc-500">Paper trading</p>
       </div>
 
       <nav className="flex flex-col gap-1">
+        <NavEquity />
+
         {primaryLinks.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}

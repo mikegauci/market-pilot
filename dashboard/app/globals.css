@@ -17,3 +17,33 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
+
+@keyframes nav-equity-flash-up {
+  0% {
+    color: #34d399;
+    text-shadow: 0 0 12px rgb(52 211 153 / 45%);
+  }
+  100% {
+    color: #f4f4f5;
+    text-shadow: none;
+  }
+}
+
+@keyframes nav-equity-flash-down {
+  0% {
+    color: #f87171;
+    text-shadow: 0 0 12px rgb(248 113 113 / 45%);
+  }
+  100% {
+    color: #f4f4f5;
+    text-shadow: none;
+  }
+}
+
+.nav-equity-flash-up {
+  animation: nav-equity-flash-up 700ms ease-out;
+}
+
+.nav-equity-flash-down {
+  animation: nav-equity-flash-down 700ms ease-out;
+}
