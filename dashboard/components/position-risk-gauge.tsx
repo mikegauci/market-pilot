@@ -48,11 +48,12 @@ function GaugeBar({
   );
 }
 
-function slBufferPct(entry: number, stopLoss: number, price: number): number | null {
+/** 0% = at/above entry (safe); 100% = at/below stop-loss. */
+function slProximityPct(entry: number, stopLoss: number, price: number): number | null {
   const range = entry - stopLoss;
   if (range <= 0) return null;
-  const remaining = price - stopLoss;
-  return Math.max(0, Math.min(100, (remaining / range) * 100));
+  const distanceFromEntry = entry - price;
+  return Math.max(0, Math.min(100, (distanceFromEntry / range) * 100));
 }
 
 function tpProgressPct(entry: number, takeProfit: number, price: number): number | null {
@@ -84,9 +85,9 @@ export function PositionRiskGauge({ position, trade, settings }: Props) {
   if (!trade) return null;
 
   const price = position.market_price ?? trade.entry_price;
-  const slBuffer =
+  const slProximity =
     trade.stop_loss != null
-      ? slBufferPct(trade.entry_price, trade.stop_loss, price)
+      ? slProximityPct(trade.entry_price, trade.stop_loss, price)
       : null;
   const tpProgress =
     trade.take_profit != null
@@ -108,16 +109,16 @@ export function PositionRiskGauge({ position, trade, settings }: Props) {
     }
   }
 
-  const hasAny = slBuffer != null || tpProgress != null || holdProgress != null;
+  const hasAny = slProximity != null || tpProgress != null || holdProgress != null;
   if (!hasAny) return null;
 
   return (
     <div className="mt-3 space-y-2 border-t border-zinc-800/60 pt-3">
       <p className="text-[11px] font-medium text-zinc-500">Exit proximity</p>
       <GaugeBar
-        label="Stop-loss buffer"
-        value={slBuffer}
-        tone="danger"
+        label="Distance to stop"
+        value={slProximity}
+        tone={slProximity != null && slProximity >= 70 ? "danger" : "neutral"}
         detail={
           trade.stop_loss != null
             ? `SL ${trade.stop_loss.toFixed(2)} · entry ${trade.entry_price.toFixed(2)}`
