@@ -6,7 +6,13 @@ import { getDisplayStatus, getStableDisplayNow } from "@/lib/trader-status";
 import type { BotStatus } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
-export function StatusBadges({ status }: { status: BotStatus }) {
+export function StatusBadges({
+  status,
+  variant = "default",
+}: {
+  status: BotStatus;
+  variant?: "default" | "sidebar";
+}) {
   const stableNow = getStableDisplayNow(status.last_heartbeat);
   const [mounted, setMounted] = useState(false);
   const [display, setDisplay] = useState(() => getDisplayStatus(status, stableNow));
@@ -34,6 +40,7 @@ export function StatusBadges({ status }: { status: BotStatus }) {
       display={display}
       market={market}
       showLiveTimes={mounted}
+      variant={variant}
     />
   );
 }
@@ -87,11 +94,13 @@ function StatusPanel({
   display,
   market,
   showLiveTimes,
+  variant,
 }: {
   status: BotStatus;
   display: ReturnType<typeof getDisplayStatus>;
   market: MarketStatus | null;
   showLiveTimes: boolean;
+  variant: "default" | "sidebar";
 }) {
   const isIbkrExecution = (status.execution_mode ?? "simulated") === "ibkr";
   const signalsPaused = market && !market.isOpen && display.traderOnline;
@@ -103,6 +112,69 @@ function StatusPanel({
       : display.traderOnline
         ? "Waiting"
         : "Unavailable";
+
+  if (variant === "sidebar") {
+    return (
+      <div className="w-full rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+          System status
+        </p>
+        <div className="mt-2 flex items-center gap-2">
+          <span
+            className={cn(
+              "h-2 w-2 shrink-0 rounded-full",
+              market?.isOpen ? "bg-emerald-400" : "bg-zinc-500",
+            )}
+            aria-hidden
+          />
+          <p className="text-xs font-medium text-zinc-200">
+            {!showLiveTimes
+              ? "Checking…"
+              : market
+                ? market.isOpen
+                  ? "Market open"
+                  : "Market closed"
+                : "Checking…"}
+          </p>
+        </div>
+        {showLiveTimes && market && (
+          <p className="mt-0.5 text-[10px] text-zinc-500">{market.sessionLabel}</p>
+        )}
+
+        <div className="mt-2.5 space-y-1.5">
+          <SidebarStatusRow
+            label="Auto-trading"
+            value={status.enabled ? "On" : "Off"}
+            active={status.enabled}
+          />
+          <SidebarStatusRow
+            label="Engine"
+            value={display.traderOnline ? "Running" : "Stopped"}
+            active={display.traderOnline}
+          />
+          <SidebarStatusRow
+            label="Broker"
+            value={display.ibkrConnected ? "Connected" : "Offline"}
+            active={display.ibkrConnected}
+          />
+          <SidebarStatusRow label="Signals" value={signalsLabel} active={signalsActive} />
+        </div>
+
+        <p className="mt-2 text-[10px] text-zinc-500" suppressHydrationWarning>
+          Updated {showLiveTimes ? display.heartbeatLabel : "—"}
+        </p>
+        <p className="mt-1 text-[10px] text-zinc-500">
+          {isIbkrExecution ? "Paper broker" : "Dashboard only"}
+        </p>
+
+        {status.last_error && (
+          <p className="mt-2 rounded border border-red-900/50 bg-red-950/30 px-2 py-1.5 text-[10px] leading-snug text-red-300">
+            {status.last_error}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-2xl rounded-xl border border-zinc-800 bg-zinc-900/80 p-4">
@@ -178,6 +250,23 @@ function StatusPanel({
           {status.last_error}
         </p>
       )}
+    </div>
+  );
+}
+
+function SidebarStatusRow({
+  label,
+  value,
+  active,
+}: {
+  label: string;
+  value: string;
+  active: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-[11px]">
+      <span className="text-zinc-500">{label}</span>
+      <span className={cn("font-medium", active ? "text-zinc-200" : "text-zinc-500")}>{value}</span>
     </div>
   );
 }

@@ -68,7 +68,7 @@ function BrokerConnectionNotice({
   );
 }
 
-export function TradingControls() {
+export function TradingControls({ variant = "default" }: { variant?: "default" | "sidebar" }) {
   const status = useLiveBotStatus();
 
   const [botEnabled, setBotEnabled] = useState(status.enabled);
@@ -99,6 +99,85 @@ export function TradingControls() {
   }, [status, mounted]);
 
   const brokerOrdersOn = executionMode === "ibkr";
+
+  if (variant === "sidebar") {
+    return (
+      <div className="w-full rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+        <h3 className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+          Controls
+        </h3>
+
+        <div className="mt-2.5 flex items-center justify-between gap-2">
+          <p
+            className="text-xs font-medium text-zinc-200"
+            title={
+              botEnabled
+                ? "Bot can open new trades during market hours"
+                : "New trades paused; open positions still managed"
+            }
+          >
+            Auto-trading
+          </p>
+          <ToggleSwitch
+            enabled={botEnabled}
+            pending={pending}
+            ariaLabel={botEnabled ? "Turn off auto-trading" : "Turn on auto-trading"}
+            onToggle={() => {
+              const next = !botEnabled;
+              setBotEnabled(next);
+              startTransition(async () => {
+                try {
+                  await toggleBot(next);
+                } catch {
+                  setBotEnabled(!next);
+                }
+              });
+            }}
+          />
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-2 border-t border-zinc-800 pt-3">
+          <p
+            className="text-xs font-medium text-zinc-200"
+            title={
+              brokerOrdersOn
+                ? "Orders sent to paper brokerage account"
+                : "Trades recorded in dashboard only"
+            }
+          >
+            Send to broker
+          </p>
+          <ToggleSwitch
+            enabled={brokerOrdersOn}
+            pending={pending}
+            ariaLabel={
+              brokerOrdersOn
+                ? "Switch to dashboard-only practice mode"
+                : "Send orders to paper broker"
+            }
+            onToggle={() => {
+              const next = brokerOrdersOn ? "simulated" : "ibkr";
+              setExecutionModeState(next);
+              startTransition(async () => {
+                try {
+                  await setExecutionMode(next);
+                } catch {
+                  setExecutionModeState(executionMode);
+                }
+              });
+            }}
+          />
+        </div>
+
+        {brokerOrdersOn && mounted && (
+          <SidebarBrokerNotice
+            traderOnline={display.traderOnline}
+            ibkrConnected={display.ibkrConnected}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-sm rounded-xl border border-zinc-800 bg-zinc-900/80 p-5 shadow-sm">
@@ -174,5 +253,35 @@ export function TradingControls() {
         />
       )}
     </div>
+  );
+}
+
+function SidebarBrokerNotice({
+  traderOnline,
+  ibkrConnected,
+}: {
+  traderOnline: boolean;
+  ibkrConnected: boolean;
+}) {
+  if (ibkrConnected) {
+    return (
+      <p className="mt-2 rounded border border-emerald-900/40 bg-emerald-950/20 px-2 py-1.5 text-[10px] leading-snug text-emerald-200/90">
+        Broker connected
+      </p>
+    );
+  }
+
+  if (!traderOnline) {
+    return (
+      <p className="mt-2 rounded border border-amber-900/40 bg-amber-950/20 px-2 py-1.5 text-[10px] leading-snug text-amber-200/90">
+        Engine not running
+      </p>
+    );
+  }
+
+  return (
+    <p className="mt-2 rounded border border-amber-900/40 bg-amber-950/20 px-2 py-1.5 text-[10px] leading-snug text-amber-200/90">
+      Broker unreachable
+    </p>
   );
 }

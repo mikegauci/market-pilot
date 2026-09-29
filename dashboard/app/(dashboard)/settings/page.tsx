@@ -1,4 +1,5 @@
 import { SettingsForm } from "@/components/settings-form";
+import { WatchlistCharts } from "@/components/watchlist-charts";
 import { resolveBaselineEquity } from "@/lib/risk-recommendations";
 import { getEmUniverseStats, getLatestPortfolio, getSettings } from "@/lib/queries";
 
@@ -24,6 +25,7 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold sm:text-2xl">Settings</h2>
+      <WatchlistCharts symbols={settings.watchlist} />
       <SettingsForm
         settings={settings}
         currentEquity={currentEquity}

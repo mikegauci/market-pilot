@@ -152,3 +152,29 @@ export type PortfolioSnapshot = {
   currency: string;
   created_at: string;
 };
+
+export type SymbolBar = {
+  id: number;
+  symbol: string;
+  bar_size: string;
+  ts: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  created_at: string;
+};
+
+export type ChartOverlayLine = {
+  price: number;
+  color: string;
+  label: string;
+  lineStyle?: "solid" | "dashed";
+};
+
+export type ChartMarker = {
+  time: string;
+  price: number;
+  label?: string;
+};

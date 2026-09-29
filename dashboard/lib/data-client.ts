@@ -3,6 +3,7 @@ import type {
   PortfolioSnapshot,
   Position,
   Prediction,
+  SymbolBar,
   Trade,
   TradeCommand,
 } from "@/lib/types/database";
@@ -140,4 +141,26 @@ export async function fetchPortfolioHistory(hours = 24): Promise<PortfolioSnapsh
     return [];
   }
   return (data ?? []) as PortfolioSnapshot[];
+}
+
+export async function fetchSymbolBars(
+  symbol: string,
+  barSize = "5 mins",
+  limit = 500,
+): Promise<SymbolBar[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("symbol_bars")
+    .select("*")
+    .eq("symbol", symbol.toUpperCase())
+    .eq("bar_size", barSize)
+    .order("ts", { ascending: false })
+    .limit(limit);
+  if (error) {
+    logFetchError("symbol_bars", error.message);
+    return [];
+  }
+  const bars = (data ?? []) as SymbolBar[];
+  bars.reverse();
+  return bars;
 }

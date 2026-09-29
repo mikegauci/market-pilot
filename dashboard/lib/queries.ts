@@ -6,6 +6,7 @@ import type {
   Position,
   Prediction,
   Settings,
+  SymbolBar,
   Trade,
   TradeCommand,
 } from "@/lib/types/database";
@@ -140,4 +141,22 @@ export async function getTradedPredictions(limit = 10): Promise<Prediction[]> {
     .order("timestamp", { ascending: false })
     .limit(limit);
   return (data ?? []) as Prediction[];
+}
+
+export async function getSymbolBars(
+  symbol: string,
+  barSize = "5 mins",
+  limit = 500,
+): Promise<SymbolBar[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("symbol_bars")
+    .select("*")
+    .eq("symbol", symbol.toUpperCase())
+    .eq("bar_size", barSize)
+    .order("ts", { ascending: false })
+    .limit(limit);
+  const bars = (data ?? []) as SymbolBar[];
+  bars.reverse();
+  return bars;
 }

@@ -1,5 +1,19 @@
 import { DashboardShell } from "@/components/dashboard-shell";
+import { getBotStatus } from "@/lib/queries";
 
-export default function DashboardLayout({ children }: LayoutProps<"/">) {
-  return <DashboardShell>{children}</DashboardShell>;
+const defaultBotStatus = {
+  id: 1,
+  enabled: false,
+  trading_mode: "paper" as const,
+  execution_mode: "simulated" as const,
+  ibkr_connected: false,
+  jev_connected: false,
+  last_heartbeat: null,
+  last_error: null,
+  updated_at: "",
+};
+
+export default async function DashboardLayout({ children }: LayoutProps<"/">) {
+  const botStatus = (await getBotStatus()) ?? defaultBotStatus;
+  return <DashboardShell botStatus={botStatus}>{children}</DashboardShell>;
 }

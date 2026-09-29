@@ -1,9 +1,7 @@
 import { OverviewStats } from "@/components/overview-stats";
-import { OverviewStatusSection } from "@/components/overview-status-section";
 import { PortfolioChart } from "@/components/portfolio-chart";
 import { PositionsTable } from "@/components/positions-table";
 import { SettingsSummary } from "@/components/settings-summary";
-import { TradedPredictionsTable } from "@/components/traded-predictions-table";
 import { TradesTable } from "@/components/trades-table";
 import {
   getActiveTradeCommands,
@@ -14,7 +12,6 @@ import {
   getPositions,
   getRecentTrades,
   getSettings,
-  getTradedPredictions,
 } from "@/lib/queries";
 import { resolveBaselineEquity } from "@/lib/risk-recommendations";
 export default async function OverviewPage() {
@@ -26,7 +23,6 @@ export default async function OverviewPage() {
     openTrades,
     tradeCommands,
     trades,
-    tradedPredictions,
     settings,
   ] = await Promise.all([
     getBotStatus(),
@@ -36,7 +32,6 @@ export default async function OverviewPage() {
     getOpenTrades(),
     getActiveTradeCommands(),
     getRecentTrades(10),
-    getTradedPredictions(10),
     getSettings(),
   ]);
 
@@ -52,10 +47,7 @@ export default async function OverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold sm:text-2xl">Overview</h2>
-        {botStatus && <OverviewStatusSection botStatus={botStatus} />}
-      </div>
+      <h2 className="text-xl font-semibold sm:text-2xl">Overview</h2>
 
       <OverviewStats portfolio={portfolio} positions={positions} currency={currency} />
 
@@ -89,12 +81,13 @@ export default async function OverviewPage() {
           }
         }
       />
-      <TradedPredictionsTable predictions={tradedPredictions} trades={trades} />
       <TradesTable
         trades={trades}
         tradeCommands={tradeCommands}
         botStatus={botStatus}
         showCloseAction
+        showSignalColumn
+        showViewAllLink
         title="Recent Trades"
       />
     </div>

@@ -3,18 +3,21 @@
 import { Menu, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { BotStatusProvider } from "@/components/bot-status-provider";
 import {
   DashboardNavContent,
   getDashboardPageTitle,
 } from "@/components/dashboard-nav";
 import { Logo } from "@/components/logo";
+import type { BotStatus } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
 type DashboardShellProps = {
   children: ReactNode;
+  botStatus: BotStatus;
 };
 
-export function DashboardShell({ children }: DashboardShellProps) {
+export function DashboardShell({ children, botStatus }: DashboardShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pageTitle = getDashboardPageTitle(pathname);
@@ -42,8 +45,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
   }, [mobileOpen, closeMobile]);
 
   return (
+    <BotStatusProvider initialStatus={botStatus}>
     <div className="flex min-h-screen">
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900/50 p-4 lg:flex">
+      <aside className="hidden w-64 shrink-0 flex min-h-screen flex-col overflow-y-auto border-r border-zinc-800 bg-zinc-900/50 p-4 lg:flex">
         <DashboardNavContent />
       </aside>
 
@@ -60,7 +64,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
         id="mobile-nav-drawer"
         aria-hidden={!mobileOpen}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-zinc-800 bg-zinc-900 p-4 transition-transform duration-200 ease-out lg:hidden",
+          "fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-y-auto border-r border-zinc-800 bg-zinc-900 p-4 transition-transform duration-200 ease-out lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -88,5 +92,6 @@ export function DashboardShell({ children }: DashboardShellProps) {
         <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
+    </BotStatusProvider>
   );
 }
