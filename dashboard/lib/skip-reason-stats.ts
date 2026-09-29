@@ -42,6 +42,7 @@ const RISK_REASONS = new Set([
   "correlation_cap",
 ]);
 
+const IBKR_PREFIXES = ["ibkr_"];
 
 export function normalizeSkipReasonKey(reason: string | null | undefined): string | null {
   if (!reason) return null;
