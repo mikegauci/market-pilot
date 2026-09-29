@@ -210,11 +210,14 @@ export function PredictionsFeed({
 
   const compare = useCallback(comparePredictions, []);
   const initialDirForKey = useCallback(
-    (key: SortKey) => (key === "symbol" ? "asc" : "desc") as const,
+    (key: SortKey): SortDir => (key === "symbol" ? "asc" : "desc"),
     [],
   );
 
-  const { sorted, sortKey, sortDir, handleSort } = useTableSort({
+  const { sorted, sortKey, sortDir, handleSort } = useTableSort<
+    Prediction,
+    SortKey
+  >({
     items: filtered,
     defaultKey: "timestamp",
     defaultDir: "desc",

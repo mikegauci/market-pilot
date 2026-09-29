@@ -122,11 +122,12 @@ export function TradesTable({
 
   const compare = useCallback(compareTrades, []);
   const initialDirForKey = useCallback(
-    (key: SortKey) => (key === "symbol" || key === "status" ? "asc" : "desc") as const,
+    (key: SortKey): SortDir =>
+      key === "symbol" || key === "status" ? "asc" : "desc",
     [],
   );
 
-  const { sorted, sortKey, sortDir, handleSort } = useTableSort({
+  const { sorted, sortKey, sortDir, handleSort } = useTableSort<Trade, SortKey>({
     items: filtered,
     defaultKey: "entry",
     defaultDir: "desc",
