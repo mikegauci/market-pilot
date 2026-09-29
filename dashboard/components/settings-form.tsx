@@ -31,7 +31,7 @@ import {
   STRATEGY_RECOMMENDATIONS,
   type StrategyHint,
 } from "@/lib/strategy-recommendations";
-import type { Settings } from "@/lib/types/database";
+import type { EmUniverseRow, Settings } from "@/lib/types/database";
 import { cn, formatCurrency } from "@/lib/utils";
 
 const SETTING_DESCRIPTIONS = {
@@ -51,7 +51,14 @@ const SETTING_DESCRIPTIONS = {
     "Auto-sell when the price rises this % above your entry to lock in gains.",
   max_hold_minutes:
     "Force-close open trades after this many minutes (0 = off). When off, exits use stop loss, take profit, and Jev SELL only.",
-  watchlist: "Stock symbols the bot watches for buy and sell signals.",
+  watchlist: "Effective symbols the bot watches right now (updated by Jev when dynamic mode is on).",
+  watchlist_core:
+    "Always-on EM symbols. Jev merges these with its top dynamic picks when dynamic mode is enabled.",
+  watchlist_dynamic_enabled:
+    "Let Jev scan the EM universe and add the highest BUY% symbols to the watchlist.",
+  watchlist_dynamic_size: "How many extra symbols Jev adds from each universe scan.",
+  watchlist_refresh_minutes: "How often Jev re-scores the full EM universe.",
+  benchmark_symbol: "EM benchmark used for headwind checks and Jev context (default EEM).",
 } as const;
 
 function FieldDescription({ children }: { children: string }) {
@@ -246,16 +253,24 @@ function RiskField({
   );
 }
 
+type EmUniverseStats = {
+  count: number;
+  tradableCount: number;
+  topHoldings: EmUniverseRow[];
+};
+
 export function SettingsForm({
   settings,
   currentEquity,
   baselineEquity,
   currency,
+  emUniverse,
 }: {
   settings: Settings;
   currentEquity: number;
   baselineEquity: number;
   currency: string;
+  emUniverse: EmUniverseStats;
 }) {
   const [pending, startTransition] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -453,9 +468,161 @@ export function SettingsForm({
           </div>
           <FieldDescription>{SETTING_DESCRIPTIONS.max_hold_minutes}</FieldDescription>
         </div>
-        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/30 p-3 sm:col-span-2">
-          <WatchlistPicker defaultValue={settings.watchlist} />
-          <FieldDescription>{SETTING_DESCRIPTIONS.watchlist}</FieldDescription>
+        <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/30 p-3 sm:col-span-2 space-y-4">
+          <div className="rounded-md border border-zinc-800/60 bg-zinc-950/40 p-3">
+            <p className="text-sm font-medium text-zinc-200">EM universe (EEM + IEMG)</p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+              {emUniverse.tradableCount > 0 ? (
+                <>
+                  {emUniverse.tradableCount} tradable US-listed symbol
+                  {emUniverse.tradableCount === 1 ? "" : "s"}
+                  {settings.em_universe_synced_at
+                    ? ` · last sync ${new Date(settings.em_universe_synced_at).toLocaleString()}`
+                    : ""}
+                  {settings.em_universe_source ? ` · source ${settings.em_universe_source}` : ""}
+                </>
+              ) : (
+                <>
+                  No synced universe in Supabase yet — trader falls back to{" "}
+                  <code className="text-zinc-300">dashboard/data/em-us-listed.json</code>.
+                </>
+              )}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Refresh weekly from the repo root:{" "}
+              <code className="text-zinc-400">node scripts/update-em-universe.mjs</code>
+            </p>
+            {emUniverse.topHoldings.length > 0 && (
+              <div className="mt-3 max-h-40 overflow-y-auto rounded border border-zinc-800">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-zinc-950 text-zinc-500">
+                    <tr>
+                      <th className="px-2 py-1 text-left">Symbol</th>
+                      <th className="px-2 py-1 text-left">Name</th>
+                      <th className="px-2 py-1 text-right">Weight</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {emUniverse.topHoldings.slice(0, 10).map((row) => (
+                      <tr key={row.symbol} className="border-t border-zinc-900">
+                        <td className="px-2 py-1">{row.symbol}</td>
+                        <td className="px-2 py-1 truncate max-w-[12rem] text-zinc-400">
+                          {row.name}
+                        </td>
+                        <td className="px-2 py-1 text-right text-zinc-400">
+                          {(row.weight_bps / 100).toFixed(2)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <div>
+            <p className="text-sm font-medium text-zinc-200">Core watchlist</p>
+            <WatchlistPicker
+              inputName="watchlist_core"
+              defaultValue={
+                settings.watchlist_core?.length ? settings.watchlist_core : settings.watchlist
+              }
+            />
+            <FieldDescription>{SETTING_DESCRIPTIONS.watchlist_core}</FieldDescription>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm text-zinc-300">
+              <input
+                type="checkbox"
+                name="watchlist_dynamic_enabled"
+                defaultChecked={settings.watchlist_dynamic_enabled ?? false}
+                className="rounded border-zinc-700"
+              />
+              Enable Jev dynamic EM watchlist
+            </label>
+            <div>
+              <Label htmlFor="watchlist_dynamic_size">Dynamic top-N</Label>
+              <Input
+                id="watchlist_dynamic_size"
+                name="watchlist_dynamic_size"
+                type="number"
+                min={0}
+                max={20}
+                defaultValue={settings.watchlist_dynamic_size ?? 5}
+                className="mt-2"
+              />
+              <FieldDescription>{SETTING_DESCRIPTIONS.watchlist_dynamic_size}</FieldDescription>
+            </div>
+            <div>
+              <Label htmlFor="watchlist_refresh_minutes">Jev scan interval (minutes)</Label>
+              <Input
+                id="watchlist_refresh_minutes"
+                name="watchlist_refresh_minutes"
+                type="number"
+                min={5}
+                max={240}
+                defaultValue={settings.watchlist_refresh_minutes ?? 30}
+                className="mt-2"
+              />
+              <FieldDescription>{SETTING_DESCRIPTIONS.watchlist_refresh_minutes}</FieldDescription>
+            </div>
+            <div>
+              <Label htmlFor="benchmark_symbol">Benchmark symbol</Label>
+              <Input
+                id="benchmark_symbol"
+                name="benchmark_symbol"
+                defaultValue={settings.benchmark_symbol ?? "EEM"}
+                className="mt-2 uppercase"
+              />
+              <FieldDescription>{SETTING_DESCRIPTIONS.benchmark_symbol}</FieldDescription>
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-zinc-200">Effective watchlist</p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+              {settings.watchlist.join(", ") || "—"}
+            </p>
+            <FieldDescription>{SETTING_DESCRIPTIONS.watchlist}</FieldDescription>
+          </div>
+          {(settings.watchlist_jev_rankings?.length ?? 0) > 0 && (
+            <div>
+              <p className="text-sm font-medium text-zinc-200">Last Jev universe scan</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {settings.watchlist_screener_ran_at
+                  ? new Date(settings.watchlist_screener_ran_at).toLocaleString()
+                  : "Unknown time"}
+              </p>
+              <div className="mt-2 max-h-48 overflow-y-auto rounded border border-zinc-800">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-zinc-950 text-zinc-500">
+                    <tr>
+                      <th className="px-2 py-1 text-left">#</th>
+                      <th className="px-2 py-1 text-left">Symbol</th>
+                      <th className="px-2 py-1 text-right">BUY</th>
+                      <th className="px-2 py-1 text-right">HOLD</th>
+                      <th className="px-2 py-1 text-right">SELL</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {settings.watchlist_jev_rankings.slice(0, 15).map((row) => (
+                      <tr key={row.symbol} className="border-t border-zinc-900">
+                        <td className="px-2 py-1 text-zinc-500">{row.rank}</td>
+                        <td className="px-2 py-1">{row.symbol}</td>
+                        <td className="px-2 py-1 text-right text-emerald-400">
+                          {Math.round(row.buy * 100)}%
+                        </td>
+                        <td className="px-2 py-1 text-right text-zinc-400">
+                          {Math.round(row.hold * 100)}%
+                        </td>
+                        <td className="px-2 py-1 text-right text-red-400">
+                          {Math.round(row.sell * 100)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
         <div className="sm:col-span-2 space-y-2">
           {profileSelectionError && !saveError && (

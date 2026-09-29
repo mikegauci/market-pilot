@@ -19,7 +19,10 @@ const baseFields = {
   stop_loss_percentage: "1",
   take_profit_percentage: "1.5",
   max_hold_minutes: "0",
-  watchlist: "AAPL, MSFT",
+  watchlist_core: "AAPL, MSFT",
+  benchmark_symbol: "EEM",
+  watchlist_dynamic_size: "5",
+  watchlist_refresh_minutes: "30",
 };
 
 describe("parseSettingsForm risk_profile", () => {
@@ -43,23 +46,24 @@ describe("parseSettingsForm risk_profile", () => {
 });
 
 describe("parseSettingsForm watchlist", () => {
-  it("deduplicates symbols", () => {
+  it("deduplicates core symbols", () => {
     const parsed = parseSettingsForm(
-      form({ ...baseFields, watchlist: "AAPL, aapl, MSFT" }),
+      form({ ...baseFields, watchlist_core: "AAPL, aapl, MSFT" }),
     );
+    expect(parsed.watchlist_core).toEqual(["AAPL", "MSFT"]);
     expect(parsed.watchlist).toEqual(["AAPL", "MSFT"]);
   });
 
-  it("rejects empty watchlist", () => {
-    expect(() => parseSettingsForm(form({ ...baseFields, watchlist: "  " }))).toThrow(
-      "Watchlist must include at least one symbol",
+  it("rejects empty core watchlist", () => {
+    expect(() => parseSettingsForm(form({ ...baseFields, watchlist_core: "  " }))).toThrow(
+      "Core watchlist must include at least one symbol",
     );
   });
 
   it("rejects malformed tickers", () => {
     expect(() =>
-      parseSettingsForm(form({ ...baseFields, watchlist: "AAPL, bad ticker" })),
-    ).toThrow("Invalid ticker(s): BAD TICKER");
+      parseSettingsForm(form({ ...baseFields, watchlist_core: "AAPL, bad ticker" })),
+    ).toThrow("Invalid core ticker(s): BAD TICKER");
   });
 });
 

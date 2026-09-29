@@ -17,8 +17,7 @@ class StrategyConfig:
     max_hold_minutes: float = 0.0
     jev_sell_exit_threshold: float = 0.75
     max_correlated_positions: int = 2
-    warmup_min_samples: int = 30
-    warmup_min_span_sec: float = 120.0
+    warmup_min_1m_bars: int = 15
     min_news_sentiment: float = -0.3
     news_block_tags: Tuple[str, ...] = (
         "downgrade",

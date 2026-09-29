@@ -1,9 +1,13 @@
 import { SettingsForm } from "@/components/settings-form";
 import { resolveBaselineEquity } from "@/lib/risk-recommendations";
-import { getLatestPortfolio, getSettings } from "@/lib/queries";
+import { getEmUniverseStats, getLatestPortfolio, getSettings } from "@/lib/queries";
 
 export default async function SettingsPage() {
-  const [settings, portfolio] = await Promise.all([getSettings(), getLatestPortfolio()]);
+  const [settings, portfolio, emUniverse] = await Promise.all([
+    getSettings(),
+    getLatestPortfolio(),
+    getEmUniverseStats(),
+  ]);
 
   if (!settings) {
     return <p className="text-zinc-500">Settings not found.</p>;
@@ -25,6 +29,7 @@ export default async function SettingsPage() {
         currentEquity={currentEquity}
         baselineEquity={baselineEquity}
         currency={currency}
+        emUniverse={emUniverse}
       />
     </div>
   );

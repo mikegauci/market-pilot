@@ -25,7 +25,13 @@ function parseSymbolList(raw: string): string[] {
   return normalizeSymbols(raw.split(","));
 }
 
-export function WatchlistPicker({ defaultValue }: { defaultValue: string[] }) {
+export function WatchlistPicker({
+  defaultValue,
+  inputName = "watchlist",
+}: {
+  defaultValue: string[];
+  inputName?: string;
+}) {
   const [selected, setSelected] = useState<string[]>(() => normalizeSymbols(defaultValue));
   const [search, setSearch] = useState("");
   const [customSymbol, setCustomSymbol] = useState("");
@@ -118,7 +124,7 @@ export function WatchlistPicker({ defaultValue }: { defaultValue: string[] }) {
 
   return (
     <div className="space-y-3">
-      <input type="hidden" name="watchlist" value={selected.join(", ")} required />
+      <input type="hidden" name={inputName} value={selected.join(", ")} required />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Label htmlFor="watchlist-search">Watchlist</Label>

@@ -150,9 +150,19 @@ export function SettingsSummary({
         />
       </div>
 
-      <div className="mt-3 border-t border-zinc-800/60 pt-3">
-        <p className="text-xs text-zinc-500">Watchlist</p>
-        <p className="mt-1 text-xs leading-relaxed text-zinc-300">{settings.watchlist.join(", ")}</p>
+      <div className="mt-3 border-t border-zinc-800/60 pt-3 space-y-2">
+        <div>
+          <p className="text-xs text-zinc-500">Effective watchlist</p>
+          <p className="mt-1 text-xs leading-relaxed text-zinc-300">
+            {settings.watchlist.join(", ")}
+          </p>
+        </div>
+        {settings.watchlist_dynamic_enabled && (
+          <p className="text-xs text-zinc-500">
+            Jev dynamic EM scan every {settings.watchlist_refresh_minutes ?? 30} min · top{" "}
+            {settings.watchlist_dynamic_size ?? 5} · benchmark {settings.benchmark_symbol ?? "EEM"}
+          </p>
+        )}
       </div>
     </Card>
   );

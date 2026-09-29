@@ -26,7 +26,34 @@ export type Settings = {
   risk_sync_equity: number | null;
   risk_profile?: "low" | "medium" | "high" | null;
   watchlist: string[];
+  watchlist_core: string[];
+  watchlist_dynamic_enabled: boolean;
+  watchlist_dynamic_size: number;
+  watchlist_refresh_minutes: number;
+  benchmark_symbol: string;
+  watchlist_jev_rankings: JevRanking[];
+  watchlist_screener_ran_at: string | null;
+  em_universe_synced_at: string | null;
+  em_universe_source: string | null;
   updated_at: string;
+};
+
+export type EmUniverseRow = {
+  symbol: string;
+  name: string;
+  source_etfs: string[];
+  weight_bps: number;
+  country: string | null;
+  tradable: boolean;
+  updated_at: string;
+};
+
+export type JevRanking = {
+  symbol: string;
+  buy: number;
+  hold: number;
+  sell: number;
+  rank: number;
 };
 
 export type MarketSnapshotNews = {
@@ -51,6 +78,10 @@ export type MarketSnapshot = MarketSnapshotNews & {
   ask?: number | null;
   spread?: number | null;
   spy_change_5m?: number | null;
+  change_1d?: number | null;
+  change_5d?: number | null;
+  change_1w?: number | null;
+  benchmark_change_5m?: number | null;
 };
 
 export type Prediction = {

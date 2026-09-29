@@ -4,6 +4,7 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
+from market.bar_aggregator import MinuteBarStore
 from market.history import HistoryStore
 from models.types import Quote
 
@@ -96,3 +97,27 @@ class MockMarketProvider:
         """Backfill history so indicators are ready on first eval cycle."""
         for symbol in self.symbols:
             self.seed_symbol_history(store, symbol, seconds=seconds)
+
+    def seed_symbol_minute_bars(
+        self,
+        minute_bars: MinuteBarStore,
+        symbol: str,
+        minutes: int = 20,
+    ) -> None:
+        """Backfill 1-minute bars for mock indicator warm-up."""
+        symbol = symbol.upper()
+        self.ensure_symbols([symbol])
+        now = datetime.now(timezone.utc)
+        price = self._prices[symbol]
+        aggregator = minute_bars.get(symbol)
+        for i in range(minutes, 0, -1):
+            ts = now - timedelta(minutes=i)
+            delta = self._rng.uniform(-0.002, 0.002)
+            price = max(0.01, price * (1 + delta))
+            volume = self._rng.randint(50_000, 200_000)
+            aggregator.record_point(ts, round(price, 4), volume)
+        self._prices[symbol] = price
+
+    def seed_minute_bars(self, minute_bars: MinuteBarStore, minutes: int = 20) -> None:
+        for symbol in self.symbols:
+            self.seed_symbol_minute_bars(minute_bars, symbol, minutes=minutes)

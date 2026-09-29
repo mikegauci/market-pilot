@@ -13,15 +13,17 @@ logger = logging.getLogger(__name__)
 
 JEV_API_URL = "https://api.typesafe.ai/v1/systemone"
 
-ACTION_QUESTION = {
+TRADE_ACTION_QUESTION = {
     "type": "choice",
     "instructions": (
         "Evaluate the short-term day-trading direction for this US equity "
         "from the supplied market state. Return calibrated buy, hold, or sell "
         "probabilities for the next few minutes of intraday movement. "
-        "Prefer BUY only when momentum, volume, and trend alignment (price vs EMAs, "
-        "RSI not overbought) support a long entry. Penalize BUY when the stock is "
-        "extended, spread is wide, or broad market (SPY) is weak. "
+        "Prefer BUY only when momentum, volume, and trend alignment (price vs EMA-9/20 "
+        "on 1-minute bars, RSI-14 on 1-minute bars not overbought) support a long "
+        "entry. Penalize BUY when the stock is extended, spread is wide, or the broad "
+        "benchmark (benchmark_change_5m on 1-minute bars) is weak. When change_1d, "
+        "change_5d, or change_1w are present, use them as secondary daily context only. "
         "When news_sentiment, news_tags, or news_top_headline are present, fold "
         "headline context into the decision: penalize BUY on bearish sentiment "
         "(news_sentiment below zero) or tags such as downgrade, lawsuit, "
@@ -46,6 +48,24 @@ ACTION_QUESTION = {
     },
 }
 
+UNIVERSE_ACTION_QUESTION = {
+    "type": "choice",
+    "instructions": (
+        "Evaluate whether this US-listed emerging markets ETF or ADR deserves a "
+        "near-term long watchlist slot. Return calibrated buy, hold, or sell "
+        "probabilities reflecting short-term intraday edge. Favor higher BUY when "
+        "momentum, volume, and trend (price vs EMA-9/20 on 1-minute bars, RSI-14 on "
+        "1-minute bars not overbought) align and change_1d/change_5d/change_1w support "
+        "the move versus a weak EM benchmark. "
+        "Penalize BUY for wide spreads, thin volume, benchmark headwinds, or bearish "
+        "news. This ranking selects which symbols to monitor — prefer calibrated "
+        "differentiation across candidates."
+    ),
+    "criteria": TRADE_ACTION_QUESTION["criteria"],
+}
+
+ACTION_QUESTION = TRADE_ACTION_QUESTION
+
 
 class JevClient:
     """TypeSafe Jev API client for buy/hold/sell predictions."""
@@ -64,11 +84,12 @@ class JevClient:
         self.timeout_sec = timeout_sec
         self.max_retries = max_retries
 
-    def predict(self, state: MarketState) -> JevPrediction:
+    def predict(self, state: MarketState, *, universe_scan: bool = False) -> JevPrediction:
+        question = UNIVERSE_ACTION_QUESTION if universe_scan else TRADE_ACTION_QUESTION
         payload = {
             "model": self.model,
             "state": state.to_dict(),
-            "questions": {"action": ACTION_QUESTION},
+            "questions": {"action": question},
         }
         headers = {
             "Authorization": f"Bearer {self.api_key}",

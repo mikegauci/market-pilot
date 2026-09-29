@@ -35,6 +35,11 @@ export type ParsedSettings = {
   max_hold_minutes: number;
   risk_profile: RiskProfile;
   watchlist: string[];
+  watchlist_core: string[];
+  watchlist_dynamic_enabled: boolean;
+  watchlist_dynamic_size: number;
+  watchlist_refresh_minutes: number;
+  benchmark_symbol: string;
 };
 
 function parseRiskProfile(formData: FormData): RiskProfile {
@@ -94,22 +99,49 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     throw new Error("Max hold (minutes) must be a whole number from 0 to 480");
   }
 
-  const watchlistRaw = String(formData.get("watchlist") ?? "");
-  const watchlist = [
+  const watchlistCoreRaw = String(formData.get("watchlist_core") ?? "");
+  const watchlist_core = [
     ...new Set(
-      watchlistRaw
+      watchlistCoreRaw
         .split(",")
         .map((s) => s.trim().toUpperCase())
         .filter(Boolean),
     ),
   ];
-  if (watchlist.length === 0) {
-    throw new Error("Watchlist must include at least one symbol");
+  if (watchlist_core.length === 0) {
+    throw new Error("Core watchlist must include at least one symbol");
   }
-  const invalidSymbols = watchlist.filter((s) => !/^[A-Z][A-Z0-9.]{0,9}$/.test(s));
-  if (invalidSymbols.length > 0) {
-    throw new Error(`Invalid ticker(s): ${invalidSymbols.join(", ")}`);
+  const invalidCore = watchlist_core.filter((s) => !/^[A-Z][A-Z0-9.]{0,9}$/.test(s));
+  if (invalidCore.length > 0) {
+    throw new Error(`Invalid core ticker(s): ${invalidCore.join(", ")}`);
   }
+
+  const watchlist_dynamic_enabled =
+    String(formData.get("watchlist_dynamic_enabled") ?? "") === "on";
+  const watchlist_dynamic_size = Number(formData.get("watchlist_dynamic_size") ?? 5);
+  if (
+    !Number.isInteger(watchlist_dynamic_size) ||
+    watchlist_dynamic_size < 0 ||
+    watchlist_dynamic_size > 20
+  ) {
+    throw new Error("Dynamic watchlist size must be a whole number from 0 to 20");
+  }
+  const watchlist_refresh_minutes = Number(formData.get("watchlist_refresh_minutes") ?? 30);
+  if (
+    !Number.isInteger(watchlist_refresh_minutes) ||
+    watchlist_refresh_minutes < 5 ||
+    watchlist_refresh_minutes > 240
+  ) {
+    throw new Error("Jev scan interval must be a whole number from 5 to 240 minutes");
+  }
+  const benchmark_symbol = String(formData.get("benchmark_symbol") ?? "EEM")
+    .trim()
+    .toUpperCase();
+  if (!/^[A-Z][A-Z0-9.]{0,9}$/.test(benchmark_symbol)) {
+    throw new Error("Benchmark symbol is invalid");
+  }
+
+  const effectiveWatchlist = watchlist_dynamic_enabled ? undefined : watchlist_core;
 
   return {
     minimum_jev_confidence,
@@ -122,6 +154,11 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     take_profit_percentage,
     max_hold_minutes,
     risk_profile: parseRiskProfile(formData),
-    watchlist,
+    watchlist: effectiveWatchlist ?? watchlist_core,
+    watchlist_core,
+    watchlist_dynamic_enabled,
+    watchlist_dynamic_size,
+    watchlist_refresh_minutes,
+    benchmark_symbol,
   };
 }

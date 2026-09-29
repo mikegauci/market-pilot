@@ -2,11 +2,26 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Dict, List, Optional, Tuple
+import threading
+from datetime import datetime, timezone
+from functools import wraps
+from typing import Callable, Dict, List, Optional, Tuple, TypeVar
+
+F = TypeVar("F", bound=Callable[..., object])
+
+
+def _ibkr_synchronized(method: F) -> F:
+    @wraps(method)
+    def wrapper(self: "IBKRClient", *args: object, **kwargs: object) -> object:
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper  # type: ignore[return-value]
 
 from ib_insync import IB, LimitOrder, MarketOrder, Stock, StopOrder, Trade
 
 from broker.symbols import from_ibkr_contract, to_ibkr_symbol
+from market.bars import BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, Bar
 from models.types import AccountSummary, BracketLegs, BracketOrderResult, Position, Quote
 
 logger = logging.getLogger(__name__)
@@ -79,6 +94,7 @@ class IBKRClient:
         self.account = account
         self.market_data_type = market_data_type
         self.ib = IB()
+        self._lock = threading.RLock()
         self._contracts: Dict[str, Stock] = {}
         self._tickers: Dict[str, object] = {}
 
@@ -113,6 +129,7 @@ class IBKRClient:
                 f"IBKR disconnected immediately (clientId={self.client_id} may be in use)"
             )
 
+    @_ibkr_synchronized
     def connect(
         self,
         timeout: float = 10.0,
@@ -184,6 +201,7 @@ class IBKRClient:
                 logger.info("Using IBKR account: %s", self.account)
         logger.info("Connected to IBKR")
 
+    @_ibkr_synchronized
     def disconnect(self) -> None:
         if self.is_connected():
             self.ib.disconnect()
@@ -198,6 +216,7 @@ class IBKRClient:
         self.account = accounts[0]
         return self.account
 
+    @_ibkr_synchronized
     def get_account_summary(self) -> AccountSummary:
         account = self._resolve_account()
         values = {item.tag: item for item in self.ib.accountValues(account)}
@@ -222,6 +241,7 @@ class IBKRClient:
             currency=currency,
         )
 
+    @_ibkr_synchronized
     def get_positions(self) -> List[Position]:
         account = self._resolve_account()
         result: List[Position] = []
@@ -286,6 +306,7 @@ class IBKRClient:
             self._contracts[symbol] = qualified[0]
         return self._contracts[symbol]
 
+    @_ibkr_synchronized
     def subscribe_watchlist(self, symbols: List[str]) -> None:
         for symbol in symbols:
             if symbol in self._tickers:
@@ -299,6 +320,7 @@ class IBKRClient:
             self._tickers[symbol] = ticker
             logger.debug("Subscribed to market data for %s", symbol)
 
+    @_ibkr_synchronized
     def sync_watchlist_subscriptions(self, symbols: List[str]) -> None:
         """Subscribe to new symbols and cancel market data for removed ones."""
         target = set(symbols)
@@ -312,6 +334,7 @@ class IBKRClient:
             logger.debug("Unsubscribed from market data for %s", symbol)
         self.subscribe_watchlist(symbols)
 
+    @_ibkr_synchronized
     def get_quotes(self, symbols: List[str], wait_sec: float = 2.0) -> List[Quote]:
         self.sync_watchlist_subscriptions(symbols)
         if wait_sec > 0:
@@ -347,6 +370,7 @@ class IBKRClient:
 
         return quotes
 
+    @_ibkr_synchronized
     def has_pending_entry_order(self, symbol: str) -> bool:
         """True when an unfilled BUY order is already open for this symbol."""
         if not self.is_connected():
@@ -363,6 +387,7 @@ class IBKRClient:
                 return True
         return False
 
+    @_ibkr_synchronized
     def place_bracket_buy(
         self,
         symbol: str,
@@ -504,6 +529,7 @@ class IBKRClient:
                 return trade
         return None
 
+    @_ibkr_synchronized
     def find_open_bracket_legs(self, symbol: str) -> Optional[BracketLegs]:
         """Find active bracket stop-loss and take-profit orders for a long position."""
         if not self.is_connected():
@@ -551,6 +577,7 @@ class IBKRClient:
             take_profit=tp_price,
         )
 
+    @_ibkr_synchronized
     def get_bracket_exit_status(
         self,
         parent_order_id: Optional[int],
@@ -576,12 +603,14 @@ class IBKRClient:
 
         return None
 
+    @_ibkr_synchronized
     def cancel_open_brackets(self, parent_id: int, sl_id: int, tp_id: int) -> None:
         for order_id in (parent_id, sl_id, tp_id):
             trade = self._find_trade_by_order_id(order_id)
             if trade:
                 self._cancel_trade(trade)
 
+    @_ibkr_synchronized
     def close_long_position(
         self,
         symbol: str,
@@ -633,3 +662,73 @@ class IBKRClient:
             fill_price,
         )
         return fill_price, filled_qty
+
+    @_ibkr_synchronized
+    def fetch_historical_bars(
+        self,
+        symbol: str,
+        duration: str = "1 W",
+        bar_size: str = BAR_SIZE_DAILY,
+        use_rth: bool = True,
+    ) -> List[Bar]:
+        """Fetch OHLCV bars from IBKR for cache seeding."""
+        if not self.is_connected():
+            return []
+
+        contract = self._ensure_contract(symbol)
+        raw_bars = self.ib.reqHistoricalData(
+            contract,
+            endDateTime="",
+            durationStr=duration,
+            barSizeSetting=bar_size,
+            whatToShow="TRADES",
+            useRTH=use_rth,
+            formatDate=1,
+        )
+        result: List[Bar] = []
+        app_symbol = symbol.upper()
+        for item in raw_bars or []:
+            ts = getattr(item, "date", None)
+            if ts is None:
+                continue
+            if isinstance(ts, datetime):
+                bar_ts = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+            else:
+                try:
+                    parsed = datetime.fromisoformat(str(ts).replace(" ", "T"))
+                except ValueError:
+                    continue
+                bar_ts = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+            open_px = _safe_float(getattr(item, "open", None))
+            high_px = _safe_float(getattr(item, "high", None))
+            low_px = _safe_float(getattr(item, "low", None))
+            close_px = _safe_float(getattr(item, "close", None))
+            if None in (open_px, high_px, low_px, close_px):
+                continue
+
+            volume_raw = getattr(item, "volume", 0)
+            try:
+                volume = int(volume_raw or 0)
+            except (TypeError, ValueError):
+                volume = 0
+
+            normalized_size = bar_size
+            if bar_size in {"5 min", "5mins", "5 mins"}:
+                normalized_size = BAR_SIZE_INTRADAY
+            elif bar_size in {"1 day", "1day", "1 day"}:
+                normalized_size = BAR_SIZE_DAILY
+
+            result.append(
+                Bar(
+                    symbol=app_symbol,
+                    bar_size=normalized_size,
+                    ts=bar_ts,
+                    open=open_px,
+                    high=high_px,
+                    low=low_px,
+                    close=close_px,
+                    volume=volume,
+                )
+            )
+        return result

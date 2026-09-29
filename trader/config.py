@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from typing import List
 
 from pydantic import field_validator, model_validator
@@ -64,8 +65,7 @@ class Settings(BaseSettings):
     strategy_max_hold_minutes: float = 0.0
     strategy_jev_sell_exit_threshold: float = 0.75
     strategy_max_correlated_positions: int = 2
-    strategy_warmup_min_samples: int = 30
-    strategy_warmup_min_span_sec: float = 120.0
+    strategy_warmup_min_1m_bars: int = 15
     strategy_min_news_sentiment: float = -0.3
     strategy_news_block_tags: str = "downgrade,lawsuit,sec_investigation,guidance_cut,layoffs"
     strategy_block_on_earnings: bool = False
@@ -80,6 +80,12 @@ class Settings(BaseSettings):
     news_failure_cooldown_sec: float = 60.0
     news_fetch_workers: int = 3
     news_max_retries: int = 3
+
+    em_universe_path: str = ""
+    bar_backfill_pacing_sec: float = 12.0
+    bar_daily_duration: str = "1 W"
+    bar_intraday_duration: str = "3 D"
+    em_backfill_on_startup: bool = True
 
     @field_validator("trading_mode", mode="before")
     @classmethod
@@ -141,6 +147,13 @@ class Settings(BaseSettings):
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
+    @field_validator("em_backfill_on_startup", mode="before")
+    @classmethod
+    def parse_em_backfill_on_startup(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
     @field_validator("strategy_block_on_earnings", mode="before")
     @classmethod
     def parse_news_bool(cls, value: object) -> bool:
@@ -197,6 +210,13 @@ class Settings(BaseSettings):
         return [s.strip().upper() for s in self.watchlist.split(",") if s.strip()]
 
     @property
+    def resolved_em_universe_path(self) -> Path:
+        if self.em_universe_path.strip():
+            return Path(self.em_universe_path.strip())
+        trader_root = Path(__file__).resolve().parent
+        return trader_root.parent / "dashboard" / "data" / "em-us-listed.json"
+
+    @property
     def strategy_config(self) -> StrategyConfig:
         return StrategyConfig(
             max_spread_pct=self.strategy_max_spread_pct,
@@ -208,8 +228,7 @@ class Settings(BaseSettings):
             max_hold_minutes=self.strategy_max_hold_minutes,
             jev_sell_exit_threshold=self.strategy_jev_sell_exit_threshold,
             max_correlated_positions=self.strategy_max_correlated_positions,
-            warmup_min_samples=self.strategy_warmup_min_samples,
-            warmup_min_span_sec=self.strategy_warmup_min_span_sec,
+            warmup_min_1m_bars=self.strategy_warmup_min_1m_bars,
             min_news_sentiment=self.strategy_min_news_sentiment,
             news_block_tags=tuple(
                 tag.strip()

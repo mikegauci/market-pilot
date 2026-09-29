@@ -9,12 +9,14 @@ from supabase import Client, create_client
 
 from risk.recommendations import should_advance_baseline
 
+from market.bars import Bar, BAR_SIZE_DAILY, BAR_SIZE_INTRADAY
 from models.types import (
     AccountSummary,
     BotControl,
     BotStatusUpdate,
     ExecutionMode,
     JevPrediction,
+    JevRankedSymbol,
     MarketState,
     Position,
     Quote,
@@ -26,6 +28,8 @@ from models.types import (
 )
 
 logger = logging.getLogger(__name__)
+
+MAX_EM_UNIVERSE_SIZE = 80
 
 # Postgres may return variable fractional digits (e.g. .99074); Python 3.9 needs 6.
 _ISO_FRACTION = re.compile(r"\.(\d+)([+-])")
@@ -40,6 +44,11 @@ def _normalize_iso_timestamp(text: str) -> str:
         return f".{frac[:6]:0<6}{tz_sep}"
 
     return _ISO_FRACTION.sub(repl, text, count=1)
+
+
+def _ensure_utc_iso(value: datetime) -> str:
+    parsed = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
 
 
 def _parse_timestamp(value: object) -> datetime:
@@ -221,6 +230,27 @@ class SupabaseRepository:
             watchlist=risk.watchlist,
         )
 
+    def _parse_jev_rankings(self, raw: object) -> List[JevRankedSymbol]:
+        if not isinstance(raw, list):
+            return []
+        rankings: List[JevRankedSymbol] = []
+        for index, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            symbol = str(item.get("symbol", "")).upper()
+            if not symbol:
+                continue
+            rankings.append(
+                JevRankedSymbol(
+                    symbol=symbol,
+                    buy=float(item.get("buy", 0)),
+                    hold=float(item.get("hold", 0)),
+                    sell=float(item.get("sell", 0)),
+                    rank=int(item.get("rank", index + 1)),
+                )
+            )
+        return rankings
+
     def get_risk_settings(self) -> RiskSettings:
         result = (
             self.client.table("settings")
@@ -228,8 +258,10 @@ class SupabaseRepository:
                 "minimum_jev_confidence, signal_record_threshold, risk_per_trade, "
                 "max_position_size, max_daily_loss, max_open_positions, "
                 "stop_loss_percentage, take_profit_percentage, max_hold_minutes, "
-                "account_capital, "
-                "risk_sync_equity, watchlist"
+                "account_capital, risk_sync_equity, watchlist, watchlist_core, "
+                "watchlist_dynamic_enabled, watchlist_dynamic_size, "
+                "watchlist_refresh_minutes, benchmark_symbol, watchlist_jev_rankings, "
+                "watchlist_screener_ran_at"
             )
             .eq("id", 1)
             .single()
@@ -237,12 +269,16 @@ class SupabaseRepository:
         )
         data = result.data
         watchlist = data.get("watchlist") or []
+        watchlist_core = data.get("watchlist_core") or []
+        if not watchlist_core and watchlist:
+            watchlist_core = list(watchlist)
         risk_sync_equity = (
             float(data["risk_sync_equity"])
             if data.get("risk_sync_equity") is not None
             else None
         )
         self._cached_risk_sync_equity = risk_sync_equity
+        screener_ran_at = data.get("watchlist_screener_ran_at")
         return RiskSettings(
             minimum_jev_confidence=float(data.get("minimum_jev_confidence", 0.85)),
             signal_record_threshold=float(data.get("signal_record_threshold", 0.80)),
@@ -256,7 +292,158 @@ class SupabaseRepository:
             account_capital=float(data.get("account_capital", 1000)),
             risk_sync_equity=risk_sync_equity,
             watchlist=[str(s).upper() for s in watchlist],
+            watchlist_core=[str(s).upper() for s in watchlist_core],
+            watchlist_dynamic_enabled=bool(data.get("watchlist_dynamic_enabled", False)),
+            watchlist_dynamic_size=int(data.get("watchlist_dynamic_size", 5)),
+            watchlist_refresh_minutes=int(data.get("watchlist_refresh_minutes", 30)),
+            benchmark_symbol=str(data.get("benchmark_symbol") or "EEM").upper(),
+            watchlist_jev_rankings=self._parse_jev_rankings(
+                data.get("watchlist_jev_rankings")
+            ),
+            watchlist_screener_ran_at=(
+                _parse_timestamp(screener_ran_at) if screener_ran_at else None
+            ),
         )
+
+    def update_effective_watchlist(
+        self,
+        watchlist: List[str],
+        rankings: List[JevRankedSymbol],
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        payload = {
+            "watchlist": watchlist,
+            "watchlist_jev_rankings": [
+                {
+                    "symbol": item.symbol,
+                    "buy": item.buy,
+                    "hold": item.hold,
+                    "sell": item.sell,
+                    "rank": item.rank,
+                }
+                for item in rankings
+            ],
+            "watchlist_screener_ran_at": now,
+            "updated_at": now,
+        }
+        self.client.table("settings").update(payload).eq("id", 1).execute()
+
+    def get_em_universe_symbols(self, tradable_only: bool = True) -> List[str]:
+        query = (
+            self.client.table("em_universe")
+            .select("symbol")
+            .order("weight_bps", desc=True)
+            .limit(MAX_EM_UNIVERSE_SIZE)
+        )
+        if tradable_only:
+            query = query.eq("tradable", True)
+        result = query.execute()
+        symbols: List[str] = []
+        for row in result.data or []:
+            symbol = str(row.get("symbol", "")).strip().upper()
+            if symbol and symbol not in symbols:
+                symbols.append(symbol)
+        return symbols
+
+    def set_em_universe_tradable(self, symbol: str, tradable: bool) -> None:
+        self.client.table("em_universe").update(
+            {
+                "tradable": tradable,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).eq("symbol", symbol.upper()).execute()
+
+    def get_bars(self, symbol: str, bar_size: str) -> List[Bar]:
+        result = (
+            self.client.table("symbol_bars")
+            .select("symbol, bar_size, ts, open, high, low, close, volume")
+            .eq("symbol", symbol.upper())
+            .eq("bar_size", bar_size)
+            .order("ts")
+            .limit(2000)
+            .execute()
+        )
+        bars: List[Bar] = []
+        for row in result.data or []:
+            bars.append(
+                Bar(
+                    symbol=str(row["symbol"]).upper(),
+                    bar_size=str(row["bar_size"]),
+                    ts=_parse_timestamp(row["ts"]),
+                    open=float(row["open"]),
+                    high=float(row["high"]),
+                    low=float(row["low"]),
+                    close=float(row["close"]),
+                    volume=int(row.get("volume") or 0),
+                )
+            )
+        return bars
+
+    def upsert_bars(self, bars: List[Bar]) -> None:
+        if not bars:
+            return
+        rows = [
+            {
+                "symbol": bar.symbol.upper(),
+                "bar_size": bar.bar_size,
+                "ts": _ensure_utc_iso(bar.ts),
+                "open": bar.open,
+                "high": bar.high,
+                "low": bar.low,
+                "close": bar.close,
+                "volume": bar.volume,
+            }
+            for bar in bars
+        ]
+        for start in range(0, len(rows), 500):
+            chunk = rows[start : start + 500]
+            self.client.table("symbol_bars").upsert(
+                chunk,
+                on_conflict="symbol,bar_size,ts",
+            ).execute()
+
+    def get_last_fetched_at(self, symbol: str, bar_size: str) -> Optional[datetime]:
+        try:
+            result = (
+                self.client.table("symbol_bars_meta")
+                .select("last_fetched_at")
+                .eq("symbol", symbol.upper())
+                .eq("bar_size", bar_size)
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            logger.warning(
+                "Could not read symbol_bars_meta for %s %s: %s",
+                symbol,
+                bar_size,
+                exc,
+            )
+            return None
+
+        rows = result.data if result is not None else None
+        if not rows:
+            return None
+        last_fetched_at = rows[0].get("last_fetched_at")
+        if not last_fetched_at:
+            return None
+        return _parse_timestamp(last_fetched_at)
+
+    def set_last_fetched_at(
+        self,
+        symbol: str,
+        bar_size: str,
+        fetched_at: datetime,
+    ) -> None:
+        payload = {
+            "symbol": symbol.upper(),
+            "bar_size": bar_size,
+            "last_fetched_at": _ensure_utc_iso(fetched_at),
+        }
+        self.client.table("symbol_bars_meta").upsert(
+            payload,
+            on_conflict="symbol,bar_size",
+        ).execute()
 
     def maybe_advance_risk_baseline(
         self,

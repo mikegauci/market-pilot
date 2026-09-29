@@ -27,10 +27,13 @@ def check_entry_filters(state: MarketState, config: StrategyConfig) -> FilterRes
         if state.price <= state.ema_20:
             return FilterResult(False, "price_below_ema20")
 
-    if state.spy_change_5m is not None and state.spy_change_5m < config.max_spy_drop_5m_pct:
+    benchmark_change = state.benchmark_change_5m
+    if benchmark_change is None:
+        benchmark_change = state.spy_change_5m
+    if benchmark_change is not None and benchmark_change < config.max_spy_drop_5m_pct:
         return FilterResult(
             False,
-            f"spy_headwind ({state.spy_change_5m:.2f}% 5m)",
+            f"benchmark_headwind ({benchmark_change:.2f}% 5m)",
         )
 
     if state.news_sentiment is not None:

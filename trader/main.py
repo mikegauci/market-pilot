@@ -3,8 +3,11 @@ from __future__ import annotations
 import logging
 import signal
 import sys
+import threading
 import time
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 from broker.execution import close_ibkr_signal_exits, sync_ibkr_exits
@@ -15,7 +18,8 @@ from config import Settings, load_settings
 from instance_lock import acquire_trader_lock
 from database.supabase import SupabaseRepository
 from jev.client import JevClient
-from market.history import HistoryStore
+from market.bar_aggregator import MinuteBarStore
+from market.bars import BarStore
 from news.cache import TtlCache
 from news.client import FinnhubNewsClient, NewsService
 from news.enrich import enrich_market_state_with_news
@@ -42,6 +46,9 @@ from strategy.signals import (
     signal_tier,
     trade_skip_reason_from_tier,
 )
+from watchlist.jev_screener import effective_benchmark
+from watchlist.screener_scheduler import EMWatchlistScheduler, ScreenerJobContext
+from watchlist.universe import load_em_universe
 
 logger = logging.getLogger(__name__)
 
@@ -113,26 +120,71 @@ def _connect_ibkr(client: IBKRClient, max_attempts: int = 1, delay_sec: float = 
     return False
 
 
-def _all_symbols(watchlist: list[str]) -> list[str]:
-    return list(dict.fromkeys(watchlist + ["SPY"]))
+def _all_symbols(watchlist: list[str], benchmark: str = "SPY") -> list[str]:
+    benchmark_symbol = (benchmark or "SPY").upper()
+    return list(dict.fromkeys(watchlist + [benchmark_symbol]))
+
+
+def _load_em_universe(settings: Settings, db: SupabaseRepository) -> List[str]:
+    return load_em_universe(db=db, path=Path(settings.resolved_em_universe_path))
+
+
+def _seed_universe_minute_bars_mock(
+    universe: List[str],
+    mock: MockMarketProvider,
+    minute_bars: MinuteBarStore,
+) -> None:
+    mock.ensure_symbols(universe)
+    for symbol in universe:
+        mock.seed_symbol_minute_bars(minute_bars, symbol)
+
+
+def _seed_universe_minute_bars_from_cache(
+    universe: List[str],
+    bar_store: BarStore,
+    minute_bars: MinuteBarStore,
+) -> None:
+    for symbol in universe:
+        bar_store.seed_minute_aggregator(minute_bars.get(symbol), symbol)
+
+
+def _apply_watchlist_update(
+    watchlist: List[str],
+    benchmark_symbol: str,
+    mock: MockMarketProvider,
+    ibkr: IBKRClient,
+    settings: Settings,
+) -> List[str]:
+    all_symbols = _all_symbols(watchlist, benchmark_symbol)
+    mock.ensure_symbols(all_symbols)
+    if settings.data_source == DataSource.IBKR and ibkr.is_connected():
+        ibkr.sync_watchlist_subscriptions(all_symbols)
+    return all_symbols
 
 
 def _sync_watchlist_symbols(
     all_symbols: list[str],
     mock: MockMarketProvider,
-    history: HistoryStore,
+    minute_bars: MinuteBarStore,
+    bar_store: BarStore,
     data_source: DataSource,
 ) -> None:
     """Pick up watchlist changes at runtime without restarting the trader."""
-    if data_source != DataSource.MOCK:
-        return
-    new_symbols = mock.ensure_symbols(all_symbols)
+    mock.ensure_symbols(all_symbols)
+    new_symbols = [
+        symbol
+        for symbol in all_symbols
+        if minute_bars.get(symbol).bar_count() == 0
+    ]
     for symbol in new_symbols:
-        mock.seed_symbol_history(history, symbol)
+        if data_source == DataSource.MOCK:
+            mock.seed_symbol_minute_bars(minute_bars, symbol)
+        else:
+            bar_store.seed_minute_aggregator(minute_bars.get(symbol), symbol)
         _warmup_logged.discard(symbol)
     if new_symbols:
         logger.info(
-            "Watchlist expanded — seeded mock history for: %s",
+            "Watchlist expanded — seeded 1-min bars for: %s",
             ", ".join(new_symbols),
         )
 
@@ -285,17 +337,27 @@ def run() -> int:
 
     risk_settings = db.get_risk_settings()
     watchlist = risk_settings.watchlist or settings.watchlist_symbols
-    all_symbols = _all_symbols(watchlist)
+    benchmark_symbol = effective_benchmark(risk_settings)
+    all_symbols = _all_symbols(watchlist, benchmark_symbol)
+    em_scheduler = EMWatchlistScheduler()
 
+    bar_store = BarStore(
+        db,
+        daily_duration=settings.bar_daily_duration,
+        intraday_duration=settings.bar_intraday_duration,
+        backfill_pacing_sec=settings.bar_backfill_pacing_sec,
+    )
     mock = MockMarketProvider(all_symbols)
-    history = HistoryStore(all_symbols)
+    minute_bars = MinuteBarStore(all_symbols)
     if settings.data_source == DataSource.MOCK:
-        mock.seed_history(history)
-        logger.info("Seeded mock price history for indicators")
-    elif settings.data_source == DataSource.IBKR:
+        mock.seed_minute_bars(minute_bars)
+        logger.info("Seeded mock 1-minute bars for indicators")
+    else:
+        for symbol in all_symbols:
+            bar_store.seed_minute_aggregator(minute_bars.get(symbol), symbol)
         logger.info(
-            "Using IBKR quotes to build indicator history (warm-up ~%.0fs)",
-            settings.strategy_config.warmup_min_span_sec,
+            "Seeded 1-minute bars from cache (need %s bars for warm-up)",
+            settings.strategy_config.warmup_min_1m_bars,
         )
 
     strategy_config = settings.strategy_config
@@ -356,6 +418,15 @@ def run() -> int:
         if _connect_ibkr(ibkr, max_attempts=3):
             ibkr.subscribe_watchlist(all_symbols)
             logger.info("Connected to IBKR (%s:%s)", settings.ibkr_host, settings.ibkr_port)
+            if risk_settings.watchlist_dynamic_enabled:
+                try:
+                    em_universe = _load_em_universe(settings, db)
+                    em_scheduler.start_backfill(
+                        settings, bar_store, ibkr, em_universe
+                    )
+                except (FileNotFoundError, ValueError) as exc:
+                    logger.warning("EM backfill skipped: %s", exc)
+                    em_scheduler.mark_backfill_unavailable()
         else:
             logger.warning("IBKR unavailable — falling back to mock market data")
     else:
@@ -443,16 +514,52 @@ def run() -> int:
                     last_settings_sync = now_mono
 
                 watchlist = risk_settings.watchlist or settings.watchlist_symbols
+                benchmark_symbol = effective_benchmark(risk_settings)
                 open_symbols = (
                     [t.symbol for t in risk_manager.open_trades]
                     if risk_manager
                     else []
                 )
+                completed_watchlist = em_scheduler.take_completed_watchlist()
+                if completed_watchlist:
+                    watchlist = completed_watchlist
+                if jev is not None and risk_settings.watchlist_dynamic_enabled:
+                    em_scheduler.maybe_start_screener(
+                        ScreenerJobContext(
+                            settings=settings,
+                            risk_settings=risk_settings,
+                            db=db,
+                            jev=jev,
+                            minute_bars=minute_bars,
+                            bar_store=bar_store,
+                            mock=mock,
+                            ibkr=ibkr,
+                            open_symbols=open_symbols,
+                            strategy_config=strategy_config,
+                            news_service=news_service,
+                            get_quotes=lambda symbols: _get_quotes(
+                                settings, ibkr, mock, symbols
+                            ),
+                        )
+                    )
                 all_symbols = _all_symbols(
-                    list(dict.fromkeys(watchlist + open_symbols))
+                    list(dict.fromkeys(watchlist + open_symbols)),
+                    benchmark_symbol,
                 )
+                if completed_watchlist:
+                    all_symbols = _apply_watchlist_update(
+                        watchlist,
+                        benchmark_symbol,
+                        mock,
+                        ibkr,
+                        settings,
+                    )
                 _sync_watchlist_symbols(
-                    all_symbols, mock, history, settings.data_source
+                    all_symbols,
+                    mock,
+                    minute_bars,
+                    bar_store,
+                    settings.data_source,
                 )
                 if (
                     settings.data_source == DataSource.IBKR
@@ -482,7 +589,7 @@ def run() -> int:
                     portfolio_dirty = True
 
             for quote in quotes:
-                history.record(quote)
+                minute_bars.record(quote)
 
             if risk_manager and db:
                 closed = risk_manager.check_exits(
@@ -519,7 +626,10 @@ def run() -> int:
                 )
                 portfolio_dirty = False
 
-            spy_history = history.get("SPY")
+            benchmark_symbol = (
+                effective_benchmark(risk_settings) if db and risk_settings else "SPY"
+            )
+            benchmark_minute_bars = minute_bars.get(benchmark_symbol.upper())
 
             market_open = (
                 settings.data_source != DataSource.IBKR or is_us_regular_session_open()
@@ -555,14 +665,18 @@ def run() -> int:
 
                 state = build_market_state(
                     quote,
-                    history,
-                    spy_history,
-                    warmup_min_samples=strategy_config.warmup_min_samples,
-                    warmup_min_span_sec=strategy_config.warmup_min_span_sec,
+                    minute_bars.get(symbol),
+                    benchmark_minute_bars,
+                    trend_changes=bar_store.get_trend_changes(symbol),
+                    warmup_min_1m_bars=strategy_config.warmup_min_1m_bars,
                 )
                 if state is None:
                     if symbol not in _warmup_logged:
-                        logger.debug("%s warming up — need more price history", symbol)
+                        logger.debug(
+                            "%s warming up — need %s one-minute bars",
+                            symbol,
+                            strategy_config.warmup_min_1m_bars,
+                        )
                         _warmup_logged.add(symbol)
                     continue
 

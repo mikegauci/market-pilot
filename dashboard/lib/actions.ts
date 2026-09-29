@@ -37,6 +37,10 @@ export async function updateSettings(formData: FormData) {
     updated_at: new Date().toISOString(),
   };
 
+  if (parsed.watchlist_dynamic_enabled) {
+    delete payload.watchlist;
+  }
+
   if (equityForBaseline > 0) {
     payload.risk_sync_equity = equityForBaseline;
   }

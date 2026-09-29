@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -83,6 +83,10 @@ class MarketState:
     ask: Optional[float]
     spread: Optional[float]
     spy_change_5m: Optional[float]
+    change_1d: Optional[float] = None
+    change_5d: Optional[float] = None
+    change_1w: Optional[float] = None
+    benchmark_change_5m: Optional[float] = None
     news_sentiment: Optional[float] = None
     news_headline_count: Optional[int] = None
     news_top_headline: Optional[str] = None
@@ -90,7 +94,10 @@ class MarketState:
     news_fetched_at: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        if payload.get("benchmark_change_5m") is None and payload.get("spy_change_5m") is not None:
+            payload["benchmark_change_5m"] = payload["spy_change_5m"]
+        return payload
 
 
 @dataclass
@@ -111,6 +118,15 @@ class StrategySettings:
 
 
 @dataclass
+class JevRankedSymbol:
+    symbol: str
+    buy: float
+    hold: float
+    sell: float
+    rank: int
+
+
+@dataclass
 class RiskSettings:
     minimum_jev_confidence: float
     signal_record_threshold: float
@@ -124,6 +140,13 @@ class RiskSettings:
     account_capital: float
     risk_sync_equity: Optional[float]
     watchlist: List[str]
+    watchlist_core: List[str] = field(default_factory=list)
+    watchlist_dynamic_enabled: bool = False
+    watchlist_dynamic_size: int = 5
+    watchlist_refresh_minutes: int = 30
+    benchmark_symbol: str = "EEM"
+    watchlist_jev_rankings: List[JevRankedSymbol] = field(default_factory=list)
+    watchlist_screener_ran_at: Optional[datetime] = None
 
 
 @dataclass

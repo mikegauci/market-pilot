@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type {
   BotStatus,
+  EmUniverseRow,
   PortfolioSnapshot,
   Position,
   Prediction,
@@ -101,6 +102,33 @@ export async function getPredictions(limit = 50, symbol?: string): Promise<Predi
   }
   const { data } = await query;
   return (data ?? []) as Prediction[];
+}
+
+export async function getEmUniverseStats(): Promise<{
+  count: number;
+  tradableCount: number;
+  topHoldings: EmUniverseRow[];
+}> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("em_universe")
+    .select("*", { count: "exact", head: true });
+  const { count: tradableCount } = await supabase
+    .from("em_universe")
+    .select("*", { count: "exact", head: true })
+    .eq("tradable", true);
+  const { data } = await supabase
+    .from("em_universe")
+    .select("symbol, name, source_etfs, weight_bps, country, tradable, updated_at")
+    .eq("tradable", true)
+    .order("weight_bps", { ascending: false })
+    .limit(20);
+
+  return {
+    count: count ?? 0,
+    tradableCount: tradableCount ?? 0,
+    topHoldings: (data ?? []) as EmUniverseRow[],
+  };
 }
 
 export async function getTradedPredictions(limit = 10): Promise<Prediction[]> {
