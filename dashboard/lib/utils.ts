@@ -19,28 +19,52 @@ export function formatPercent(value: number | null | undefined) {
   return `${(value * 100).toFixed(0)}%`;
 }
 
-export function formatDateTime(value: string | null | undefined) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(new Date(value));
+const SHORT_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+function pad2(value: string | number) {
+  return String(value).padStart(2, "0");
 }
 
-/** Fixed en-GB formatting — safe for SSR (avoids toLocaleString hydration mismatches). */
+/**
+ * Assemble timestamps manually. Node and browsers disagree on en-GB Intl output
+ * (e.g. "28 Sept, 21:59:02" vs "28 Sep at 21:59:02"), which breaks SSR hydration.
+ */
+function localDateTimeParts(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return {
+    day: date.getDate(),
+    month: SHORT_MONTHS[date.getMonth()],
+    monthNum: date.getMonth() + 1,
+    year: date.getFullYear(),
+    hour: pad2(date.getHours()),
+    minute: pad2(date.getMinutes()),
+    second: pad2(date.getSeconds()),
+  };
+}
+
+export function formatDateTime(value: string | null | undefined) {
+  const parts = value ? localDateTimeParts(value) : null;
+  if (!parts) return "—";
+  return `${parts.day} ${parts.month} ${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
+/** Full local timestamp with fixed separators — safe for SSR hydration. */
 export function formatDateTimeFull(value: string | null | undefined) {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(new Date(value));
+  const parts = value ? localDateTimeParts(value) : null;
+  if (!parts) return "—";
+  return `${pad2(parts.day)}/${pad2(parts.monthNum)}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second}`;
 }
