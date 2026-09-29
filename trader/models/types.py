@@ -147,6 +147,11 @@ class RiskSettings:
     watchlist_jev_rankings: List[JevRankedSymbol] = field(default_factory=list)
     watchlist_screener_ran_at: Optional[datetime] = None
     min_volume_ratio: float = 0.0
+    demotion_exits_enabled: bool = True
+    demotion_max_hold_ratio: float = 0.5
+    demotion_jev_sell_on_loss: bool = True
+    demotion_jev_sell_max_loss_pct: float = 0.02
+    demotion_force_exit: bool = False
 
 
 @dataclass

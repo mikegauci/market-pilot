@@ -47,7 +47,8 @@ const SETTING_DESCRIPTIONS_FULL = {
   max_position_size: "Largest amount the bot will put into a single trade.",
   max_daily_loss:
     "If today's losses reach this amount, the bot stops opening new trades until tomorrow.",
-  max_open_positions: "How many trades the bot can hold at the same time.",
+  max_open_positions:
+    "How many trades the bot can hold at the same time. Set at or above dynamic top-N to avoid slot blocking when names rotate off.",
   stop_loss_percentage:
     "Auto-sell if the price drops this % below your entry — also controls how large each trade is for a given risk budget.",
   take_profit_percentage:
@@ -69,7 +70,7 @@ const SETTING_DESCRIPTIONS = {
   risk_per_trade: "Max loss per trade if stop loss hits.",
   max_position_size: "Cap on capital deployed in one position.",
   max_daily_loss: "Stop new trades after today's losses reach this amount.",
-  max_open_positions: "Concurrent open trades allowed.",
+  max_open_positions: "Concurrent open trades allowed (recommend ≥ dynamic top-N).",
   stop_loss_percentage: "Exit when price falls this % below entry.",
   take_profit_percentage: "Exit when price rises this % above entry.",
   max_hold_minutes: "Force-close after N minutes (0 = off).",

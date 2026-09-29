@@ -68,6 +68,40 @@ describe("parseSettingsForm watchlist", () => {
   });
 });
 
+describe("parseSettingsForm demotion", () => {
+  it("defaults demotion toggles to off when checkboxes are omitted", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        watchlist_dynamic_enabled: "on",
+        demotion_max_hold_ratio: "0.5",
+        demotion_jev_sell_max_loss_pct: "2",
+      }),
+    );
+    expect(parsed.demotion_exits_enabled).toBe(false);
+    expect(parsed.demotion_jev_sell_on_loss).toBe(false);
+    expect(parsed.demotion_force_exit).toBe(false);
+  });
+
+  it("parses demotion settings when dynamic mode is on", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        watchlist_dynamic_enabled: "on",
+        demotion_exits_enabled: "on",
+        demotion_max_hold_ratio: "0.5",
+        demotion_jev_sell_on_loss: "on",
+        demotion_jev_sell_max_loss_pct: "2",
+        demotion_force_exit: "on",
+      }),
+    );
+    expect(parsed.demotion_exits_enabled).toBe(true);
+    expect(parsed.demotion_max_hold_ratio).toBe(0.5);
+    expect(parsed.demotion_jev_sell_max_loss_pct).toBe(0.02);
+    expect(parsed.demotion_force_exit).toBe(true);
+  });
+});
+
 describe("parseSettingsForm max_hold_minutes", () => {
   it("parses zero as disabled", () => {
     const parsed = parseSettingsForm(form({ ...baseFields, max_hold_minutes: "0" }));

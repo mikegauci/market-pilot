@@ -96,7 +96,7 @@ def _filter_stale_core_from_saved(
     return filtered
 
 
-def _resolve_trading_watchlist_base(risk_settings: RiskSettings) -> List[str]:
+def resolve_base_watchlist(risk_settings: RiskSettings) -> List[str]:
     if not risk_settings.watchlist_dynamic_enabled:
         return resolve_watchlist_core(risk_settings)
     if risk_settings.watchlist_screener_ran_at is None:
@@ -113,7 +113,7 @@ def resolve_trading_watchlist(
     open_symbols: Sequence[str] = (),
 ) -> List[str]:
     """Trading watchlist: base symbols plus any open positions (benchmark added in main)."""
-    base = _resolve_trading_watchlist_base(risk_settings)
+    base = resolve_base_watchlist(risk_settings)
     if not open_symbols:
         return base
     merged: List[str] = []

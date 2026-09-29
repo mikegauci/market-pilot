@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 from models.types import ClosedTrade, TradeRecord
 
@@ -43,7 +43,9 @@ def sync_ibkr_exits(
         net_pnl = gross_pnl
         now = datetime.now(timezone.utc)
 
-        db.close_trade(trade.id, exit_price, now, gross_pnl, net_pnl)
+        db.close_trade(
+            trade.id, exit_price, now, gross_pnl, net_pnl, exit_reason=reason
+        )
         risk_manager.remove_open_trade(trade.id)
         risk_manager.record_closed_pnl(net_pnl)
         closed_any = True
@@ -73,24 +75,38 @@ def close_ibkr_signal_exits(
     risk_manager: RiskManager,
     db: SupabaseRepository,
     *,
-    max_hold_minutes: float,
+    max_hold_minutes: float = 0.0,
+    max_hold_for_symbol: Optional[Callable[[str], float]] = None,
     jev_sell_symbols: Optional[set[str]] = None,
+    demotion_exit_symbols: Optional[set[str]] = None,
     fill_timeout_sec: float = 30.0,
 ) -> bool:
-    """Close IBKR positions on time limit or high-confidence Jev SELL."""
+    """Close IBKR positions on time limit, demotion, or high-confidence Jev SELL."""
     closed_any = False
     jev_sell_symbols = jev_sell_symbols or set()
+    demotion_exit_symbols = demotion_exit_symbols or set()
 
     for trade in list(risk_manager.open_trades):
         if trade.execution_mode != "ibkr":
             continue
 
-        time_exit = _trade_hold_expired(trade, max_hold_minutes)
+        hold_minutes = (
+            max_hold_for_symbol(trade.symbol)
+            if max_hold_for_symbol is not None
+            else max_hold_minutes
+        )
+        time_exit = _trade_hold_expired(trade, hold_minutes)
         jev_exit = trade.symbol in jev_sell_symbols
-        if not time_exit and not jev_exit:
+        demotion_exit = trade.symbol in demotion_exit_symbols
+        if not time_exit and not jev_exit and not demotion_exit:
             continue
 
-        reason = "time_exit" if time_exit else "jev_sell"
+        if demotion_exit:
+            reason = "demotion_exit"
+        elif time_exit:
+            reason = "time_exit"
+        else:
+            reason = "jev_sell"
         try:
             exit_price, filled_qty = ibkr.close_long_position(
                 trade.symbol,
@@ -108,7 +124,9 @@ def close_ibkr_signal_exits(
         net_pnl = gross_pnl
         now = datetime.now(timezone.utc)
 
-        db.close_trade(trade.id, exit_price, now, gross_pnl, net_pnl)
+        db.close_trade(
+            trade.id, exit_price, now, gross_pnl, net_pnl, exit_reason=reason
+        )
         risk_manager.remove_open_trade(trade.id)
         risk_manager.record_closed_pnl(net_pnl)
         closed_any = True
@@ -129,11 +147,31 @@ def close_ibkr_signal_exits(
 def collect_time_exit_symbols(
     open_trades: List[TradeRecord],
     max_hold_minutes: float,
+    *,
+    max_hold_for_symbol: Optional[Callable[[str], float]] = None,
 ) -> set[str]:
-    if max_hold_minutes <= 0:
+    symbols: set[str] = set()
+    for trade in open_trades:
+        hold_minutes = (
+            max_hold_for_symbol(trade.symbol)
+            if max_hold_for_symbol is not None
+            else max_hold_minutes
+        )
+        if hold_minutes > 0 and _trade_hold_expired(trade, hold_minutes):
+            symbols.add(trade.symbol)
+    return symbols
+
+
+def collect_demotion_exit_symbols(
+    open_trades: List[TradeRecord],
+    risk_settings,
+) -> set[str]:
+    from watchlist.demotion import is_demoted_symbol
+
+    if not risk_settings.demotion_exits_enabled or not risk_settings.demotion_force_exit:
         return set()
     return {
         trade.symbol
         for trade in open_trades
-        if _trade_hold_expired(trade, max_hold_minutes)
+        if trade.execution_mode == "ibkr" and is_demoted_symbol(trade.symbol, risk_settings)
     }

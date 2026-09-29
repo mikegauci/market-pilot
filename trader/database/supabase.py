@@ -262,7 +262,8 @@ class SupabaseRepository:
                 "account_capital, risk_sync_equity, watchlist, watchlist_core, "
                 "watchlist_dynamic_enabled, watchlist_dynamic_size, "
                 "watchlist_refresh_minutes, benchmark_symbol, watchlist_jev_rankings, "
-                "watchlist_screener_ran_at"
+                "watchlist_screener_ran_at, demotion_exits_enabled, demotion_max_hold_ratio, "
+                "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit"
             )
             .eq("id", 1)
             .single()
@@ -305,6 +306,13 @@ class SupabaseRepository:
             watchlist_screener_ran_at=(
                 _parse_timestamp(screener_ran_at) if screener_ran_at else None
             ),
+            demotion_exits_enabled=bool(data.get("demotion_exits_enabled", True)),
+            demotion_max_hold_ratio=float(data.get("demotion_max_hold_ratio", 0.5)),
+            demotion_jev_sell_on_loss=bool(data.get("demotion_jev_sell_on_loss", True)),
+            demotion_jev_sell_max_loss_pct=float(
+                data.get("demotion_jev_sell_max_loss_pct", 0.02)
+            ),
+            demotion_force_exit=bool(data.get("demotion_force_exit", False)),
         )
 
     def update_effective_watchlist(
@@ -569,6 +577,7 @@ class SupabaseRepository:
         net_pnl: float,
         *,
         filled_quantity: Optional[float] = None,
+        exit_reason: Optional[str] = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         payload = {
@@ -582,6 +591,8 @@ class SupabaseRepository:
         if filled_quantity is not None:
             payload["quantity"] = filled_quantity
             payload["position_value"] = round(exit_price * filled_quantity, 6)
+        if exit_reason:
+            payload["exit_reason"] = exit_reason
         self.client.table("trades").update(payload).eq("id", trade_id).execute()
 
     def sync_positions_from_trades(

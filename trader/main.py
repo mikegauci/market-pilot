@@ -10,7 +10,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from broker.execution import close_ibkr_signal_exits, sync_ibkr_exits
+from broker.execution import (
+    close_ibkr_signal_exits,
+    collect_demotion_exit_symbols,
+    sync_ibkr_exits,
+)
 from broker.manual_close import process_manual_close_commands
 from broker.ibkr import IBKRClient, MARKET_DATA_COMPETING_SESSION_MSG
 from broker.reconcile import reconcile_orphan_ibkr_positions
@@ -48,6 +52,7 @@ from strategy.signals import (
     signal_tier,
     trade_skip_reason_from_tier,
 )
+from watchlist.demotion import effective_max_hold_minutes
 from watchlist.jev_screener import (
     apply_screener_result_to_risk_settings,
     effective_benchmark,
@@ -654,9 +659,12 @@ def run() -> int:
                 minute_bars.record(quote)
 
             if risk_manager and db:
+                def _max_hold_for_symbol(symbol: str) -> float:
+                    return effective_max_hold_minutes(symbol, risk_settings)
+
                 closed = risk_manager.check_exits(
                     quotes_by_symbol,
-                    max_hold_minutes=risk_settings.max_hold_minutes,
+                    max_hold_for_symbol=_max_hold_for_symbol,
                 )
                 for closed_trade in closed:
                     db.close_trade(
@@ -665,19 +673,39 @@ def run() -> int:
                         closed_trade.exit_time,
                         closed_trade.gross_pnl,
                         closed_trade.net_pnl,
+                        exit_reason=closed_trade.reason,
                     )
                     portfolio_dirty = True
                 if closed:
                     risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
 
+                closed_demotion = risk_manager.check_demotion_exits(quotes_by_symbol)
+                for closed_trade in closed_demotion:
+                    db.close_trade(
+                        closed_trade.trade_id,
+                        closed_trade.exit_price,
+                        closed_trade.exit_time,
+                        closed_trade.gross_pnl,
+                        closed_trade.net_pnl,
+                        exit_reason=closed_trade.reason,
+                    )
+                    portfolio_dirty = True
+                if closed_demotion:
+                    risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
+
                 if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
                     if sync_ibkr_exits(ibkr, risk_manager, db):
                         portfolio_dirty = True
+                    demotion_exit_symbols = collect_demotion_exit_symbols(
+                        risk_manager.open_trades,
+                        risk_settings,
+                    )
                     if close_ibkr_signal_exits(
                         ibkr,
                         risk_manager,
                         db,
-                        max_hold_minutes=risk_settings.max_hold_minutes,
+                        max_hold_for_symbol=_max_hold_for_symbol,
+                        demotion_exit_symbols=demotion_exit_symbols,
                         fill_timeout_sec=settings.ibkr_fill_timeout_sec,
                     ):
                         portfolio_dirty = True
@@ -799,6 +827,7 @@ def run() -> int:
                                 closed.exit_time,
                                 closed.gross_pnl,
                                 closed.net_pnl,
+                                exit_reason=closed.reason,
                             )
                             portfolio_dirty = True
                             risk_manager.set_daily_realized_pnl(

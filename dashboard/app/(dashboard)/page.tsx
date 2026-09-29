@@ -67,6 +67,7 @@ export default async function OverviewPage() {
         positions={positions}
         openTrades={openTrades}
         tradeCommands={tradeCommands}
+        settings={settings}
         botStatus={
           botStatus ?? {
             id: 1,

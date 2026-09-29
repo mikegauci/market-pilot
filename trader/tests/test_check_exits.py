@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from models.types import Quote, RiskSettings, TradeRecord, TradingMode
 from risk.manager import RiskManager
+from watchlist.demotion import effective_max_hold_minutes
 
 
 def _risk_settings() -> RiskSettings:
@@ -122,6 +123,45 @@ class TestCheckExits(unittest.TestCase):
         quotes = {"META": Quote(symbol="META", price=746.73, bid=None, ask=None, spread=None)}
 
         self.assertTrue(self.manager.can_jev_sell_exit("META", quotes))
+
+    def test_demoted_trade_exits_at_reduced_max_hold(self) -> None:
+        settings = _risk_settings()
+        settings.max_hold_minutes = 100.0
+        settings.watchlist = ["BABA", "VALE", "EEM"]
+        settings.watchlist_core = ["NVDA", "AAPL", "EEM"]
+        settings.watchlist_dynamic_enabled = True
+        settings.watchlist_screener_ran_at = datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc)
+        settings.demotion_exits_enabled = True
+        settings.demotion_max_hold_ratio = 0.5
+        self.manager.update_settings(settings)
+
+        entry_time = datetime.now(timezone.utc) - timedelta(minutes=51)
+        self.manager.open_trades = [_trade(symbol="NU", entry_time=entry_time)]
+        quotes = {"NU": Quote(symbol="NU", price=750.0, bid=None, ask=None, spread=None)}
+
+        closed = self.manager.check_exits(
+            quotes,
+            max_hold_for_symbol=lambda symbol: effective_max_hold_minutes(symbol, settings),
+        )
+
+        self.assertEqual(len(closed), 1)
+        self.assertEqual(closed[0].reason, "time_exit")
+
+    def test_jev_sell_exit_allowed_for_demoted_loser_within_cap(self) -> None:
+        settings = _risk_settings()
+        settings.watchlist = ["BABA", "VALE", "EEM"]
+        settings.watchlist_core = ["NVDA", "AAPL", "EEM"]
+        settings.watchlist_dynamic_enabled = True
+        settings.watchlist_screener_ran_at = datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc)
+        settings.demotion_exits_enabled = True
+        settings.demotion_jev_sell_on_loss = True
+        settings.demotion_jev_sell_max_loss_pct = 0.02
+        self.manager.update_settings(settings)
+
+        self.manager.open_trades = [_trade(symbol="NU", entry_price=100.0)]
+        quotes = {"NU": Quote(symbol="NU", price=99.0, bid=None, ask=None, spread=None)}
+
+        self.assertTrue(self.manager.can_jev_sell_exit("NU", quotes))
 
 
 if __name__ == "__main__":

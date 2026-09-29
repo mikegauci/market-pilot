@@ -112,6 +112,7 @@ def _persist_manual_close(
                 closed.gross_pnl,
                 closed.net_pnl,
                 filled_quantity=filled_qty,
+                exit_reason=closed.reason,
             )
             risk_manager.remove_open_trade(closed.trade_id)
             db.complete_trade_command(command_id)

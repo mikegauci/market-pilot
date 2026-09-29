@@ -131,6 +131,109 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
         used for broad-market headwind checks and Jev context.
       </p>
 
+      {!dynamicEnabled && (
+        <>
+          <input
+            type="hidden"
+            name="demotion_exits_enabled"
+            value={settings.demotion_exits_enabled ? "on" : "off"}
+          />
+          <input
+            type="hidden"
+            name="demotion_max_hold_ratio"
+            value={settings.demotion_max_hold_ratio ?? 0.5}
+          />
+          <input
+            type="hidden"
+            name="demotion_jev_sell_on_loss"
+            value={settings.demotion_jev_sell_on_loss ? "on" : "off"}
+          />
+          <input
+            type="hidden"
+            name="demotion_jev_sell_max_loss_pct"
+            value={(settings.demotion_jev_sell_max_loss_pct ?? 0.02) * 100}
+          />
+          <input
+            type="hidden"
+            name="demotion_force_exit"
+            value={settings.demotion_force_exit ? "on" : "off"}
+          />
+        </>
+      )}
+
+      {dynamicEnabled && (
+        <div className="space-y-3 rounded-lg border border-zinc-800/60 bg-zinc-950/30 p-3">
+          <p className="text-sm font-medium text-zinc-200">Demotion exits</p>
+          <p className="text-xs text-zinc-500">
+            When an open position drops off the top-N watchlist, these rules help free
+            capital for new picks.
+          </p>
+          <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-200">
+            <input
+              type="checkbox"
+              name="demotion_exits_enabled"
+              defaultChecked={settings.demotion_exits_enabled ?? true}
+              className="mt-0.5 rounded border-zinc-700"
+            />
+            <span className="text-xs">Enable demotion exit rules</span>
+          </label>
+          <SettingsFieldGroup>
+            <SettingsField
+              id="demotion_max_hold_ratio"
+              label="Demoted max-hold ratio"
+              description="Fraction of max hold for demoted positions (0.5 = half; 0 = exit at next check)."
+            >
+              <Input
+                id="demotion_max_hold_ratio"
+                name="demotion_max_hold_ratio"
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                defaultValue={settings.demotion_max_hold_ratio ?? 0.5}
+              />
+            </SettingsField>
+            <SettingsField
+              id="demotion_jev_sell_max_loss_pct"
+              label="Demoted Jev sell max loss (%)"
+              description="Allow Jev SELL on demoted names while loss is within this %."
+            >
+              <Input
+                id="demotion_jev_sell_max_loss_pct"
+                name="demotion_jev_sell_max_loss_pct"
+                type="number"
+                min={0}
+                max={25}
+                step={0.1}
+                defaultValue={(settings.demotion_jev_sell_max_loss_pct ?? 0.02) * 100}
+              />
+            </SettingsField>
+          </SettingsFieldGroup>
+          <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-200">
+            <input
+              type="checkbox"
+              name="demotion_jev_sell_on_loss"
+              defaultChecked={settings.demotion_jev_sell_on_loss ?? true}
+              className="mt-0.5 rounded border-zinc-700"
+            />
+            <span className="text-xs">
+              Allow Jev SELL on demoted positions even when underwater (within max loss)
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-200">
+            <input
+              type="checkbox"
+              name="demotion_force_exit"
+              defaultChecked={settings.demotion_force_exit ?? false}
+              className="mt-0.5 rounded border-zinc-700"
+            />
+            <span className="text-xs">
+              Force market exit when a position is demoted (off by default)
+            </span>
+          </label>
+        </div>
+      )}
+
       <div>
         <p className="text-sm font-medium text-zinc-200">Effective watchlist</p>
         <p className="mt-1 text-xs text-zinc-500">

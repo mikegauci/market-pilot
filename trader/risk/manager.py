@@ -4,7 +4,9 @@ import logging
 import math
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
+
+from watchlist.demotion import is_demoted_symbol, jev_sell_exit_allowed
 
 from models.types import (
     ClosedTrade,
@@ -157,6 +159,7 @@ class RiskManager:
         self,
         quotes_by_symbol: Dict[str, Quote],
         *,
+        max_hold_for_symbol: Optional[Callable[[str], float]] = None,
         max_hold_minutes: Optional[float] = None,
     ) -> List[ClosedTrade]:
         closed: List[ClosedTrade] = []
@@ -184,11 +187,17 @@ class RiskManager:
             elif price >= trade.take_profit:
                 exit_price = trade.take_profit
                 reason = "take_profit"
-            elif max_hold_minutes is not None and max_hold_minutes > 0:
-                hold_limit = trade.entry_time + timedelta(minutes=max_hold_minutes)
-                if datetime.now(timezone.utc) >= hold_limit:
-                    exit_price = price
-                    reason = "time_exit"
+            else:
+                hold_minutes = (
+                    max_hold_for_symbol(trade.symbol)
+                    if max_hold_for_symbol is not None
+                    else (max_hold_minutes or 0.0)
+                )
+                if hold_minutes > 0:
+                    hold_limit = trade.entry_time + timedelta(minutes=hold_minutes)
+                    if datetime.now(timezone.utc) >= hold_limit:
+                        exit_price = price
+                        reason = "time_exit"
 
             if exit_price is None:
                 remaining.append(trade)
@@ -197,6 +206,34 @@ class RiskManager:
             closed.append(self._build_closed_trade(trade, exit_price, reason))
 
         self.open_trades = remaining
+        return closed
+
+    def check_demotion_exits(
+        self,
+        quotes_by_symbol: Dict[str, Quote],
+    ) -> List[ClosedTrade]:
+        """Market-close simulated trades when demotion force-exit is enabled."""
+        if not self.settings.demotion_exits_enabled or not self.settings.demotion_force_exit:
+            return []
+
+        closed: List[ClosedTrade] = []
+        closed_ids: set[str] = set()
+
+        for trade in self.open_trades:
+            if trade.execution_mode == "ibkr":
+                continue
+            if not is_demoted_symbol(trade.symbol, self.settings):
+                continue
+
+            quote = quotes_by_symbol.get(trade.symbol)
+            if quote is None or quote.price is None:
+                continue
+
+            closed.append(self._build_closed_trade(trade, quote.price, "demotion_exit"))
+            closed_ids.add(trade.id)
+
+        if closed_ids:
+            self.open_trades = [t for t in self.open_trades if t.id not in closed_ids]
         return closed
 
     def can_jev_sell_exit(
@@ -215,16 +252,17 @@ class RiskManager:
         if quote is None or quote.price is None:
             return False
 
+        if jev_sell_exit_allowed(trade, self.settings, quote):
+            return True
+
         pnl = (quote.price - trade.entry_price) * trade.quantity
-        if pnl < 0:
-            if log_skip:
-                logger.info(
-                    "Filter: skipping Jev SELL exit for %s — unrealized loss ($%.2f)",
-                    symbol,
-                    pnl,
-                )
-            return False
-        return True
+        if log_skip and pnl < 0:
+            logger.info(
+                "Filter: skipping Jev SELL exit for %s — unrealized loss ($%.2f)",
+                symbol,
+                pnl,
+            )
+        return False
 
     def check_jev_exit(
         self,

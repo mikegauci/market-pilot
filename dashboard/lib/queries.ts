@@ -1,3 +1,4 @@
+import { normalizeSettings } from "@/lib/normalize-settings";
 import { createClient } from "@/lib/supabase/server";
 import type {
   BotStatus,
@@ -20,7 +21,7 @@ export async function getBotStatus(): Promise<BotStatus | null> {
 export async function getSettings(): Promise<Settings | null> {
   const supabase = await createClient();
   const { data } = await supabase.from("settings").select("*").eq("id", 1).single();
-  return data as Settings | null;
+  return normalizeSettings(data as Settings | null);
 }
 
 export async function getLatestPortfolio(): Promise<PortfolioSnapshot | null> {

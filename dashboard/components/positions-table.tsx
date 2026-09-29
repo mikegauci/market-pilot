@@ -10,7 +10,8 @@ import { fetchActiveTradeCommands, fetchOpenTrades, fetchPositions } from "@/lib
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import { useTraderOnline } from "@/lib/hooks/use-trader-online";
 import { tradeForPosition } from "@/lib/trade-matching";
-import type { BotStatus, Position, Trade, TradeCommand } from "@/lib/types/database";
+import { isOffEffectiveWatchlist } from "@/lib/demotion";
+import type { BotStatus, Position, Settings, Trade, TradeCommand } from "@/lib/types/database";
 import { formatCurrency } from "@/lib/utils";
 
 type Props = {
@@ -18,6 +19,7 @@ type Props = {
   openTrades: Trade[];
   tradeCommands: TradeCommand[];
   botStatus: BotStatus;
+  settings?: Settings | null;
 };
 
 export function PositionsTable({
@@ -25,6 +27,7 @@ export function PositionsTable({
   openTrades,
   tradeCommands,
   botStatus,
+  settings,
 }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const traderOnline = useTraderOnline(botStatus);
@@ -95,7 +98,19 @@ export function PositionsTable({
                           )}
                         </button>
                       </td>
-                      <td className="py-2 pr-4 font-medium">{p.symbol}</td>
+                      <td className="py-2 pr-4 font-medium">
+                        <span className="inline-flex items-center gap-2">
+                          {p.symbol}
+                          {settings && isOffEffectiveWatchlist(p.symbol, settings) && (
+                            <span
+                              className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-400"
+                              title="Open position no longer on the effective top-N watchlist; tighter exit rules apply"
+                            >
+                              Demoted
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td className="py-2 pr-4">{p.quantity}</td>
                       <td className="py-2 pr-4">{formatCurrency(p.avg_cost)}</td>
                       <td className="py-2 pr-4">{formatCurrency(p.market_price)}</td>

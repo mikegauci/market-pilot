@@ -167,10 +167,18 @@ export function SettingsSummary({
           </p>
         </div>
         {settings.watchlist_dynamic_enabled && (
-          <p className="text-xs text-zinc-500">
-            Jev dynamic EM scan every {settings.watchlist_refresh_minutes ?? 30} min · top{" "}
-            {settings.watchlist_dynamic_size ?? 5} · benchmark EEM
-          </p>
+          <>
+            <p className="text-xs text-zinc-500">
+              Jev dynamic EM scan every {settings.watchlist_refresh_minutes ?? 30} min · top{" "}
+              {settings.watchlist_dynamic_size ?? 5} · benchmark EEM
+            </p>
+            {settings.demotion_exits_enabled && (
+              <p className="text-xs text-zinc-500">
+                Demotion exits: max-hold ×{settings.demotion_max_hold_ratio ?? 0.5}
+                {settings.demotion_force_exit ? " · force exit on" : ""}
+              </p>
+            )}
+          </>
         )}
         <StrategyIndicatorsCard
           compact

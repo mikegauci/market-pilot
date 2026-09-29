@@ -42,6 +42,11 @@ export type ParsedSettings = {
   watchlist_dynamic_size: number;
   watchlist_refresh_minutes: number;
   benchmark_symbol: string;
+  demotion_exits_enabled: boolean;
+  demotion_max_hold_ratio: number;
+  demotion_jev_sell_on_loss: boolean;
+  demotion_jev_sell_max_loss_pct: number;
+  demotion_force_exit: boolean;
 };
 
 function parseRiskProfile(formData: FormData): RiskProfile {
@@ -149,6 +154,30 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
 
   const effectiveWatchlist = watchlist_dynamic_enabled ? undefined : watchlist_core;
 
+  const demotion_exits_enabled =
+    String(formData.get("demotion_exits_enabled") ?? "") === "on";
+  const demotion_max_hold_ratio = Number(formData.get("demotion_max_hold_ratio") ?? 0.5);
+  if (
+    !Number.isFinite(demotion_max_hold_ratio) ||
+    demotion_max_hold_ratio < 0 ||
+    demotion_max_hold_ratio > 1
+  ) {
+    throw new Error("Demotion max-hold ratio must be between 0 and 1");
+  }
+  const demotion_jev_sell_on_loss =
+    String(formData.get("demotion_jev_sell_on_loss") ?? "") === "on";
+  const demotion_jev_sell_max_loss_pct = Number(
+    formData.get("demotion_jev_sell_max_loss_pct") ?? 2,
+  );
+  if (
+    !Number.isFinite(demotion_jev_sell_max_loss_pct) ||
+    demotion_jev_sell_max_loss_pct < 0 ||
+    demotion_jev_sell_max_loss_pct > 25
+  ) {
+    throw new Error("Demotion Jev sell max loss must be between 0 and 25 (%)");
+  }
+  const demotion_force_exit = String(formData.get("demotion_force_exit") ?? "") === "on";
+
   return {
     minimum_jev_confidence,
     signal_record_threshold,
@@ -167,5 +196,10 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     watchlist_dynamic_size,
     watchlist_refresh_minutes,
     benchmark_symbol,
+    demotion_exits_enabled,
+    demotion_max_hold_ratio,
+    demotion_jev_sell_on_loss,
+    demotion_jev_sell_max_loss_pct: demotion_jev_sell_max_loss_pct / 100,
+    demotion_force_exit,
   };
 }

@@ -35,6 +35,11 @@ export type Settings = {
   benchmark_symbol: string;
   watchlist_jev_rankings: JevRanking[];
   watchlist_screener_ran_at: string | null;
+  demotion_exits_enabled: boolean;
+  demotion_max_hold_ratio: number;
+  demotion_jev_sell_on_loss: boolean;
+  demotion_jev_sell_max_loss_pct: number;
+  demotion_force_exit: boolean;
   em_universe_synced_at: string | null;
   em_universe_source: string | null;
   updated_at: string;
@@ -118,6 +123,7 @@ export type Trade = {
   paper_or_live: "paper" | "live";
   jev_buy_probability: number | null;
   execution_mode?: "simulated" | "ibkr";
+  exit_reason?: string | null;
   created_at: string;
 };
 

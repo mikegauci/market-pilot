@@ -1,0 +1,17 @@
+import type { Settings } from "@/lib/types/database";
+
+/** Apply defaults for settings columns that may be missing on older rows. */
+export function normalizeSettings(raw: Settings | null): Settings | null {
+  if (!raw) {
+    return null;
+  }
+
+  return {
+    ...raw,
+    demotion_exits_enabled: raw.demotion_exits_enabled ?? true,
+    demotion_max_hold_ratio: raw.demotion_max_hold_ratio ?? 0.5,
+    demotion_jev_sell_on_loss: raw.demotion_jev_sell_on_loss ?? true,
+    demotion_jev_sell_max_loss_pct: raw.demotion_jev_sell_max_loss_pct ?? 0.02,
+    demotion_force_exit: raw.demotion_force_exit ?? false,
+  };
+}
