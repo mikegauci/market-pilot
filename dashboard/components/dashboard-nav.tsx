@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, LineChart, LogOut, Settings, TrendingUp } from "lucide-react";
+import { Activity, Layers, LineChart, LogOut, Settings, TrendingUp } from "lucide-react";
 import { LiveStatus } from "@/components/live-status";
 import { Logo } from "@/components/logo";
-import { MarketClock } from "@/components/market-clock";
 import { TradingControls } from "@/components/trading-controls";
 import { signOut } from "@/lib/actions";
 import { cn } from "@/lib/utils";
@@ -14,6 +13,7 @@ export const dashboardNavLinks = [
   { href: "/", label: "Overview", icon: LineChart },
   { href: "/predictions", label: "Predictions", icon: Activity },
   { href: "/trades", label: "Trades", icon: TrendingUp },
+  { href: "/strategy", label: "Strategy", icon: Layers },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -53,7 +53,6 @@ export function DashboardNavContent({
       <div className="mb-6">
         <Logo size={logoSize} />
         <p className="mt-2 text-xs text-zinc-500">Paper trading</p>
-        <MarketClock />
       </div>
 
       <nav className="flex flex-col gap-1">

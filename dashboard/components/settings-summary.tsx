@@ -13,7 +13,6 @@ import {
   type RiskProfile,
   type RiskRecommendationKey,
 } from "@/lib/risk-recommendations";
-import { StrategyIndicatorsCard } from "@/components/strategy-indicators-card";
 import { demotionHoldPolicyLabel } from "@/lib/demotion-presets";
 import type { Settings } from "@/lib/types/database";
 import { formatStrategyPercent } from "@/lib/strategy-recommendations";
@@ -186,11 +185,12 @@ export function SettingsSummary({
             )}
           </>
         )}
-        <StrategyIndicatorsCard
-          compact
-          benchmarkSymbol={settings.benchmark_symbol ?? "EEM"}
-          minVolumeRatio={settings.min_volume_ratio ?? 0}
-        />
+        <Link
+          href="/strategy"
+          className="inline-block text-xs text-emerald-400 hover:text-emerald-300"
+        >
+          View strategy guide →
+        </Link>
       </div>
     </Card>
   );

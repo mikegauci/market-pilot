@@ -1,5 +1,5 @@
+import Link from "next/link";
 import { SettingsForm } from "@/components/settings-form";
-import { StrategyIndicatorsCard } from "@/components/strategy-indicators-card";
 import { resolveBaselineEquity } from "@/lib/risk-recommendations";
 import { getEmUniverseStats, getLatestPortfolio, getSettings } from "@/lib/queries";
 import { formatCurrency } from "@/lib/utils";
@@ -59,24 +59,13 @@ export default async function SettingsPage() {
         emUniverse={emUniverse}
       />
 
-      <details className="group rounded-xl border border-zinc-800/80 bg-zinc-950/20">
-        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-zinc-300 marker:content-none sm:px-5 [&::-webkit-details-marker]:hidden">
-          <span className="inline-flex items-center gap-2">
-            <span className="inline-block text-zinc-500 transition group-open:rotate-90">
-              ▸
-            </span>
-            Indicators & filters (reference)
-          </span>
-        </summary>
-        <div className="border-t border-zinc-800/60 px-4 pb-4 pt-2 sm:px-5">
-          <StrategyIndicatorsCard
-            variant="reference"
-            embedded
-            benchmarkSymbol={settings.benchmark_symbol ?? "EEM"}
-            minVolumeRatio={settings.min_volume_ratio ?? 0}
-          />
-        </div>
-      </details>
+      <p className="text-sm text-zinc-500">
+        See{" "}
+        <Link href="/strategy" className="text-emerald-500/80 hover:text-emerald-400">
+          Indicators & Filters
+        </Link>{" "}
+        for a full guide to what the bot watches and which safety checks can block a trade.
+      </p>
     </div>
   );
 }
