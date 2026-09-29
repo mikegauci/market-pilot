@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { ClientDateTime } from "@/components/client-date-time";
 import { Input } from "@/components/ui/input";
 import { WatchlistCharts } from "@/components/watchlist-charts";
 import { WatchlistPicker } from "@/components/watchlist-picker";
@@ -24,7 +25,7 @@ import {
   resolveWatchlistScanStatus,
 } from "@/lib/effective-watchlist";
 import { formatStrategyPercent } from "@/lib/strategy-recommendations";
-import { cn, formatDateTimeFull } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 type EmUniverseStats = {
   count: number;
@@ -120,8 +121,8 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
         <p className="mt-1 text-xs text-zinc-500">
           {scanStatus.mode === "last_scan" ? (
             <>
-              Last successful scan {formatDateTimeFull(scanStatus.ranAt)}. Failed rescans keep
-              this list until the next success. Open positions are added at runtime.
+              Last successful scan <ClientDateTime value={scanStatus.ranAt} />. Failed rescans
+              keep this list until the next success. Open positions are added at runtime.
             </>
           ) : (
             formatWatchlistScanStatus(scanStatus)
@@ -356,9 +357,11 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
       {(settings.watchlist_jev_rankings?.length ?? 0) > 0 && (
         <SettingsCollapsible summary="Last Jev universe scan">
           <p className="mb-2 text-xs text-zinc-500">
-            {settings.watchlist_screener_ran_at
-              ? formatDateTimeFull(settings.watchlist_screener_ran_at)
-              : "Unknown time"}
+            {settings.watchlist_screener_ran_at ? (
+              <ClientDateTime value={settings.watchlist_screener_ran_at} />
+            ) : (
+              "Unknown time"
+            )}
           </p>
           <div className="max-h-48 overflow-y-auto rounded border border-zinc-800">
             <table className="w-full text-xs">
@@ -399,9 +402,14 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
             <>
               {emUniverse.tradableCount} tradable US-listed symbol
               {emUniverse.tradableCount === 1 ? "" : "s"}
-              {settings.em_universe_synced_at
-                ? ` · last sync ${formatDateTimeFull(settings.em_universe_synced_at)}`
-                : ""}
+              {settings.em_universe_synced_at ? (
+                <>
+                  {" · last sync "}
+                  <ClientDateTime value={settings.em_universe_synced_at} />
+                </>
+              ) : (
+                ""
+              )}
               {settings.em_universe_source ? ` · source ${settings.em_universe_source}` : ""}
               {" · "}
               Universe syncs weekly from EEM + IEMG holdings.

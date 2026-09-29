@@ -84,6 +84,8 @@ def backfill_watchlist_symbols(
     bar_store: BarStore,
     ibkr: IBKRClient,
     symbols: Sequence[str],
+    *,
+    on_progress: Optional[Callable[..., None]] = None,
 ) -> None:
     """Backfill watchlist/core symbols on the main thread (ib_insync needs its event loop)."""
     priority = list(dict.fromkeys(s.upper() for s in symbols if s))
@@ -109,6 +111,7 @@ def backfill_watchlist_symbols(
         stale,
         ibkr,
         pacing_sec=settings.bar_backfill_pacing_sec,
+        on_progress=on_progress,
     )
     logger.info(
         "Watchlist bar backfill complete — refreshed %s/%s symbol(s)",

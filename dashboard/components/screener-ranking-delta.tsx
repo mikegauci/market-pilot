@@ -1,5 +1,6 @@
 "use client";
 
+import { ClientDateTime } from "@/components/client-date-time";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
 import {
@@ -8,7 +9,7 @@ import {
   newSymbolsInScan,
 } from "@/lib/screener-ranking-delta";
 import type { WatchlistScreenerHistory } from "@/lib/types/database";
-import { cn, formatDateTimeFull } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 type Props = {
   history: WatchlistScreenerHistory[];
@@ -36,8 +37,15 @@ export function ScreenerRankingDelta({ history }: Props) {
     <Card>
       <CardTitle>Screener ranking changes</CardTitle>
       <p className="mt-1 text-xs text-zinc-600">
-        Latest scan {formatDateTimeFull(current.ran_at)}
-        {previous ? ` · vs ${formatDateTimeFull(previous.ran_at)}` : " · first recorded scan"}
+        Latest scan <ClientDateTime value={current.ran_at} />
+        {previous ? (
+          <>
+            {" · vs "}
+            <ClientDateTime value={previous.ran_at} />
+          </>
+        ) : (
+          " · first recorded scan"
+        )}
       </p>
 
       {(newcomers.length > 0 || dropped.length > 0) && (

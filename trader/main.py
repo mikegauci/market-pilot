@@ -208,6 +208,32 @@ def _sync_watchlist_symbols(
         )
 
 
+def _pulse_bot_status(
+    db: SupabaseRepository,
+    *,
+    enabled: bool,
+    trading_mode: TradingMode,
+    execution_mode: ExecutionMode,
+    ibkr_connected: bool,
+    jev_connected: bool = False,
+    last_error: Optional[str] = None,
+) -> None:
+    """Lightweight status write so the dashboard shows online during long startup work."""
+    try:
+        db.update_bot_status(
+            BotStatusUpdate(
+                enabled=enabled,
+                trading_mode=trading_mode,
+                execution_mode=execution_mode,
+                ibkr_connected=ibkr_connected,
+                jev_connected=jev_connected,
+                last_error=last_error,
+            )
+        )
+    except Exception as exc:
+        logger.warning("Bot status pulse failed: %s", exc)
+
+
 def _get_quotes(
     settings: Settings,
     ibkr: IBKRClient,
@@ -436,6 +462,18 @@ def run() -> int:
     elif settings.data_source == DataSource.MOCK:
         logger.info("News enrichment skipped in mock data mode")
 
+    bot_control = db.get_bot_control(settings.execution_mode)
+    trading_mode = bot_control.trading_mode
+    configured_execution_mode = bot_control.execution_mode
+    _pulse_bot_status(
+        db,
+        enabled=bot_control.enabled,
+        trading_mode=trading_mode,
+        execution_mode=configured_execution_mode,
+        ibkr_connected=False,
+        jev_connected=False,
+    )
+
     if settings.data_source == DataSource.IBKR:
         if _connect_ibkr(ibkr, max_attempts=3):
             global _ibkr_market_data_mode
@@ -446,6 +484,14 @@ def run() -> int:
                 settings.ibkr_port,
                 _ibkr_market_data_mode,
             )
+            _pulse_bot_status(
+                db,
+                enabled=bot_control.enabled,
+                trading_mode=trading_mode,
+                execution_mode=configured_execution_mode,
+                ibkr_connected=True,
+                jev_connected=False,
+            )
             # Core + open positions + dynamic picks — otherwise symbols like JPM
             # (on screener list / held but not always-on core) never get bars.
             open_symbols = [trade.symbol for trade in db.get_open_trades()]
@@ -455,8 +501,26 @@ def run() -> int:
                     + resolve_trading_watchlist(risk_settings, open_symbols)
                 )
             )
+
+            def _on_backfill_progress(result: object, index: int, total: int) -> None:
+                del result
+                if index == 1 or index == total or index % 5 == 0:
+                    logger.info("Watchlist backfill progress %s/%s", index, total)
+                    _pulse_bot_status(
+                        db,
+                        enabled=bot_control.enabled,
+                        trading_mode=trading_mode,
+                        execution_mode=configured_execution_mode,
+                        ibkr_connected=True,
+                        jev_connected=False,
+                    )
+
             backfill_watchlist_symbols(
-                settings, bar_store, ibkr, priority_symbols
+                settings,
+                bar_store,
+                ibkr,
+                priority_symbols,
+                on_progress=_on_backfill_progress,
             )
             for symbol in priority_symbols:
                 bar_store.seed_minute_aggregator(
@@ -478,14 +542,28 @@ def run() -> int:
                     em_scheduler.mark_backfill_unavailable()
             else:
                 em_scheduler.mark_backfill_unavailable()
+            _pulse_bot_status(
+                db,
+                enabled=bot_control.enabled,
+                trading_mode=trading_mode,
+                execution_mode=configured_execution_mode,
+                ibkr_connected=True,
+                jev_connected=False,
+            )
         else:
             logger.warning("IBKR unavailable — falling back to mock market data")
+            _pulse_bot_status(
+                db,
+                enabled=bot_control.enabled,
+                trading_mode=trading_mode,
+                execution_mode=configured_execution_mode,
+                ibkr_connected=False,
+                jev_connected=False,
+                last_error="IBKR unavailable — using mock data",
+            )
     else:
         logger.info("Using mock market data (IBKR not required)")
 
-    bot_control = db.get_bot_control(settings.execution_mode)
-    trading_mode = bot_control.trading_mode
-    configured_execution_mode = bot_control.execution_mode
     execution_mode = effective_execution_mode(
         settings.data_source, configured_execution_mode
     )
