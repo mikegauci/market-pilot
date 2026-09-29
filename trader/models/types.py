@@ -91,6 +91,7 @@ class MarketState:
     news_top_headline: Optional[str] = None
     news_tags: Optional[List[str]] = None
     news_fetched_at: Optional[str] = None
+    news_articles: Optional[List[Dict[str, Any]]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         payload = asdict(self)

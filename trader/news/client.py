@@ -1,21 +1,29 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import FrozenSet, List, Optional
+from typing import Any, Dict, FrozenSet, List, Optional
 
 import httpx
 
 from news.cache import CooldownTracker, TtlCache
-from news.sentiment import NewsArticle, NewsContext, score_articles
+from news.sentiment import (
+    NewsArticle,
+    NewsContext,
+    published_at_from_unix,
+    score_articles,
+    score_single_article,
+)
 
 logger = logging.getLogger(__name__)
 
 FINNHUB_NEWS_URL = "https://finnhub.io/api/v1/company-news"
+FINNHUB_MARKET_NEWS_URL = "https://finnhub.io/api/v1/news"
 
 
 class FetchStatus(str, Enum):
@@ -32,12 +40,136 @@ class FetchOutcome:
     retry_after_sec: float = 60.0
 
 
+@dataclass(frozen=True)
+class MarketNewsItem:
+    id: int
+    headline: str
+    summary: str
+    url: str
+    source: str
+    image: str
+    category: str
+    related: str
+    related_symbols: List[str]
+    published_at: str
+    sentiment: float
+    tags: List[str]
+
+    def to_row(self, *, fetched_at: str) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "headline": self.headline,
+            "summary": self.summary or None,
+            "url": self.url or None,
+            "source": self.source or None,
+            "image": self.image or None,
+            "category": self.category,
+            "related": self.related or None,
+            "related_symbols": self.related_symbols,
+            "published_at": self.published_at,
+            "fetched_at": fetched_at,
+            "sentiment": self.sentiment,
+            "tags": self.tags,
+        }
+
+
 def _http_status_message(exc: httpx.HTTPStatusError) -> str:
     return f"HTTP {exc.response.status_code}"
 
 
+def _stable_news_id(
+    raw_id: object,
+    *,
+    url: str,
+    headline: str,
+    published_ts: int,
+) -> int:
+    if raw_id is not None and str(raw_id).strip():
+        try:
+            return int(raw_id)
+        except (TypeError, ValueError):
+            pass
+    key = url or f"{headline}|{published_ts}"
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:15]
+    return int(digest, 16)
+
+
+def parse_related_symbols(related: str) -> List[str]:
+    if not related or not related.strip():
+        return []
+    symbols: List[str] = []
+    seen: set[str] = set()
+    for part in related.replace(";", ",").split(","):
+        symbol = part.strip().upper()
+        if not symbol or symbol in seen:
+            continue
+        seen.add(symbol)
+        symbols.append(symbol)
+    return symbols
+
+
+def _parse_general_articles(
+    raw: list,
+    *,
+    category: str,
+    max_items: int = 100,
+) -> List[MarketNewsItem]:
+    sorted_items = sorted(
+        raw,
+        key=lambda item: int(item.get("datetime", 0)),
+        reverse=True,
+    )
+    articles: List[MarketNewsItem] = []
+    for item in sorted_items:
+        headline = str(item.get("headline", "")).strip()
+        if not headline:
+            continue
+        published_ts = int(item.get("datetime", 0))
+        published_at = published_at_from_unix(published_ts)
+        if not published_at:
+            continue
+        summary = str(item.get("summary", "")).strip()
+        url = str(item.get("url", "")).strip()
+        source = str(item.get("source", "")).strip()
+        image = str(item.get("image", "")).strip()
+        related = str(item.get("related", "")).strip()
+        article = NewsArticle(
+            headline=headline,
+            summary=summary,
+            url=url,
+            source=source,
+            published_at=published_at,
+            image=image,
+        )
+        sentiment, tags = score_single_article(article)
+        articles.append(
+            MarketNewsItem(
+                id=_stable_news_id(
+                    item.get("id"),
+                    url=url,
+                    headline=headline,
+                    published_ts=published_ts,
+                ),
+                headline=headline,
+                summary=summary,
+                url=url,
+                source=source,
+                image=image,
+                category=str(item.get("category") or category),
+                related=related,
+                related_symbols=parse_related_symbols(related),
+                published_at=published_at,
+                sentiment=sentiment,
+                tags=tags,
+            )
+        )
+        if len(articles) >= max_items:
+            break
+    return articles
+
+
 class FinnhubNewsClient:
-    """Fetch company news from Finnhub and score with rule-based sentiment."""
+    """Fetch company and general market news from Finnhub."""
 
     def __init__(
         self,
@@ -143,6 +275,59 @@ class FinnhubNewsClient:
             status=FetchStatus.OK,
         )
 
+    def fetch_general_news(
+        self,
+        *,
+        category: str = "general",
+        max_items: int = 100,
+    ) -> tuple[List[MarketNewsItem], FetchStatus]:
+        params = {"category": category, "token": self.api_key}
+        raw: object = None
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                with httpx.Client(timeout=self.timeout_sec) as client:
+                    response = client.get(FINNHUB_MARKET_NEWS_URL, params=params)
+
+                if response.status_code == 429:
+                    retry_after = float(response.headers.get("retry-after", 60))
+                    logger.warning(
+                        "Finnhub general news rate limited (attempt %s/%s), retry in %.1fs",
+                        attempt,
+                        self.max_retries,
+                        retry_after,
+                    )
+                    if attempt < self.max_retries:
+                        time.sleep(retry_after)
+                        continue
+                    return [], FetchStatus.RATE_LIMITED
+
+                response.raise_for_status()
+                raw = response.json()
+                break
+            except httpx.HTTPStatusError as exc:
+                logger.warning(
+                    "Finnhub general news HTTP error: %s",
+                    _http_status_message(exc),
+                )
+                if exc.response.status_code in {401, 403}:
+                    return [], FetchStatus.ERROR
+            except Exception as exc:
+                logger.warning("Finnhub general news request failed: %s", exc)
+
+            if attempt < self.max_retries:
+                time.sleep(2 ** attempt)
+        else:
+            return [], FetchStatus.ERROR
+
+        if not isinstance(raw, list):
+            logger.warning("Unexpected Finnhub general news response")
+            return [], FetchStatus.ERROR
+
+        articles = _parse_general_articles(raw, category=category, max_items=max_items)
+        if not articles:
+            return [], FetchStatus.EMPTY
+        return articles, FetchStatus.OK
+
 
 def _parse_articles(raw: list, max_headlines: int, *, since_ts: float) -> List[NewsArticle]:
     sorted_items = sorted(
@@ -159,7 +344,19 @@ def _parse_articles(raw: list, max_headlines: int, *, since_ts: float) -> List[N
         if not headline:
             continue
         summary = str(item.get("summary", "")).strip()
-        articles.append(NewsArticle(headline=headline, summary=summary))
+        url = str(item.get("url", "")).strip()
+        source = str(item.get("source", "")).strip()
+        image = str(item.get("image", "")).strip()
+        articles.append(
+            NewsArticle(
+                headline=headline,
+                summary=summary,
+                url=url,
+                source=source,
+                published_at=published_at_from_unix(published_ts),
+                image=image,
+            )
+        )
         if len(articles) >= max_headlines:
             break
     return articles

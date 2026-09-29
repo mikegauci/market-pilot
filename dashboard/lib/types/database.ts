@@ -79,12 +79,38 @@ export type RankingDelta = {
   buy: number;
 };
 
+export type NewsArticleSnapshot = {
+  headline: string;
+  summary?: string | null;
+  url?: string | null;
+  source?: string | null;
+  published_at?: string | null;
+  image?: string | null;
+};
+
+export type MarketNewsRow = {
+  id: number;
+  headline: string;
+  summary: string | null;
+  url: string | null;
+  source: string | null;
+  image: string | null;
+  category: string;
+  related: string | null;
+  related_symbols: string[];
+  published_at: string;
+  fetched_at: string;
+  sentiment: number | null;
+  tags: string[];
+};
+
 export type MarketSnapshotNews = {
   news_sentiment?: number | null;
   news_headline_count?: number | null;
   news_top_headline?: string | null;
   news_tags?: string[] | null;
   news_fetched_at?: string | null;
+  news_articles?: NewsArticleSnapshot[] | null;
 };
 
 export type MarketSnapshot = MarketSnapshotNews & {

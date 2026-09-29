@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   BotStatus,
   EmUniverseRow,
+  MarketNewsRow,
   PortfolioSnapshot,
   Position,
   Prediction,
@@ -154,6 +155,16 @@ export async function getPredictions(limit = 50, symbol?: string): Promise<Predi
   }
   const { data } = await query;
   return (data ?? []) as Prediction[];
+}
+
+export async function getMarketNews(limit = 100): Promise<MarketNewsRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("market_news")
+    .select("*")
+    .order("published_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as MarketNewsRow[];
 }
 
 export async function getEmUniverseStats(): Promise<{

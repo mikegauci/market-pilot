@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type {
+  MarketNewsRow,
   PortfolioSnapshot,
   Position,
   Prediction,
@@ -42,6 +43,20 @@ export async function fetchPredictions(limit = 50, symbol?: string): Promise<Pre
     return [];
   }
   return (data ?? []) as Prediction[];
+}
+
+export async function fetchMarketNews(limit = 100): Promise<MarketNewsRow[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("market_news")
+    .select("*")
+    .order("published_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    logFetchError("market_news", error.message);
+    return [];
+  }
+  return (data ?? []) as MarketNewsRow[];
 }
 
 export async function fetchTradedPredictions(limit = 10): Promise<Prediction[]> {

@@ -1,12 +1,17 @@
 "use client";
 
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
 import { PredictionIndicators } from "@/components/prediction-indicators";
 import { fetchPredictions } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
+import {
+  hasNewsSignal,
+  sentimentClass,
+  sentimentLabel,
+} from "@/lib/news-feed";
 import type { MarketSnapshot, Prediction } from "@/lib/types/database";
 import { formatCurrency, formatDateTime, formatPercent } from "@/lib/utils";
 
@@ -37,18 +42,6 @@ function comparePredictions(a: Prediction, b: Prediction, key: SortKey): number 
     case "trade_created":
       return Number(a.trade_created) - Number(b.trade_created);
   }
-}
-
-function sentimentLabel(sentiment: number): string {
-  if (sentiment > 0.1) return "bullish";
-  if (sentiment < -0.1) return "bearish";
-  return "neutral";
-}
-
-function sentimentClass(sentiment: number): string {
-  if (sentiment > 0.1) return "bg-emerald-900 text-emerald-300";
-  if (sentiment < -0.1) return "bg-red-900 text-red-300";
-  return "bg-zinc-800 text-zinc-300";
 }
 
 const SKIP_REASON_LABELS: Record<string, string> = {
@@ -113,11 +106,7 @@ function TradeCell({ prediction }: { prediction: Prediction }) {
 }
 
 function NewsCell({ snapshot }: { snapshot?: MarketSnapshot | null }) {
-  if (
-    snapshot?.news_sentiment == null &&
-    !snapshot?.news_top_headline &&
-    !(snapshot?.news_tags && snapshot.news_tags.length > 0)
-  ) {
+  if (!hasNewsSignal(snapshot)) {
     return <span className="text-zinc-600">—</span>;
   }
 
@@ -162,22 +151,43 @@ function NewsCell({ snapshot }: { snapshot?: MarketSnapshot | null }) {
 export function PredictionsFeed({
   predictions,
   filterOptions = {},
+  initialExpandedId = null,
+  limit = 50,
 }: {
   predictions: Prediction[];
   filterOptions?: {
     minVolumeRatio?: number;
     benchmarkSymbol?: string;
   };
+  initialExpandedId?: string | null;
+  limit?: number;
 }) {
   const [symbolFilter, setSymbolFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("timestamp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(initialExpandedId);
 
-  const loadPredictions = useCallback(() => fetchPredictions(50), []);
+  const loadPredictions = useCallback(() => fetchPredictions(limit), [limit]);
   const livePredictions = useLiveQuery(predictions, loadPredictions, ["predictions"]);
 
+  useEffect(() => {
+    setExpandedId(initialExpandedId);
+  }, [initialExpandedId]);
+
+  useEffect(() => {
+    if (!initialExpandedId) return;
+    const el = document.getElementById(`prediction-${initialExpandedId}`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [initialExpandedId, livePredictions]);
+
   const symbols = [...new Set(livePredictions.map((p) => p.symbol))].sort();
+
+  useEffect(() => {
+    if (symbolFilter && !symbols.includes(symbolFilter)) {
+      setSymbolFilter("");
+    }
+  }, [symbols, symbolFilter]);
+
   const filtered = symbolFilter
     ? livePredictions.filter((p) => p.symbol === symbolFilter)
     : livePredictions;
@@ -271,7 +281,10 @@ export function PredictionsFeed({
 
                 return (
                   <Fragment key={p.id}>
-                    <tr className="border-b border-zinc-800/50">
+                    <tr
+                      id={`prediction-${p.id}`}
+                      className="border-b border-zinc-800/50"
+                    >
                       <td className="py-2 pr-2">
                         {hasExpandableDetail ? (
                           <button

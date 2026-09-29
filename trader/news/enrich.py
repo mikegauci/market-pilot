@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 
 def apply_news_context(state: MarketState, context: NewsContext) -> MarketState:
+    articles = [article.to_dict() for article in context.articles] or None
     return replace(
         state,
         news_sentiment=context.sentiment,
@@ -18,6 +19,7 @@ def apply_news_context(state: MarketState, context: NewsContext) -> MarketState:
         news_top_headline=context.top_headline or None,
         news_tags=context.tags or None,
         news_fetched_at=context.fetched_at,
+        news_articles=articles,
     )
 
 

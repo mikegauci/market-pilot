@@ -1,14 +1,27 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
-from typing import Iterable, List, Sequence
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 
 @dataclass(frozen=True)
 class NewsArticle:
     headline: str
     summary: str = ""
+    url: str = ""
+    source: str = ""
+    published_at: Optional[str] = None
+    image: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        payload = asdict(self)
+        # Drop empty optional strings for a compact snapshot.
+        for key in ("summary", "url", "source", "image"):
+            if not payload.get(key):
+                payload[key] = None
+        return payload
 
 
 @dataclass(frozen=True)
@@ -18,6 +31,7 @@ class NewsContext:
     top_headline: str
     tags: List[str]
     fetched_at: str
+    articles: List[NewsArticle]
 
 
 _NEGATIVE_RULES: Sequence[tuple[re.Pattern[str], str, float]] = (
@@ -47,6 +61,32 @@ _EVENT_RULES: Sequence[tuple[re.Pattern[str], str]] = (
 
 def _article_text(article: NewsArticle) -> str:
     return f"{article.headline} {article.summary}".strip()
+
+
+def published_at_from_unix(ts: int) -> Optional[str]:
+    if ts <= 0:
+        return None
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+
+
+def score_single_article(article: NewsArticle) -> tuple[float, List[str]]:
+    """Rule-based sentiment/tags for one article (used for general market news)."""
+    text = _article_text(article)
+    score = 0.0
+    tags: set[str] = set()
+    for pattern, tag, delta in _NEGATIVE_RULES:
+        if pattern.search(text):
+            tags.add(tag)
+            score += delta
+    for pattern, tag, delta in _POSITIVE_RULES:
+        if pattern.search(text):
+            tags.add(tag)
+            score += delta
+    for pattern, tag in _EVENT_RULES:
+        if pattern.search(text):
+            tags.add(tag)
+    sentiment = max(-1.0, min(1.0, score))
+    return round(sentiment, 3), sorted(tags)
 
 
 def score_articles(
@@ -84,4 +124,5 @@ def score_articles(
         top_headline=top,
         tags=sorted(tags),
         fetched_at=fetched_at,
+        articles=article_list,
     )

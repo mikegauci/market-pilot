@@ -26,10 +26,15 @@ from models.types import (
     TradeRecord,
     TradingMode,
 )
+from news.market_news import dedupe_market_news_rows
 
 logger = logging.getLogger(__name__)
 
 MAX_EM_UNIVERSE_SIZE = 80
+
+# Failure backoff so a bad Finnhub/DB cycle does not wait the full refresh interval.
+GENERAL_NEWS_FAILURE_BACKOFF_SEC = 60.0
+
 
 # Postgres may return variable fractional digits (e.g. .99074); Python 3.9 needs 6.
 _ISO_FRACTION = re.compile(r"\.(\d+)([+-])")
@@ -734,6 +739,25 @@ class SupabaseRepository:
             "trade_skip_reason": None if trade_created else trade_skip_reason,
         }
         self.client.table("predictions").insert(payload).execute()
+
+    def upsert_market_news(self, rows: List[dict], *, keep: int = 100) -> int:
+        if not rows:
+            return 0
+        deduped = dedupe_market_news_rows(rows)
+        if not deduped:
+            return 0
+        self.client.table("market_news").upsert(deduped, on_conflict="id").execute()
+        overflow = (
+            self.client.table("market_news")
+            .select("id")
+            .order("published_at", desc=True)
+            .range(keep, keep + 999)
+            .execute()
+        )
+        stale_ids = [row["id"] for row in (overflow.data or [])]
+        if stale_ids:
+            self.client.table("market_news").delete().in_("id", stale_ids).execute()
+        return len(deduped)
 
     def reclaim_stale_trade_commands(self, stale_after_sec: float = 120.0) -> int:
         cutoff = (

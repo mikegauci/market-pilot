@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     news_enabled: bool = False
     finnhub_api_key: str = ""
     news_cache_ttl_sec: float = 600.0
+    news_general_refresh_sec: float = 600.0
     news_lookback_hours: int = 24
     news_max_headlines: int = 5
     news_skip_symbols: str = "SPY,QQQ,IWM,DIA"
@@ -81,6 +82,7 @@ class Settings(BaseSettings):
     news_failure_cooldown_sec: float = 60.0
     news_fetch_workers: int = 3
     news_max_retries: int = 3
+    news_general_keep: int = 100
 
     em_universe_path: str = ""
     bar_backfill_pacing_sec: float = 12.0

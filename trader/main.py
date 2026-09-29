@@ -21,12 +21,12 @@ from broker.reconcile import reconcile_orphan_ibkr_positions
 from config import Settings, load_settings
 from execution_mode import effective_execution_mode
 from instance_lock import acquire_trader_lock
-from database.supabase import SupabaseRepository
+from database.supabase import GENERAL_NEWS_FAILURE_BACKOFF_SEC, SupabaseRepository
 from jev.client import JevClient
 from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
 from news.cache import TtlCache
-from news.client import FinnhubNewsClient, NewsService
+from news.client import FetchStatus, FinnhubNewsClient, NewsService
 from news.enrich import enrich_market_state_with_news
 from news.sentiment import NewsContext
 from market.hours import is_us_regular_session_open
@@ -410,6 +410,7 @@ def run() -> int:
             logger.warning("JEV_ENABLED=true but TYPESAFE_AI_API_KEY is not set — skipping Jev calls")
 
     news_service: Optional[NewsService] = None
+    news_client: Optional[FinnhubNewsClient] = None
     if settings.news_enabled and settings.data_source != DataSource.MOCK:
         news_client = FinnhubNewsClient(
             settings.finnhub_api_key,
@@ -427,8 +428,9 @@ def run() -> int:
             fetch_workers=settings.news_fetch_workers,
         )
         logger.info(
-            "News enrichment enabled (Finnhub, cache TTL %.0fs, skip %s)",
+            "News enrichment enabled (Finnhub, cache TTL %.0fs, general refresh %.0fs, skip %s)",
             settings.news_cache_ttl_sec,
+            settings.news_general_refresh_sec,
             ", ".join(sorted(settings.news_skip_symbol_set)) or "none",
         )
     elif settings.data_source == DataSource.MOCK:
@@ -541,7 +543,63 @@ def run() -> int:
     last_bot_control_sync = startup_mono
     last_settings_sync = startup_mono
     last_portfolio_history = 0.0
+    last_general_news_refresh = 0.0
+    general_news_running = False
+    general_news_lock = threading.Lock()
     data_source_label = "ibkr" if ibkr.is_connected() else "mock"
+
+    def _start_general_news_refresh() -> None:
+        nonlocal last_general_news_refresh, general_news_running
+        if news_client is None or db is None:
+            return
+        with general_news_lock:
+            if general_news_running:
+                return
+            general_news_running = True
+            # Prevent re-fire while the worker is in flight.
+            last_general_news_refresh = time.monotonic()
+
+        client = news_client
+        repo = db
+        keep = settings.news_general_keep
+        full_interval = settings.news_general_refresh_sec
+
+        def worker() -> None:
+            nonlocal last_general_news_refresh, general_news_running
+            success = False
+            try:
+                items, status = client.fetch_general_news(max_items=keep)
+                if status == FetchStatus.OK and items:
+                    fetched_at = datetime.now(timezone.utc).isoformat()
+                    rows = [item.to_row(fetched_at=fetched_at) for item in items]
+                    count = repo.upsert_market_news(rows, keep=keep)
+                    logger.info("Upserted %s general market news articles", count)
+                    success = True
+                elif status == FetchStatus.EMPTY:
+                    logger.info("General market news fetch returned empty")
+                    success = True
+                else:
+                    logger.warning(
+                        "General market news fetch status: %s", status.value
+                    )
+            except Exception as exc:
+                logger.warning("General market news refresh failed: %s", exc)
+            finally:
+                now = time.monotonic()
+                with general_news_lock:
+                    if success:
+                        last_general_news_refresh = now
+                    else:
+                        # Retry sooner than the full refresh interval.
+                        backoff = min(GENERAL_NEWS_FAILURE_BACKOFF_SEC, full_interval)
+                        last_general_news_refresh = now - full_interval + backoff
+                    general_news_running = False
+
+        threading.Thread(
+            target=worker,
+            name="general-market-news",
+            daemon=True,
+        ).start()
 
     while not _shutdown_requested:
         loop_start = time.monotonic()
@@ -565,6 +623,16 @@ def run() -> int:
                         settings.data_source, configured_execution_mode
                     )
                     last_bot_control_sync = now_mono
+
+                if (
+                    news_client is not None
+                    and should_refresh(
+                        now_mono,
+                        last_general_news_refresh,
+                        settings.news_general_refresh_sec,
+                    )
+                ):
+                    _start_general_news_refresh()
 
                 if should_refresh(
                     now_mono,

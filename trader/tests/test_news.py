@@ -14,6 +14,8 @@ from news.client import (
     NewsService,
     _http_status_message,
     _parse_articles,
+    _parse_general_articles,
+    parse_related_symbols,
 )
 from news.enrich import apply_news_context, enrich_market_state_with_news
 from news.sentiment import NewsArticle, NewsContext, score_articles
@@ -60,16 +62,32 @@ class TestNewsSentiment(unittest.TestCase):
 
 class TestNewsEnrich(unittest.TestCase):
     def test_apply_news_context(self) -> None:
+        article = NewsArticle(
+            headline="Company faces lawsuit",
+            summary="Investors react to filing",
+            url="https://example.com/lawsuit",
+            source="Reuters",
+            published_at="2026-01-01T11:00:00+00:00",
+        )
         context = NewsContext(
             sentiment=-0.35,
-            headline_count=2,
+            headline_count=1,
             top_headline="Company faces lawsuit",
             tags=["lawsuit"],
             fetched_at="2026-01-01T12:00:00+00:00",
+            articles=[article],
         )
         enriched = apply_news_context(_state(), context)
         self.assertEqual(enriched.news_sentiment, -0.35)
         self.assertEqual(enriched.news_tags, ["lawsuit"])
+        self.assertIsNotNone(enriched.news_articles)
+        assert enriched.news_articles is not None
+        self.assertEqual(enriched.news_articles[0]["url"], "https://example.com/lawsuit")
+        self.assertEqual(enriched.news_articles[0]["source"], "Reuters")
+        self.assertEqual(
+            enriched.news_articles[0]["published_at"],
+            "2026-01-01T11:00:00+00:00",
+        )
 
     def test_enrich_without_service_returns_unchanged(self) -> None:
         state = _state()
@@ -147,6 +165,75 @@ class TestParseArticles(unittest.TestCase):
         self.assertEqual(len(articles), 1)
         self.assertEqual(articles[0].headline, "Fresh headline")
 
+    def test_keeps_url_summary_source_and_published_at(self) -> None:
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        raw = [
+            {
+                "datetime": now_ts - 30,
+                "headline": "NVDA upgrades outlook",
+                "summary": "Chipmaker raises guidance.",
+                "url": "https://example.com/nvda",
+                "source": "Bloomberg",
+                "image": "https://example.com/nvda.jpg",
+            }
+        ]
+        articles = _parse_articles(raw, max_headlines=5, since_ts=now_ts - 3600)
+        self.assertEqual(len(articles), 1)
+        article = articles[0]
+        self.assertEqual(article.url, "https://example.com/nvda")
+        self.assertEqual(article.summary, "Chipmaker raises guidance.")
+        self.assertEqual(article.source, "Bloomberg")
+        self.assertEqual(article.image, "https://example.com/nvda.jpg")
+        self.assertIsNotNone(article.published_at)
+        assert article.published_at is not None
+        self.assertTrue(article.published_at.endswith("+00:00"))
+
+
+class TestParseGeneralArticles(unittest.TestCase):
+    def test_parses_general_market_news_payload(self) -> None:
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        raw = [
+            {
+                "id": 42,
+                "datetime": now_ts - 120,
+                "headline": "Markets rally on jobs data",
+                "summary": "Stocks climb after payrolls.",
+                "url": "https://example.com/rally",
+                "source": "Reuters",
+                "image": "",
+                "related": "SPY,QQQ",
+                "category": "general",
+            }
+        ]
+        articles = _parse_general_articles(raw, category="general")
+        self.assertEqual(len(articles), 1)
+        article = articles[0]
+        self.assertEqual(article.id, 42)
+        self.assertEqual(article.source, "Reuters")
+        self.assertEqual(article.url, "https://example.com/rally")
+        self.assertEqual(article.related_symbols, ["SPY", "QQQ"])
+        self.assertIsNotNone(article.published_at)
+
+    def test_parse_related_symbols(self) -> None:
+        self.assertEqual(parse_related_symbols("AAPL, msft;NVDA"), ["AAPL", "MSFT", "NVDA"])
+        self.assertEqual(parse_related_symbols(""), [])
+
+
+class TestDedupeMarketNewsRows(unittest.TestCase):
+    def test_dedupes_by_id_and_url_keeping_first(self) -> None:
+        from news.market_news import dedupe_market_news_rows
+
+        rows = [
+            {"id": 1, "url": "https://example.com/a", "headline": "First"},
+            {"id": 2, "url": "https://example.com/a", "headline": "Dup url"},
+            {"id": 1, "url": "https://example.com/b", "headline": "Dup id"},
+            {"id": 3, "url": "", "headline": "No url"},
+            {"id": 4, "url": None, "headline": "Null url"},
+        ]
+        deduped = dedupe_market_news_rows(rows)
+        self.assertEqual([row["id"] for row in deduped], [1, 3, 4])
+        self.assertEqual(deduped[0]["headline"], "First")
+
 
 class TestFinnhubClient(unittest.TestCase):
     def test_empty_response_is_empty_status(self) -> None:
@@ -209,6 +296,12 @@ class TestNewsService(unittest.TestCase):
             top_headline="NVDA beats estimates",
             tags=["earnings_beat"],
             fetched_at="2026-01-01T12:00:00+00:00",
+            articles=[
+                NewsArticle(
+                    headline="NVDA beats estimates",
+                    url="https://example.com/beat",
+                )
+            ],
         )
         client.fetch_news.return_value = FetchOutcome(
             context=context,
