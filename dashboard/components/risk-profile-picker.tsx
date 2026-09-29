@@ -41,7 +41,7 @@ export function RiskProfilePicker({
       <div>
         <p className="text-sm font-medium text-zinc-200">Risk profile</p>
         <p className="mt-0.5 text-xs text-zinc-500">
-          Choose a preset, Apply to fill risk fields, then Save to persist profile and dollar amounts.
+          Selecting a preset fills the risk fields below. Save settings to persist profile and amounts.
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">

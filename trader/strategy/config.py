@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Tuple
 
 
@@ -28,3 +28,12 @@ class StrategyConfig:
         "layoffs",
     )
     block_on_earnings: bool = False
+
+
+def strategy_config_with_risk_overrides(
+    base: StrategyConfig,
+    *,
+    min_volume_ratio: float,
+) -> StrategyConfig:
+    """Apply dashboard settings overrides onto env-based strategy config."""
+    return replace(base, min_volume_ratio=min_volume_ratio)

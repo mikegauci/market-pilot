@@ -19,6 +19,7 @@ function labelFor(name: string): string {
     stop_loss_percentage: "Stop loss (%)",
     take_profit_percentage: "Take profit (%)",
     max_hold_minutes: "Max hold (minutes)",
+    min_volume_ratio: "Min volume ratio",
   };
   return labels[name] ?? name;
 }
@@ -33,6 +34,7 @@ export type ParsedSettings = {
   stop_loss_percentage: number;
   take_profit_percentage: number;
   max_hold_minutes: number;
+  min_volume_ratio: number;
   risk_profile: RiskProfile;
   watchlist: string[];
   watchlist_core: string[];
@@ -76,6 +78,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   const stop_loss_percentage = parseStrategyPercent(formData, "stop_loss_percentage");
   const take_profit_percentage = parseStrategyPercent(formData, "take_profit_percentage");
   const max_hold_minutes = parseRequiredNumber(formData, "max_hold_minutes");
+  const min_volume_ratio = parseRequiredNumber(formData, "min_volume_ratio");
 
   if (signal_record_threshold > minimum_jev_confidence) {
     throw new Error("Signal record threshold (%) must be at or below Min Jev confidence (%)");
@@ -97,6 +100,9 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   if (!Number.isInteger(max_hold_minutes) || max_hold_minutes < 0 || max_hold_minutes > 480) {
     throw new Error("Max hold (minutes) must be a whole number from 0 to 480");
+  }
+  if (min_volume_ratio < 0 || min_volume_ratio > 5) {
+    throw new Error("Min volume ratio must be between 0 (off) and 5");
   }
 
   const watchlistCoreRaw = String(formData.get("watchlist_core") ?? "");
@@ -153,6 +159,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     stop_loss_percentage,
     take_profit_percentage,
     max_hold_minutes,
+    min_volume_ratio,
     risk_profile: parseRiskProfile(formData),
     watchlist: effectiveWatchlist ?? watchlist_core,
     watchlist_core,

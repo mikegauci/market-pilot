@@ -140,12 +140,13 @@ class RiskSettings:
     risk_sync_equity: Optional[float]
     watchlist: List[str]
     watchlist_core: List[str] = field(default_factory=list)
-    watchlist_dynamic_enabled: bool = False
+    watchlist_dynamic_enabled: bool = True
     watchlist_dynamic_size: int = 5
     watchlist_refresh_minutes: int = 30
     benchmark_symbol: str = "EEM"
     watchlist_jev_rankings: List[JevRankedSymbol] = field(default_factory=list)
     watchlist_screener_ran_at: Optional[datetime] = None
+    min_volume_ratio: float = 0.0
 
 
 @dataclass

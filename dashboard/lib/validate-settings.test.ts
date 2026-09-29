@@ -19,6 +19,7 @@ const baseFields = {
   stop_loss_percentage: "1",
   take_profit_percentage: "1.5",
   max_hold_minutes: "0",
+  min_volume_ratio: "0.5",
   watchlist_core: "AAPL, MSFT",
   benchmark_symbol: "EEM",
   watchlist_dynamic_size: "5",

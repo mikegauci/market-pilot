@@ -149,6 +149,14 @@ export function SettingsSummary({
               : "Off"
           }
         />
+        <SettingRow
+          label="Min volume ratio"
+          value={
+            settings.min_volume_ratio > 0
+              ? String(settings.min_volume_ratio)
+              : "Off"
+          }
+        />
       </div>
 
       <div className="mt-3 border-t border-zinc-800/60 pt-3 space-y-2">
@@ -161,12 +169,13 @@ export function SettingsSummary({
         {settings.watchlist_dynamic_enabled && (
           <p className="text-xs text-zinc-500">
             Jev dynamic EM scan every {settings.watchlist_refresh_minutes ?? 30} min · top{" "}
-            {settings.watchlist_dynamic_size ?? 5} · benchmark {settings.benchmark_symbol ?? "EEM"}
+            {settings.watchlist_dynamic_size ?? 5} · benchmark EEM
           </p>
         )}
         <StrategyIndicatorsCard
           compact
           benchmarkSymbol={settings.benchmark_symbol ?? "EEM"}
+          minVolumeRatio={settings.min_volume_ratio ?? 0}
         />
       </div>
     </Card>

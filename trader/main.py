@@ -39,6 +39,7 @@ from models.types import (
 )
 from risk.manager import RiskManager
 from strategy.confirmation import ConfirmationTracker
+from strategy.config import strategy_config_with_risk_overrides
 from strategy.filters import check_correlation_cap, check_entry_filters
 from strategy.signals import (
     is_sell_exit_eligible,
@@ -364,10 +365,11 @@ def run() -> int:
     confirmation_tracker = ConfirmationTracker(strategy_config.confirmation_cycles)
     logger.info(
         "Strategy filters: min confidence from settings, margin %.0f%%, "
-        "confirmation %sx, max hold %.0fm (dashboard)",
+        "confirmation %sx, max hold %.0fm (dashboard), min volume ratio %.2f (dashboard)",
         strategy_config.min_buy_hold_margin * 100,
         strategy_config.confirmation_cycles,
         risk_settings.max_hold_minutes,
+        risk_settings.min_volume_ratio,
     )
 
     ibkr = IBKRClient(
@@ -761,7 +763,11 @@ def run() -> int:
                         eligible = False
 
                     if eligible and risk_manager and db:
-                        entry_filter = check_entry_filters(state, strategy_config)
+                        entry_strategy = strategy_config_with_risk_overrides(
+                            strategy_config,
+                            min_volume_ratio=risk_settings.min_volume_ratio,
+                        )
+                        entry_filter = check_entry_filters(state, entry_strategy)
                         if not entry_filter.passed:
                             trade_skip_reason = entry_filter.reason
                             logger.info(
@@ -773,7 +779,7 @@ def run() -> int:
                             eligible = False
 
                         corr_filter = check_correlation_cap(
-                            risk_manager.open_trades, symbol, strategy_config
+                            risk_manager.open_trades, symbol, entry_strategy
                         )
                         if eligible and not corr_filter.passed:
                             trade_skip_reason = corr_filter.reason

@@ -22,6 +22,8 @@ export type Settings = {
   stop_loss_percentage: number;
   take_profit_percentage: number;
   max_hold_minutes: number;
+  /** 0 = off; block entries when 1m volume ratio is below this vs 10-bar average */
+  min_volume_ratio: number;
   account_capital: number;
   risk_sync_equity: number | null;
   risk_profile?: "low" | "medium" | "high" | null;
