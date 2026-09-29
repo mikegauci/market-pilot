@@ -3,9 +3,11 @@ import type {
   PortfolioSnapshot,
   Position,
   Prediction,
+  Settings,
   SymbolBar,
   Trade,
   TradeCommand,
+  WatchlistScreenerHistory,
 } from "@/lib/types/database";
 
 function logFetchError(table: string, message: string) {
@@ -126,6 +128,96 @@ export async function fetchLatestPortfolio(): Promise<PortfolioSnapshot | null> 
     return null;
   }
   return data as PortfolioSnapshot | null;
+}
+
+export async function fetchPortfolioHistory(limit = 5000): Promise<PortfolioSnapshot[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("portfolio_history")
+    .select("*")
+    .order("timestamp", { ascending: false })
+    .limit(limit);
+  if (error) {
+    logFetchError("portfolio_history", error.message);
+    return [];
+  }
+  const rows = (data ?? []) as PortfolioSnapshot[];
+  rows.reverse();
+  return rows;
+}
+
+export async function fetchClosedTrades(): Promise<Trade[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("trades")
+    .select("*")
+    .eq("status", "closed")
+    .order("exit_time", { ascending: false })
+    .limit(500);
+  if (error) {
+    logFetchError("trades", error.message);
+    return [];
+  }
+  return (data ?? []) as Trade[];
+}
+
+export async function fetchAnalyticsPredictions(limit = 2000): Promise<Prediction[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("predictions")
+    .select("*")
+    .order("timestamp", { ascending: false })
+    .limit(limit);
+  if (error) {
+    logFetchError("predictions", error.message);
+    return [];
+  }
+  return (data ?? []) as Prediction[];
+}
+
+export async function fetchLatestPredictionsBySymbol(limit = 500): Promise<Prediction[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("predictions")
+    .select("*")
+    .order("timestamp", { ascending: false })
+    .limit(limit);
+  if (error) {
+    logFetchError("predictions", error.message);
+    return [];
+  }
+  const seen = new Set<string>();
+  const latest: Prediction[] = [];
+  for (const row of (data ?? []) as Prediction[]) {
+    if (seen.has(row.symbol)) continue;
+    seen.add(row.symbol);
+    latest.push(row);
+  }
+  return latest.sort((a, b) => a.symbol.localeCompare(b.symbol));
+}
+
+export async function fetchScreenerHistory(limit = 10): Promise<WatchlistScreenerHistory[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("watchlist_screener_history")
+    .select("*")
+    .order("ran_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    logFetchError("watchlist_screener_history", error.message);
+    return [];
+  }
+  return (data ?? []) as WatchlistScreenerHistory[];
+}
+
+export async function fetchSettings(): Promise<Settings | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase.from("settings").select("*").eq("id", 1).single();
+  if (error) {
+    logFetchError("settings", error.message);
+    return null;
+  }
+  return data as Settings;
 }
 
 export async function fetchSymbolBars(

@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
+import { PredictionIndicators } from "@/components/prediction-indicators";
 import { fetchPredictions } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import type { MarketSnapshot, Prediction } from "@/lib/types/database";
@@ -158,7 +159,16 @@ function NewsCell({ snapshot }: { snapshot?: MarketSnapshot | null }) {
   );
 }
 
-export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) {
+export function PredictionsFeed({
+  predictions,
+  filterOptions = {},
+}: {
+  predictions: Prediction[];
+  filterOptions?: {
+    minVolumeRatio?: number;
+    benchmarkSymbol?: string;
+  };
+}) {
   const [symbolFilter, setSymbolFilter] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("timestamp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -256,19 +266,19 @@ export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) 
             <tbody>
               {sorted.map((p) => {
                 const snapshot = p.market_snapshot;
-                const hasNewsDetail = Boolean(snapshot?.news_top_headline);
+                const hasExpandableDetail = Boolean(snapshot);
                 const isExpanded = expandedId === p.id;
 
                 return (
                   <Fragment key={p.id}>
                     <tr className="border-b border-zinc-800/50">
                       <td className="py-2 pr-2">
-                        {hasNewsDetail ? (
+                        {hasExpandableDetail ? (
                           <button
                             type="button"
                             onClick={() => toggleExpanded(p.id)}
                             className="text-zinc-500 hover:text-zinc-300"
-                            aria-label={isExpanded ? "Collapse news" : "Expand news"}
+                            aria-label={isExpanded ? "Collapse details" : "Expand details"}
                           >
                             {isExpanded ? (
                               <ChevronDown className="h-4 w-4" />
@@ -297,40 +307,47 @@ export function PredictionsFeed({ predictions }: { predictions: Prediction[] }) 
                         <TradeCell prediction={p} />
                       </td>
                     </tr>
-                    {isExpanded && hasNewsDetail && (
+                    {isExpanded && hasExpandableDetail && (
                       <tr className="border-b border-zinc-800/50 bg-zinc-900/40">
                         <td />
                         <td colSpan={8} className="py-3 pr-3">
-                          <div className="space-y-2 text-xs text-zinc-400">
-                            <p className="text-sm text-zinc-300">{snapshot?.news_top_headline}</p>
-                            {snapshot?.news_sentiment != null && (
-                              <p>
-                                Sentiment:{" "}
-                                <span
-                                  className={
-                                    Math.abs(snapshot.news_sentiment) > 0.1
-                                      ? snapshot.news_sentiment > 0
-                                        ? "text-emerald-400"
-                                        : "text-red-400"
-                                      : "text-zinc-500"
-                                  }
-                                >
-                                  {sentimentLabel(snapshot.news_sentiment)}{" "}
-                                  ({snapshot.news_sentiment.toFixed(2)})
-                                </span>
-                                {" — "}
-                                keyword scan of recent headlines; used to block buys on bearish
-                                news
-                              </p>
-                            )}
-                            {snapshot?.news_headline_count != null && (
-                              <p>
-                                {snapshot.news_headline_count} headline
-                                {snapshot.news_headline_count === 1 ? "" : "s"} in lookback window
-                              </p>
-                            )}
-                            {snapshot?.news_fetched_at && (
-                              <p>News fetched: {formatDateTime(snapshot.news_fetched_at)}</p>
+                          <div className="space-y-4">
+                            <PredictionIndicators
+                              snapshot={snapshot}
+                              symbol={p.symbol}
+                              filterOptions={filterOptions}
+                            />
+                            {snapshot?.news_top_headline && (
+                              <div className="space-y-2 border-t border-zinc-800/60 pt-3 text-xs text-zinc-400">
+                                <p className="text-sm font-medium text-zinc-300">News</p>
+                                <p className="text-sm text-zinc-300">{snapshot.news_top_headline}</p>
+                                {snapshot?.news_sentiment != null && (
+                                  <p>
+                                    Sentiment:{" "}
+                                    <span
+                                      className={
+                                        Math.abs(snapshot.news_sentiment) > 0.1
+                                          ? snapshot.news_sentiment > 0
+                                            ? "text-emerald-400"
+                                            : "text-red-400"
+                                          : "text-zinc-500"
+                                      }
+                                    >
+                                      {sentimentLabel(snapshot.news_sentiment)}{" "}
+                                      ({snapshot.news_sentiment.toFixed(2)})
+                                    </span>
+                                  </p>
+                                )}
+                                {snapshot?.news_headline_count != null && (
+                                  <p>
+                                    {snapshot.news_headline_count} headline
+                                    {snapshot.news_headline_count === 1 ? "" : "s"} in lookback
+                                  </p>
+                                )}
+                                {snapshot?.news_fetched_at && (
+                                  <p>News fetched: {formatDateTime(snapshot.news_fetched_at)}</p>
+                                )}
+                              </div>
                             )}
                           </div>
                         </td>

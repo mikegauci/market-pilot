@@ -1,15 +1,17 @@
 import Link from "next/link";
+import { LiveStrategyGrid } from "@/components/live-strategy-grid";
 import { StrategyGuide } from "@/components/strategy-guide";
-import { getSettings } from "@/lib/queries";
+import { getLatestPredictionsBySymbol, getSettings } from "@/lib/queries";
 import { formatPercent } from "@/lib/utils";
 
 export default async function StrategyPage() {
   const settings = await getSettings();
   const minConfidence = settings?.minimum_jev_confidence ?? 0.85;
   const recordThreshold = settings?.signal_record_threshold ?? 0.75;
+  const latestPredictions = settings ? await getLatestPredictionsBySymbol() : [];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       <header className="space-y-2">
         <h2 className="text-xl font-semibold sm:text-2xl">Indicators & Filters</h2>
         <p className="text-sm leading-relaxed text-zinc-400">
@@ -43,6 +45,10 @@ export default async function StrategyPage() {
           feed.
         </p>
       </header>
+
+      {settings && (
+        <LiveStrategyGrid predictions={latestPredictions} settings={settings} />
+      )}
 
       <StrategyGuide
         benchmarkSymbol={settings?.benchmark_symbol ?? "EEM"}

@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { SettingsForm } from "@/components/settings-form";
+import { ScreenerRankingDelta } from "@/components/screener-ranking-delta";
 import { resolveBaselineEquity } from "@/lib/risk-recommendations";
-import { getEmUniverseStats, getLatestPortfolio, getSettings } from "@/lib/queries";
+import { getEmUniverseStats, getLatestPortfolio, getScreenerHistory, getSettings } from "@/lib/queries";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function SettingsPage() {
-  const [settings, portfolio, emUniverse] = await Promise.all([
+  const [settings, portfolio, emUniverse, screenerHistory] = await Promise.all([
     getSettings(),
     getLatestPortfolio(),
     getEmUniverseStats(),
+    getScreenerHistory(5),
   ]);
 
   if (!settings) {
@@ -58,6 +60,8 @@ export default async function SettingsPage() {
         currency={currency}
         emUniverse={emUniverse}
       />
+
+      <ScreenerRankingDelta history={screenerHistory} />
 
       <p className="text-sm text-zinc-500">
         See{" "}

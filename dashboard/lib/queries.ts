@@ -10,6 +10,7 @@ import type {
   SymbolBar,
   Trade,
   TradeCommand,
+  WatchlistScreenerHistory,
 } from "@/lib/types/database";
 
 export async function getBotStatus(): Promise<BotStatus | null> {
@@ -33,6 +34,66 @@ export async function getLatestPortfolio(): Promise<PortfolioSnapshot | null> {
     .limit(1)
     .maybeSingle();
   return data as PortfolioSnapshot | null;
+}
+
+export async function getPortfolioHistory(limit = 5000): Promise<PortfolioSnapshot[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("portfolio_history")
+    .select("*")
+    .order("timestamp", { ascending: false })
+    .limit(limit);
+  const rows = (data ?? []) as PortfolioSnapshot[];
+  rows.reverse();
+  return rows;
+}
+
+export async function getClosedTrades(): Promise<Trade[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("trades")
+    .select("*")
+    .eq("status", "closed")
+    .order("exit_time", { ascending: false })
+    .limit(500);
+  return (data ?? []) as Trade[];
+}
+
+export async function getAnalyticsPredictions(limit = 2000): Promise<Prediction[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("predictions")
+    .select("*")
+    .order("timestamp", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as Prediction[];
+}
+
+export async function getLatestPredictionsBySymbol(limit = 500): Promise<Prediction[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("predictions")
+    .select("*")
+    .order("timestamp", { ascending: false })
+    .limit(limit);
+  const seen = new Set<string>();
+  const latest: Prediction[] = [];
+  for (const row of (data ?? []) as Prediction[]) {
+    if (seen.has(row.symbol)) continue;
+    seen.add(row.symbol);
+    latest.push(row);
+  }
+  return latest.sort((a, b) => a.symbol.localeCompare(b.symbol));
+}
+
+export async function getScreenerHistory(limit = 10): Promise<WatchlistScreenerHistory[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("watchlist_screener_history")
+    .select("*")
+    .order("ran_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as WatchlistScreenerHistory[];
 }
 
 export async function getPositions(): Promise<Position[]> {

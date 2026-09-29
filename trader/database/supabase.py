@@ -321,22 +321,33 @@ class SupabaseRepository:
         rankings: List[JevRankedSymbol],
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
+        rankings_payload = [
+            {
+                "symbol": item.symbol,
+                "buy": item.buy,
+                "hold": item.hold,
+                "sell": item.sell,
+                "rank": item.rank,
+            }
+            for item in rankings
+        ]
         payload = {
             "watchlist": watchlist,
-            "watchlist_jev_rankings": [
-                {
-                    "symbol": item.symbol,
-                    "buy": item.buy,
-                    "hold": item.hold,
-                    "sell": item.sell,
-                    "rank": item.rank,
-                }
-                for item in rankings
-            ],
+            "watchlist_jev_rankings": rankings_payload,
             "watchlist_screener_ran_at": now,
             "updated_at": now,
         }
         self.client.table("settings").update(payload).eq("id", 1).execute()
+        try:
+            self.client.table("watchlist_screener_history").insert(
+                {
+                    "ran_at": now,
+                    "rankings": rankings_payload,
+                    "watchlist": watchlist,
+                }
+            ).execute()
+        except Exception as exc:
+            logger.warning("Failed to log screener history: %s", exc)
 
     def update_effective_watchlist_fallback(self, watchlist: List[str]) -> None:
         """Persist always-on core fallback after a failed dynamic scan."""

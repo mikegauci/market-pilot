@@ -63,6 +63,22 @@ export type JevRanking = {
   rank: number;
 };
 
+export type WatchlistScreenerHistory = {
+  id: string;
+  ran_at: string;
+  rankings: JevRanking[];
+  watchlist: string[];
+  created_at: string;
+};
+
+export type RankingDelta = {
+  symbol: string;
+  previousRank: number | null;
+  currentRank: number;
+  delta: number | null;
+  buy: number;
+};
+
 export type MarketSnapshotNews = {
   news_sentiment?: number | null;
   news_headline_count?: number | null;

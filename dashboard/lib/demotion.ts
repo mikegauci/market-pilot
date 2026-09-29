@@ -31,3 +31,13 @@ export function isDemotedSymbol(symbol: string, settings: Settings): boolean {
   }
   return isOffEffectiveWatchlist(symbol, settings);
 }
+
+/** Max hold minutes for a symbol, accounting for demotion ratio. Mirrors trader/watchlist/demotion.py. */
+export function effectiveMaxHoldMinutes(symbol: string, settings: Settings): number {
+  const base = settings.max_hold_minutes;
+  if (base <= 0) return 0;
+  if (!isDemotedSymbol(symbol, settings)) return base;
+  const ratio = settings.demotion_max_hold_ratio;
+  if (ratio <= 0) return 0.001;
+  return base * ratio;
+}

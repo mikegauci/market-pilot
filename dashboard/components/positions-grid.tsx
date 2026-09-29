@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { ClosePositionButton } from "@/components/close-position-button";
+import { PositionRiskGauge } from "@/components/position-risk-gauge";
 import { SymbolChartPanel } from "@/components/symbol-chart-panel";
 import { Card, CardTitle } from "@/components/ui/card";
 import { overlaysForPosition } from "@/lib/chart-overlays";
@@ -101,6 +102,8 @@ export function PositionsGrid({
                     refreshIntervalMs={60_000}
                   />
                 </div>
+
+                <PositionRiskGauge position={p} trade={trade ?? null} settings={settings} />
 
                 <div className="mt-3 border-t border-zinc-800/60 pt-3">
                   {trade ? (

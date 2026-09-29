@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, Layers, LineChart, LogOut, Settings, TrendingUp } from "lucide-react";
+import { Activity, BarChart3, Layers, LineChart, LogOut, Settings, TrendingUp } from "lucide-react";
 import { LiveStatus } from "@/components/live-status";
 import { Logo } from "@/components/logo";
 import { useOpenPositionsCount } from "@/components/open-positions-count-provider";
@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 
 export const dashboardNavLinks = [
   { href: "/", label: "Overview", icon: LineChart },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/predictions", label: "Predictions", icon: Activity },
   { href: "/trades", label: "Trades", icon: TrendingUp },
   { href: "/strategy", label: "Strategy", icon: Layers },
