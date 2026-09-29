@@ -5,7 +5,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -14,11 +14,12 @@ import {
 import { Card, CardTitle } from "@/components/ui/card";
 import { fetchAnalyticsPredictions } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
+import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
 import {
+  activityByHour,
   aggregateSkipReasons,
   buildSignalFunnel,
   findNearMisses,
-  skipRateByHour,
   type SignalFunnel,
 } from "@/lib/skip-reason-stats";
 import type { Prediction } from "@/lib/types/database";
@@ -32,11 +33,13 @@ type Props = {
 
 function FunnelStep({
   label,
+  description,
   count,
   total,
   isLast,
 }: {
   label: string;
+  description: string;
   count: number;
   total: number;
   isLast?: boolean;
@@ -51,6 +54,7 @@ function FunnelStep({
           <span className="text-zinc-600">({pct.toFixed(0)}%)</span>
         </span>
       </div>
+      <p className="mt-0.5 text-[11px] leading-snug text-zinc-600">{description}</p>
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-zinc-800">
         <div
           className="h-full rounded-full bg-emerald-500/70 transition-all"
@@ -61,28 +65,66 @@ function FunnelStep({
   );
 }
 
-function SignalFunnelCard({ funnel }: { funnel: SignalFunnel }) {
+function SignalFunnelCard({
+  funnel,
+  recordThreshold,
+  minConfidence,
+}: {
+  funnel: SignalFunnel;
+  recordThreshold: number;
+  minConfidence: number;
+}) {
   const base = funnel.highBuySignals || 1;
-  const steps: { label: string; count: number }[] = [
-    { label: "High BUY signals", count: funnel.highBuySignals },
-    { label: "Trade threshold met", count: funnel.tradeEligible },
-    { label: "Past confirmation", count: funnel.pastConfirmation },
-    { label: "Past entry filters", count: funnel.pastFilters },
-    { label: "Past risk / broker", count: funnel.pastRisk },
-    { label: "Trades opened", count: funnel.traded },
+  const recordPct = formatPercent(recordThreshold);
+  const minPct = formatPercent(minConfidence);
+  const marginPct = formatPercent(STRATEGY_FILTER_THRESHOLDS.minBuyHoldMargin);
+  const steps: { label: string; description: string; count: number }[] = [
+    {
+      label: "High BUY signals",
+      description: `BUY was the top side and ≥ ${recordPct} (record threshold). Baseline for the % below.`,
+      count: funnel.highBuySignals,
+    },
+    {
+      label: "Trade threshold met",
+      description: `Cleared min confidence (${minPct}) and BUY–HOLD margin (≥ ${marginPct}).`,
+      count: funnel.tradeEligible,
+    },
+    {
+      label: "Past confirmation",
+      description: "Cleared trade threshold and finished N consecutive eligible cycles.",
+      count: funnel.pastConfirmation,
+    },
+    {
+      label: "Past entry filters",
+      description: "Also cleared RSI, spread, volume, EMA-20, benchmark, and news filters.",
+      count: funnel.pastFilters,
+    },
+    {
+      label: "Past risk / broker",
+      description: "Also cleared position limits, capital, daily loss, and IBKR gates.",
+      count: funnel.pastRisk,
+    },
+    {
+      label: "Trades opened",
+      description: "Cleared every gate and opened a position.",
+      count: funnel.traded,
+    },
   ];
 
   return (
     <Card>
       <CardTitle>Signal funnel</CardTitle>
       <p className="mt-1 text-xs text-zinc-600">
-        From predictions with BUY above record threshold. Percentages relative to high BUY count.
+        Sequential pipeline: each stage only counts signals that cleared every earlier stage.
+        Percentages are vs the High BUY baseline (first row is always 100%). Counts never increase
+        down the funnel.
       </p>
       <div className="mt-4">
         {steps.map((step, index) => (
           <FunnelStep
             key={step.label}
             label={step.label}
+            description={step.description}
             count={step.count}
             total={base}
             isLast={index === steps.length - 1}
@@ -110,11 +152,18 @@ export function SkipReasonAnalytics({
     () => findNearMisses(live, recordThreshold, minConfidence),
     [live, recordThreshold, minConfidence],
   );
-  const hourly = useMemo(() => skipRateByHour(live), [live]);
+  const hourly = useMemo(
+    () => activityByHour(live, recordThreshold, minConfidence),
+    [live, recordThreshold, minConfidence],
+  );
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      <SignalFunnelCard funnel={funnel} />
+      <SignalFunnelCard
+        funnel={funnel}
+        recordThreshold={recordThreshold}
+        minConfidence={minConfidence}
+      />
 
       <Card>
         <CardTitle>Top skip reasons</CardTitle>
@@ -179,9 +228,12 @@ export function SkipReasonAnalytics({
       </Card>
 
       <Card>
-        <CardTitle>Skip rate by hour</CardTitle>
+        <CardTitle>Activity by hour (UTC)</CardTitle>
+        <p className="mt-1 text-xs text-zinc-600">
+          Strong BUY signals, trade-threshold hits, and trades opened — grouped by UTC clock hour.
+        </p>
         {hourly.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-500">No prediction data</p>
+          <p className="mt-4 text-sm text-zinc-500">No strong BUY signals yet</p>
         ) : (
           <div className="mt-4 h-56">
             <ResponsiveContainer width="100%" height="100%">
@@ -190,18 +242,12 @@ export function SkipReasonAnalytics({
                 <XAxis
                   dataKey="hour"
                   tick={{ fill: "#71717a", fontSize: 10 }}
-                  tickFormatter={(h) => `${h}:00`}
+                  tickFormatter={(h) => `${h}h`}
+                  interval={2}
                 />
-                <YAxis
-                  tick={{ fill: "#71717a", fontSize: 10 }}
-                  tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
-                  domain={[0, 1]}
-                />
+                <YAxis allowDecimals={false} tick={{ fill: "#71717a", fontSize: 10 }} />
                 <Tooltip
-                  formatter={(value) =>
-                    `${(((value as number) ?? 0) * 100).toFixed(0)}%`
-                  }
-                  labelFormatter={(h) => `${h}:00`}
+                  labelFormatter={(h) => `${h}:00 UTC`}
                   contentStyle={{
                     background: "#18181b",
                     border: "1px solid #3f3f46",
@@ -209,14 +255,10 @@ export function SkipReasonAnalytics({
                     fontSize: 12,
                   }}
                 />
-                <Bar dataKey="skipRate" name="Skip rate">
-                  {hourly.map((entry, index) => (
-                    <Cell
-                      key={`${entry.hour}-${index}`}
-                      fill={entry.skipRate > 0.5 ? "#f87171" : "#a78bfa"}
-                    />
-                  ))}
-                </Bar>
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="highBuy" name="High BUY" fill="#71717a" />
+                <Bar dataKey="tradeEligible" name="Trade-ready" fill="#60a5fa" />
+                <Bar dataKey="traded" name="Traded" fill="#34d399" />
               </BarChart>
             </ResponsiveContainer>
           </div>

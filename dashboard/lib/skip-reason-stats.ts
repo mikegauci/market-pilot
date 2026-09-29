@@ -1,3 +1,4 @@
+import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
 import type { Prediction } from "@/lib/types/database";
 
 export type SkipReasonBucket = {
@@ -43,6 +44,14 @@ const RISK_REASONS = new Set([
 ]);
 
 const IBKR_PREFIXES = ["ibkr_"];
+
+const TIER_SKIP_REASONS = new Set([
+  "below_trade_threshold",
+  "buy_hold_margin",
+  "hold_dominant",
+  "sell_dominant",
+  "signal_not_eligible",
+]);
 
 export function normalizeSkipReasonKey(reason: string | null | undefined): string | null {
   if (!reason) return null;
@@ -94,33 +103,39 @@ function isHighBuySignal(p: Prediction): boolean {
   );
 }
 
-function isTradeEligible(p: Prediction, minConfidence: number): boolean {
+/** Matches trader StrategyConfig.min_buy_hold_margin default (0.15). */
+export function isTradeEligible(
+  p: Prediction,
+  minConfidence: number,
+  minBuyHoldMargin: number = STRATEGY_FILTER_THRESHOLDS.minBuyHoldMargin,
+): boolean {
   return (
     isHighBuySignal(p) &&
     p.buy_probability >= minConfidence &&
-    p.buy_probability - p.hold_probability >= 0.05
+    p.buy_probability - p.hold_probability >= minBuyHoldMargin
   );
 }
 
-function isPastConfirmation(reason: string | null | undefined): boolean {
-  if (!reason) return true;
-  return !reason.startsWith("awaiting_confirmation");
+function isConfirmationBlocked(reason: string | null | undefined): boolean {
+  return Boolean(reason?.startsWith("awaiting_confirmation"));
 }
 
-function isPastFilters(reason: string | null | undefined): boolean {
-  if (!reason) return true;
+function isFilterBlocked(reason: string | null | undefined): boolean {
   const key = normalizeSkipReasonKey(reason);
-  if (!key) return true;
-  return !FILTER_PREFIXES.includes(key);
+  if (!key) return false;
+  return FILTER_PREFIXES.includes(key);
 }
 
-function isPastRisk(reason: string | null | undefined): boolean {
-  if (!reason) return true;
+function isRiskBlocked(reason: string | null | undefined): boolean {
   const key = normalizeSkipReasonKey(reason);
-  if (!key) return true;
-  if (RISK_REASONS.has(key)) return false;
-  if (IBKR_PREFIXES.some((p) => key.startsWith(p))) return false;
-  return true;
+  if (!key) return false;
+  if (RISK_REASONS.has(key)) return true;
+  return IBKR_PREFIXES.some((p) => key.startsWith(p));
+}
+
+function isTierSkip(reason: string | null | undefined): boolean {
+  const key = normalizeSkipReasonKey(reason);
+  return key != null && TIER_SKIP_REASONS.has(key);
 }
 
 export function aggregateSkipReasons(predictions: Prediction[]): SkipReasonBucket[] {
@@ -135,10 +150,15 @@ export function aggregateSkipReasons(predictions: Prediction[]): SkipReasonBucke
     .sort((a, b) => b.count - a.count);
 }
 
+/**
+ * Sequential funnel: each stage only counts predictions that cleared all prior stages.
+ * Counts never increase later in the pipeline.
+ */
 export function buildSignalFunnel(
   predictions: Prediction[],
   recordThreshold: number,
   minConfidence: number,
+  minBuyHoldMargin: number = STRATEGY_FILTER_THRESHOLDS.minBuyHoldMargin,
 ): SignalFunnel {
   let highBuySignals = 0;
   let tradeEligible = 0;
@@ -151,10 +171,20 @@ export function buildSignalFunnel(
     if (p.buy_probability < recordThreshold || !isHighBuySignal(p)) continue;
     highBuySignals += 1;
 
-    if (isTradeEligible(p, minConfidence)) tradeEligible += 1;
-    if (isPastConfirmation(p.trade_skip_reason)) pastConfirmation += 1;
-    if (isPastFilters(p.trade_skip_reason)) pastFilters += 1;
-    if (isPastRisk(p.trade_skip_reason)) pastRisk += 1;
+    if (!isTradeEligible(p, minConfidence, minBuyHoldMargin)) continue;
+    // Tier skips (below threshold / margin) mean we never entered later gates.
+    if (isTierSkip(p.trade_skip_reason)) continue;
+    tradeEligible += 1;
+
+    if (isConfirmationBlocked(p.trade_skip_reason)) continue;
+    pastConfirmation += 1;
+
+    if (isFilterBlocked(p.trade_skip_reason)) continue;
+    pastFilters += 1;
+
+    if (isRiskBlocked(p.trade_skip_reason)) continue;
+    pastRisk += 1;
+
     if (p.trade_created) traded += 1;
   }
 
@@ -189,20 +219,39 @@ export function findNearMisses(
     .slice(0, 10);
 }
 
-export function skipRateByHour(predictions: Prediction[]): { hour: number; skipRate: number; total: number }[] {
-  const buckets = new Map<number, { skipped: number; total: number }>();
+export type HourlyActivity = {
+  hour: number;
+  highBuy: number;
+  tradeEligible: number;
+  traded: number;
+};
+
+/**
+ * Per-hour counts of strong BUY signals, trade-threshold hits, and trades opened.
+ * Hours are UTC (matches prediction timestamps stored in Supabase).
+ * Returns all 24 hours so quiet periods are visible.
+ */
+export function activityByHour(
+  predictions: Prediction[],
+  recordThreshold: number,
+  minConfidence: number,
+  minBuyHoldMargin: number = STRATEGY_FILTER_THRESHOLDS.minBuyHoldMargin,
+): HourlyActivity[] {
+  const buckets: HourlyActivity[] = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    highBuy: 0,
+    tradeEligible: 0,
+    traded: 0,
+  }));
+
   for (const p of predictions) {
-    const hour = new Date(p.timestamp).getHours();
-    const bucket = buckets.get(hour) ?? { skipped: 0, total: 0 };
-    bucket.total += 1;
-    if (!p.trade_created && p.trade_skip_reason) bucket.skipped += 1;
-    buckets.set(hour, bucket);
+    if (p.buy_probability < recordThreshold || !isHighBuySignal(p)) continue;
+    const hour = new Date(p.timestamp).getUTCHours();
+    const bucket = buckets[hour]!;
+    bucket.highBuy += 1;
+    if (isTradeEligible(p, minConfidence, minBuyHoldMargin)) bucket.tradeEligible += 1;
+    if (p.trade_created) bucket.traded += 1;
   }
-  return [...buckets.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([hour, { skipped, total }]) => ({
-      hour,
-      total,
-      skipRate: total > 0 ? skipped / total : 0,
-    }));
+
+  return buckets;
 }
