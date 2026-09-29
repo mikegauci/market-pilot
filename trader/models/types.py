@@ -154,6 +154,12 @@ class RiskSettings:
     demotion_jev_sell_on_loss: bool = True
     demotion_jev_sell_max_loss_pct: float = 0.02
     demotion_force_exit: bool = False
+    # Block Jev SELL soft-exits until the trade has been open this many minutes.
+    min_hold_minutes: float = 15.0
+    # Minimum Jev SELL probability to soft-exit (must also be sell-dominant).
+    jev_sell_exit_threshold: float = 0.95
+    # Block new entries in a symbol for this many minutes after an exit. 0 = off.
+    reentry_cooldown_minutes: float = 45.0
 
 
 @dataclass

@@ -86,14 +86,16 @@ class TestJevScreener(unittest.TestCase):
             dynamic_symbols=["BABA", "VALE"],
             open_symbols=["NU"],
         )
-        self.assertEqual(merged, ["BABA", "VALE", "NU", "EEM"])
+        self.assertEqual(merged, ["BABA", "VALE", "NU"])
         self.assertNotIn("NVDA", merged)
         self.assertNotIn("AAPL", merged)
+        self.assertNotIn("EEM", merged)
 
     def test_merge_core_watchlist_includes_core_and_open(self) -> None:
         settings = _base_settings()
         merged = merge_core_watchlist(settings, open_symbols=["NU"])
-        self.assertEqual(merged, ["NVDA", "AAPL", "EEM", "NU"])
+        self.assertEqual(merged, ["NVDA", "AAPL", "NU"])
+        self.assertNotIn("EEM", merged)
 
     def test_filter_stale_core_from_saved(self) -> None:
         settings = _base_settings(
@@ -106,21 +108,21 @@ class TestJevScreener(unittest.TestCase):
             settings,
             ["NVDA", "AAPL", "BABA", "VALE", "EEM"],
         )
-        self.assertEqual(filtered, ["BABA", "VALE", "EEM"])
+        self.assertEqual(filtered, ["BABA", "VALE"])
 
     def test_resolve_trading_watchlist_dynamic_off_uses_core(self) -> None:
         settings = _base_settings(
             watchlist_dynamic_enabled=False,
             watchlist=["BABA", "VALE"],
         )
-        self.assertEqual(resolve_trading_watchlist(settings), ["NVDA", "AAPL", "EEM"])
+        self.assertEqual(resolve_trading_watchlist(settings), ["NVDA", "AAPL"])
 
     def test_resolve_trading_watchlist_dynamic_on_before_scan_uses_core(self) -> None:
         settings = _base_settings(
             watchlist=["BABA", "VALE"],
             watchlist_screener_ran_at=None,
         )
-        self.assertEqual(resolve_trading_watchlist(settings), ["NVDA", "AAPL", "EEM"])
+        self.assertEqual(resolve_trading_watchlist(settings), ["NVDA", "AAPL"])
 
     def test_resolve_trading_watchlist_strips_stale_union(self) -> None:
         settings = _base_settings(
@@ -133,7 +135,7 @@ class TestJevScreener(unittest.TestCase):
         )
         self.assertEqual(
             resolve_trading_watchlist(settings),
-            ["BABA", "VALE", "EEM"],
+            ["BABA", "VALE"],
         )
 
     def test_resolve_trading_watchlist_merges_open_positions(self) -> None:
@@ -143,8 +145,19 @@ class TestJevScreener(unittest.TestCase):
         )
         self.assertEqual(
             resolve_trading_watchlist(settings, ["NU"]),
-            ["BABA", "VALE", "EEM", "NU"],
+            ["BABA", "VALE", "NU"],
         )
+
+    def test_resolve_trading_watchlist_never_includes_benchmark(self) -> None:
+        settings = _base_settings(
+            watchlist=["EEM", "BABA"],
+            watchlist_screener_ran_at=datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc),
+            watchlist_jev_rankings=[
+                JevRankedSymbol("BABA", 0.9, 0.05, 0.05, 1),
+                JevRankedSymbol("EEM", 0.95, 0.03, 0.02, 2),
+            ],
+        )
+        self.assertEqual(resolve_trading_watchlist(settings, ["EEM"]), ["BABA"])
 
     def test_screener_due_respects_refresh_interval(self) -> None:
         now = datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc)

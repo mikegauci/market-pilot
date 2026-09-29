@@ -22,6 +22,7 @@ def _risk_settings() -> RiskSettings:
         account_capital=10_000.0,
         risk_sync_equity=None,
         watchlist=["META", "NVDA"],
+        min_hold_minutes=0.0,
     )
 
 
@@ -97,7 +98,8 @@ class TestCheckExits(unittest.TestCase):
 
     def test_jev_sell_exit_closes_profitable_trade(self) -> None:
         self.manager.open_trades = [_trade()]
-        quotes = {"META": Quote(symbol="META", price=760.0, bid=None, ask=None, spread=None)}
+        # At/above take profit so soft-exit is allowed (bracket TP zone).
+        quotes = {"META": Quote(symbol="META", price=758.0, bid=None, ask=None, spread=None)}
 
         closed = self.manager.check_jev_exit("META", quotes)
 
@@ -123,6 +125,74 @@ class TestCheckExits(unittest.TestCase):
         quotes = {"META": Quote(symbol="META", price=746.73, bid=None, ask=None, spread=None)}
 
         self.assertTrue(self.manager.can_jev_sell_exit("META", quotes))
+
+    def test_jev_sell_exit_blocked_during_min_hold(self) -> None:
+        settings = _risk_settings()
+        settings.min_hold_minutes = 15.0
+        self.manager.update_settings(settings)
+
+        entry_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+        self.manager.open_trades = [_trade(entry_time=entry_time)]
+        quotes = {"META": Quote(symbol="META", price=760.0, bid=None, ask=None, spread=None)}
+
+        self.assertFalse(self.manager.can_jev_sell_exit("META", quotes))
+        self.assertIsNone(self.manager.check_jev_exit("META", quotes))
+
+    def test_jev_sell_exit_allowed_after_min_hold(self) -> None:
+        settings = _risk_settings()
+        settings.min_hold_minutes = 15.0
+        self.manager.update_settings(settings)
+
+        entry_time = datetime.now(timezone.utc) - timedelta(minutes=20)
+        self.manager.open_trades = [_trade(entry_time=entry_time)]
+        # At/above take profit so below-TP soft-exit gate does not apply.
+        quotes = {"META": Quote(symbol="META", price=758.0, bid=None, ask=None, spread=None)}
+
+        self.assertTrue(self.manager.can_jev_sell_exit("META", quotes))
+
+    def test_jev_sell_exit_blocked_between_entry_and_take_profit(self) -> None:
+        settings = _risk_settings()
+        settings.min_hold_minutes = 0.0
+        self.manager.update_settings(settings)
+
+        self.manager.open_trades = [_trade()]
+        # Above entry (746.73) but below TP (757.93).
+        quotes = {"META": Quote(symbol="META", price=752.0, bid=None, ask=None, spread=None)}
+
+        self.assertFalse(self.manager.can_jev_sell_exit("META", quotes))
+
+    def test_reentry_cooldown_blocks_immediate_reentry(self) -> None:
+        from models.types import JevPrediction, MarketState
+
+        settings = _risk_settings()
+        settings.reentry_cooldown_minutes = 45.0
+        self.manager.update_settings(settings)
+        self.manager.note_symbol_exit("META", datetime.now(timezone.utc))
+
+        state = MarketState(
+            symbol="META",
+            price=750.0,
+            change_5m=0.1,
+            change_15m=0.2,
+            volume_ratio=1.0,
+            rsi=50.0,
+            ema_9=745.0,
+            ema_20=740.0,
+            bid=749.9,
+            ask=750.1,
+            spread=0.2,
+            spy_change_5m=0.0,
+        )
+        prediction = JevPrediction(
+            symbol="META",
+            buy=0.9,
+            hold=0.05,
+            sell=0.05,
+            timestamp=datetime.now(timezone.utc),
+        )
+        decision = self.manager.evaluate_entry(state, prediction, True, {})
+        self.assertFalse(decision.approved)
+        self.assertIn("reentry_cooldown", decision.reason or "")
 
     def test_demoted_trade_exits_at_reduced_max_hold(self) -> None:
         settings = _risk_settings()

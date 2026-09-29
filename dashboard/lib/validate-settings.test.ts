@@ -19,6 +19,9 @@ const baseFields = {
   stop_loss_percentage: "1",
   take_profit_percentage: "1.5",
   max_hold_minutes: "0",
+  min_hold_minutes: "15",
+  jev_sell_exit_threshold: "95",
+  reentry_cooldown_minutes: "45",
   min_volume_ratio: "0.5",
   min_share_price: "20",
   watchlist_core: "AAPL, MSFT",
@@ -127,5 +130,31 @@ describe("parseSettingsForm max_hold_minutes", () => {
     expect(() =>
       parseSettingsForm(form({ ...baseFields, max_hold_minutes: "15.5" })),
     ).toThrow("Max hold (minutes) must be a whole number from 0 to 480");
+  });
+});
+
+describe("parseSettingsForm exit tuning", () => {
+  it("parses min hold and Jev SELL exit threshold", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        min_hold_minutes: "15",
+        jev_sell_exit_threshold: "95",
+      }),
+    );
+    expect(parsed.min_hold_minutes).toBe(15);
+    expect(parsed.jev_sell_exit_threshold).toBe(0.95);
+  });
+
+  it("rejects min hold above max hold when max hold is on", () => {
+    expect(() =>
+      parseSettingsForm(
+        form({
+          ...baseFields,
+          max_hold_minutes: "10",
+          min_hold_minutes: "15",
+        }),
+      ),
+    ).toThrow("Min hold (minutes) must be at or below max hold when max hold is on");
   });
 });

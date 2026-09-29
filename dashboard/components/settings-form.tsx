@@ -55,6 +55,12 @@ const SETTING_DESCRIPTIONS_FULL = {
     "Auto-sell when the price rises this % above your entry to lock in gains.",
   max_hold_minutes:
     "Force-close open trades after this many minutes (0 = off). When off, exits use stop loss, take profit, and Jev SELL only.",
+  min_hold_minutes:
+    "Block Jev SELL soft-exits until a trade has been open this many minutes (0 = off). Stop loss and take profit still work immediately.",
+  jev_sell_exit_threshold:
+    "Only soft-exit on a Jev SELL when sell probability reaches this % (and sell is dominant). Higher values let bracket take-profit work more often.",
+  reentry_cooldown_minutes:
+    "After exiting a symbol, block new entries in that symbol for this many minutes (0 = off). Reduces immediate re-chase after winners or stops.",
   min_volume_ratio:
     "Block new entries when latest 1-min volume is below this fraction of the 10-bar average (0 = off). Example: 0.5 requires at least half the recent average volume.",
   min_share_price:
@@ -76,6 +82,9 @@ const SETTING_DESCRIPTIONS = {
   stop_loss_percentage: "Exit when price falls this % below entry.",
   take_profit_percentage: "Exit when price rises this % above entry.",
   max_hold_minutes: "Force-close after N minutes (0 = off).",
+  min_hold_minutes: "No Jev SELL exit until N minutes (0 = off).",
+  jev_sell_exit_threshold: "Min Jev SELL % required to soft-exit.",
+  reentry_cooldown_minutes: "No re-entry in same symbol for N minutes (0 = off).",
   min_volume_ratio: "Block entries when volume is below this fraction of average (0 = off).",
   min_share_price: "Block entries / EM picks below this USD price (0 = off).",
   watchlist: "Live symbols the trader evaluates each cycle.",
@@ -264,6 +273,13 @@ export function SettingsForm({
     fractionToDisplayPercent(settings.take_profit_percentage),
   );
   const [maxHoldMinutes, setMaxHoldMinutes] = useState(settings.max_hold_minutes ?? 0);
+  const [minHoldMinutes, setMinHoldMinutes] = useState(settings.min_hold_minutes ?? 15);
+  const [jevSellExitPct, setJevSellExitPct] = useState(
+    fractionToDisplayPercent(settings.jev_sell_exit_threshold ?? 0.95),
+  );
+  const [reentryCooldownMinutes, setReentryCooldownMinutes] = useState(
+    settings.reentry_cooldown_minutes ?? 45,
+  );
   const [minVolumeRatio, setMinVolumeRatio] = useState(settings.min_volume_ratio ?? 0);
   const [minSharePrice, setMinSharePrice] = useState(settings.min_share_price ?? 20);
   const maxHoldHints = getMaxHoldHints(maxHoldMinutes);
@@ -472,6 +488,60 @@ export function SettingsForm({
               max={480}
               value={maxHoldMinutes}
               onChange={(event) => setMaxHoldMinutes(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="min_hold_minutes"
+            label="Min hold (minutes)"
+            description={SETTING_DESCRIPTIONS.min_hold_minutes}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.min_hold_minutes}
+          >
+            <Input
+              id="min_hold_minutes"
+              name="min_hold_minutes"
+              type="number"
+              step="1"
+              min={0}
+              max={480}
+              value={minHoldMinutes}
+              onChange={(event) => setMinHoldMinutes(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="jev_sell_exit_threshold"
+            label="Jev SELL exit (%)"
+            description={SETTING_DESCRIPTIONS.jev_sell_exit_threshold}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.jev_sell_exit_threshold}
+          >
+            <Input
+              id="jev_sell_exit_threshold"
+              name="jev_sell_exit_threshold"
+              type="number"
+              step="1"
+              min={50}
+              max={100}
+              value={jevSellExitPct}
+              onChange={(event) => setJevSellExitPct(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="reentry_cooldown_minutes"
+            label="Re-entry cooldown (minutes)"
+            description={SETTING_DESCRIPTIONS.reentry_cooldown_minutes}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.reentry_cooldown_minutes}
+          >
+            <Input
+              id="reentry_cooldown_minutes"
+              name="reentry_cooldown_minutes"
+              type="number"
+              step="1"
+              min={0}
+              max={480}
+              value={reentryCooldownMinutes}
+              onChange={(event) => setReentryCooldownMinutes(Number(event.target.value))}
               required
             />
           </SettingsField>

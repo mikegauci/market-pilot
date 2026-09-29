@@ -98,6 +98,7 @@ class TestDemotion(unittest.TestCase):
 
     def test_jev_sell_exit_allowed_for_demoted_loser(self) -> None:
         settings = _settings()
+        settings.min_hold_minutes = 0.0
         trade = TradeRecord(
             id="t1",
             symbol="NU",

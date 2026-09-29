@@ -144,7 +144,7 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
             <span className="text-xs text-zinc-500">—</span>
           )}
         </div>
-        <FieldDescription title="Symbols Jev evaluates for entries right now (plus open positions and EEM at runtime).">
+        <FieldDescription title="Symbols Jev evaluates for entries right now (plus open positions). EEM is benchmark-only and is not traded.">
           This is the live predicting watchlist — not the fallback editor below.
         </FieldDescription>
       </div>
@@ -186,7 +186,7 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
         Benchmark:{" "}
         <span className="font-medium text-zinc-300">EEM</span>
         {" — "}
-        used for broad-market headwind checks and Jev context.
+        used for broad-market headwind checks and Jev context only (not traded).
       </p>
 
       {!dynamicEnabled && (

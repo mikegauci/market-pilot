@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     strategy_min_buy_hold_margin: float = 0.15
     strategy_confirmation_cycles: int = 2
     strategy_max_hold_minutes: float = 0.0
-    strategy_jev_sell_exit_threshold: float = 0.75
+    strategy_jev_sell_exit_threshold: float = 0.95
     strategy_max_correlated_positions: int = 2
     strategy_warmup_min_1m_bars: int = 15
     strategy_min_news_sentiment: float = -0.3

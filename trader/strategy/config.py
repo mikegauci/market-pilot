@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Tuple
+from typing import Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -15,7 +15,7 @@ class StrategyConfig:
     min_buy_hold_margin: float = 0.15
     confirmation_cycles: int = 2
     max_hold_minutes: float = 0.0
-    jev_sell_exit_threshold: float = 0.75
+    jev_sell_exit_threshold: float = 0.95
     max_correlated_positions: int = 2
     warmup_min_1m_bars: int = 15
     min_news_sentiment: float = -0.3
@@ -36,10 +36,13 @@ def strategy_config_with_risk_overrides(
     *,
     min_volume_ratio: float,
     min_share_price: float = 0.0,
+    jev_sell_exit_threshold: Optional[float] = None,
 ) -> StrategyConfig:
     """Apply dashboard settings overrides onto env-based strategy config."""
-    return replace(
-        base,
-        min_volume_ratio=min_volume_ratio,
-        min_share_price=min_share_price,
-    )
+    updates: dict = {
+        "min_volume_ratio": min_volume_ratio,
+        "min_share_price": min_share_price,
+    }
+    if jev_sell_exit_threshold is not None:
+        updates["jev_sell_exit_threshold"] = jev_sell_exit_threshold
+    return replace(base, **updates)

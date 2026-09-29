@@ -24,8 +24,11 @@ const baseSettings: Settings = {
   stop_loss_percentage: 0.02,
   take_profit_percentage: 0.04,
   max_hold_minutes: 100,
-    min_volume_ratio: 0,
-    min_share_price: 20,
+  min_hold_minutes: 15,
+  jev_sell_exit_threshold: 0.95,
+  reentry_cooldown_minutes: 45,
+  min_volume_ratio: 0,
+  min_share_price: 20,
   account_capital: 10000,
   risk_sync_equity: null,
   watchlist: ["AAPL"],
@@ -240,7 +243,7 @@ describe("demotion effectiveMaxHoldMinutes", () => {
       watchlist: ["BABA"],
       watchlist_jev_rankings: [{ symbol: "BABA", buy: 0.9, hold: 0.05, sell: 0.05, rank: 1 }],
     };
-    expect(effectiveMaxHoldMinutes("NU", settings)).toBe(20);
+    expect(effectiveMaxHoldMinutes("NU", settings)).toBe(50);
     expect(effectiveMaxHoldMinutes("BABA", settings)).toBe(100);
   });
 });

@@ -6,7 +6,12 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, List, Optional
 
-from watchlist.demotion import is_demoted_symbol, jev_sell_exit_allowed
+from watchlist.demotion import (
+    is_demoted_symbol,
+    jev_sell_exit_allowed,
+    min_hold_remaining_minutes,
+    price_between_entry_and_take_profit,
+)
 
 from models.types import (
     ClosedTrade,
@@ -43,6 +48,7 @@ class RiskManager:
         self.open_trades: List[TradeRecord] = list(open_trades or [])
         self.daily_realized_pnl = daily_realized_pnl
         self.total_realized_pnl = total_realized_pnl
+        self._last_exit_at: Dict[str, datetime] = {}
 
     def update_capital(self, effective_capital: float, currency: str = "USD") -> None:
         self.effective_capital = effective_capital
@@ -56,6 +62,52 @@ class RiskManager:
 
     def set_daily_realized_pnl(self, daily_pnl: float) -> None:
         self.daily_realized_pnl = daily_pnl
+
+    def hydrate_reentry_cooldowns(self, exits_by_symbol: Dict[str, datetime]) -> None:
+        """Seed per-symbol exit timestamps (e.g. from DB on startup)."""
+        for symbol, exit_time in exits_by_symbol.items():
+            key = str(symbol).upper()
+            if not key or exit_time is None:
+                continue
+            stamped = exit_time
+            if stamped.tzinfo is None:
+                stamped = stamped.replace(tzinfo=timezone.utc)
+            prior = self._last_exit_at.get(key)
+            if prior is None or stamped > prior:
+                self._last_exit_at[key] = stamped
+
+    def note_symbol_exit(
+        self,
+        symbol: str,
+        exit_time: Optional[datetime] = None,
+    ) -> None:
+        key = str(symbol).upper()
+        if not key:
+            return
+        stamped = exit_time or datetime.now(timezone.utc)
+        if stamped.tzinfo is None:
+            stamped = stamped.replace(tzinfo=timezone.utc)
+        prior = self._last_exit_at.get(key)
+        if prior is None or stamped > prior:
+            self._last_exit_at[key] = stamped
+
+    def reentry_cooldown_remaining_minutes(
+        self,
+        symbol: str,
+        *,
+        now: Optional[datetime] = None,
+    ) -> float:
+        cooldown = float(getattr(self.settings, "reentry_cooldown_minutes", 0) or 0)
+        if cooldown <= 0:
+            return 0.0
+        last_exit = self._last_exit_at.get(str(symbol).upper())
+        if last_exit is None:
+            return 0.0
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        elapsed = (current - last_exit).total_seconds() / 60.0
+        return max(0.0, cooldown - elapsed)
 
     def _deployed_capital(self) -> float:
         return sum(t.position_value for t in self.open_trades)
@@ -108,6 +160,13 @@ class RiskManager:
 
         if any(t.symbol == state.symbol for t in self.open_trades):
             return TradeDecision(False, "already_open")
+
+        reentry_remaining = self.reentry_cooldown_remaining_minutes(state.symbol)
+        if reentry_remaining > 0:
+            return TradeDecision(
+                False,
+                f"reentry_cooldown ({reentry_remaining:.0f}m left)",
+            )
 
         if len(self.open_trades) >= self.settings.max_open_positions:
             return TradeDecision(False, "max_open_positions")
@@ -254,6 +313,25 @@ class RiskManager:
 
         if jev_sell_exit_allowed(trade, self.settings, quote):
             return True
+
+        remaining = min_hold_remaining_minutes(trade, self.settings)
+        if log_skip and remaining > 0:
+            logger.info(
+                "Filter: skipping Jev SELL exit for %s — min hold (%.1fm left)",
+                symbol,
+                remaining,
+            )
+            return False
+
+        if log_skip and price_between_entry_and_take_profit(trade, quote.price):
+            logger.info(
+                "Filter: skipping Jev SELL exit for %s — below take profit "
+                "($%.2f < TP $%.2f); letting bracket work",
+                symbol,
+                quote.price,
+                trade.take_profit,
+            )
+            return False
 
         pnl = (quote.price - trade.entry_price) * trade.quantity
         if log_skip and pnl < 0:
