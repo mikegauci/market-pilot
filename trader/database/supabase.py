@@ -77,7 +77,7 @@ def _trade_from_row(row: dict) -> TradeRecord:
         exit_price=float(row["exit_price"]) if row.get("exit_price") is not None else None,
         gross_pnl=float(row["gross_pnl"]) if row.get("gross_pnl") is not None else None,
         net_pnl=float(row["net_pnl"]) if row.get("net_pnl") is not None else None,
-        execution_mode=str(row.get("execution_mode", "simulated")),
+        execution_mode=str(row.get("execution_mode", "ibkr")),
         ibkr_parent_order_id=int(row["ibkr_parent_order_id"]) if row.get("ibkr_parent_order_id") is not None else None,
         ibkr_sl_order_id=int(row["ibkr_sl_order_id"]) if row.get("ibkr_sl_order_id") is not None else None,
         ibkr_tp_order_id=int(row["ibkr_tp_order_id"]) if row.get("ibkr_tp_order_id") is not None else None,
@@ -177,7 +177,7 @@ class SupabaseRepository:
 
     def get_bot_control(
         self,
-        fallback_execution_mode: ExecutionMode = ExecutionMode.SIMULATED,
+        fallback_execution_mode: ExecutionMode = ExecutionMode.IBKR,
     ) -> BotControl:
         try:
             result = (
@@ -765,7 +765,7 @@ class SupabaseRepository:
         message: str,
         enabled: bool,
         trading_mode: TradingMode,
-        execution_mode: ExecutionMode = ExecutionMode.SIMULATED,
+        execution_mode: ExecutionMode = ExecutionMode.IBKR,
     ) -> None:
         try:
             self.update_bot_status(

@@ -38,10 +38,18 @@ Open [http://localhost:3000](http://localhost:3000) and sign in.
 
 | Control | Supabase field | Effect |
 |---------|----------------|--------|
-| Trading bot ON/OFF | `bot_status.enabled` | Allow or block new entries |
-| IBKR paper orders | `bot_status.execution_mode` | `simulated` or `ibkr` |
+| Auto-trading | `bot_status.enabled` | Allow or block new entries |
 
-The Python trader reads both every eval cycle (~30s). Status badges treat heartbeats older than 30s as **Trader offline** and hide stale IBKR/Jev connection flags.
+Orders go to the IBKR paper account when the engine and broker are connected. The Python trader reads `bot_status.enabled` every eval cycle (~30s). Status badges treat heartbeats older than 30s as **Trader offline** and hide stale IBKR/Jev connection flags.
+
+### Supabase: execution mode defaults
+
+If setting up a new Supabase project (or before this repo change), apply migration `execution_mode_defaults_ibkr_only`:
+
+- Default `bot_status.execution_mode` and `trades.execution_mode` to `ibkr`
+- Restrict dashboard updates so `execution_mode` cannot revert to `simulated`
+
+Production project `gbprapqifrvhylfazjvs` already has this migration applied via Supabase MCP.
 
 ## Deploy to Vercel
 

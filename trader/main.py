@@ -12,9 +12,10 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from broker.execution import close_ibkr_signal_exits, sync_ibkr_exits
 from broker.manual_close import process_manual_close_commands
-from broker.ibkr import IBKRClient
+from broker.ibkr import IBKRClient, MARKET_DATA_COMPETING_SESSION_MSG
 from broker.reconcile import reconcile_orphan_ibkr_positions
 from config import Settings, load_settings
+from execution_mode import effective_execution_mode
 from instance_lock import acquire_trader_lock
 from database.supabase import SupabaseRepository
 from jev.client import JevClient
@@ -60,8 +61,11 @@ logger = logging.getLogger(__name__)
 _shutdown_requested = False
 _warmup_logged: Set[str] = set()
 _last_closed_market_log = 0.0
+_last_market_data_warn = 0.0
+_ibkr_market_data_mode = "stream"
 _ibkr_entry_cooldown_until: Dict[str, float] = {}
 _CLOSED_MARKET_LOG_INTERVAL_SEC = 300.0
+_MARKET_DATA_WARN_INTERVAL_SEC = 300.0
 _SHUTDOWN_SLEEP_CHUNK_SEC = 0.5
 
 
@@ -422,8 +426,14 @@ def run() -> int:
 
     if settings.data_source == DataSource.IBKR:
         if _connect_ibkr(ibkr, max_attempts=3):
-            ibkr.subscribe_watchlist(all_symbols)
-            logger.info("Connected to IBKR (%s:%s)", settings.ibkr_host, settings.ibkr_port)
+            global _ibkr_market_data_mode
+            _ibkr_market_data_mode = ibkr.ensure_market_data_ready(all_symbols)
+            logger.info(
+                "Connected to IBKR (%s:%s) — market data mode: %s",
+                settings.ibkr_host,
+                settings.ibkr_port,
+                _ibkr_market_data_mode,
+            )
             if risk_settings.watchlist_dynamic_enabled:
                 try:
                     em_universe = _load_em_universe(settings, db)
@@ -440,15 +450,24 @@ def run() -> int:
 
     bot_control = db.get_bot_control(settings.execution_mode)
     trading_mode = bot_control.trading_mode
-    execution_mode = bot_control.execution_mode
+    configured_execution_mode = bot_control.execution_mode
+    execution_mode = effective_execution_mode(
+        settings.data_source, configured_execution_mode
+    )
     risk_manager: Optional[RiskManager] = None
     if db:
         risk_manager = _init_risk_manager(db, ibkr, trading_mode, risk_settings)
-        if execution_mode != settings.execution_mode:
+        if configured_execution_mode != settings.execution_mode:
             logger.info(
                 "Execution mode from dashboard: %s (env default: %s)",
-                execution_mode.value,
+                configured_execution_mode.value,
                 settings.execution_mode.value,
+            )
+        if execution_mode != configured_execution_mode:
+            logger.info(
+                "DATA_SOURCE=mock — using simulated execution for local dev "
+                "(dashboard execution_mode remains %s)",
+                configured_execution_mode.value,
             )
         logger.info(
             "Risk engine loaded — %s open simulated trades, capital $%.2f",
@@ -508,7 +527,10 @@ def run() -> int:
                     bot_control = db.get_bot_control(settings.execution_mode)
                     bot_enabled = bot_control.enabled
                     trading_mode = bot_control.trading_mode
-                    execution_mode = bot_control.execution_mode
+                    configured_execution_mode = bot_control.execution_mode
+                    execution_mode = effective_execution_mode(
+                        settings.data_source, configured_execution_mode
+                    )
                     last_bot_control_sync = now_mono
 
                 if should_refresh(
@@ -591,6 +613,31 @@ def run() -> int:
 
             quotes = _get_quotes(settings, ibkr, mock, all_symbols)
             quotes_by_symbol: Dict[str, Quote] = {q.symbol: q for q in quotes}
+
+            if (
+                settings.data_source == DataSource.IBKR
+                and ibkr.is_connected()
+                and _ibkr_market_data_mode == "unavailable"
+            ):
+                global _last_market_data_warn
+                now_mono = time.monotonic()
+                if (now_mono - _last_market_data_warn) >= _MARKET_DATA_WARN_INTERVAL_SEC:
+                    priced = sum(
+                        1 for quote in quotes if quote.price is not None and quote.price > 0
+                    )
+                    logger.warning(
+                        "IBKR quotes still missing (%s/%s symbols priced) — %s",
+                        priced,
+                        len(quotes),
+                        MARKET_DATA_COMPETING_SESSION_MSG,
+                    )
+                    _last_market_data_warn = now_mono
+                    recovered = ibkr.ensure_market_data_ready(all_symbols, wait_sec=1.0)
+                    if recovered != "unavailable":
+                        _ibkr_market_data_mode = recovered
+                        logger.info("IBKR market data mode restored: %s", recovered)
+                        quotes = _get_quotes(settings, ibkr, mock, all_symbols)
+                        quotes_by_symbol = {q.symbol: q for q in quotes}
 
             if risk_manager and db:
                 if process_manual_close_commands(
@@ -972,7 +1019,7 @@ def run() -> int:
                     trading_mode=trading_mode,
                     ibkr_connected=ibkr.is_connected(),
                     jev_connected=jev_connected_this_cycle or jev_connected,
-                    execution_mode=execution_mode,
+                    execution_mode=configured_execution_mode,
                     last_error=None,
                 )
                 account = None
@@ -1035,7 +1082,7 @@ def run() -> int:
                     str(exc),
                     enabled=bot_enabled,
                     trading_mode=trading_mode,
-                    execution_mode=execution_mode,
+                    execution_mode=configured_execution_mode,
                 )
 
         elapsed = time.monotonic() - loop_start
@@ -1057,7 +1104,9 @@ def run() -> int:
 
     if db:
         try:
-            db.mark_trader_offline(bot_enabled, trading_mode, execution_mode)
+            db.mark_trader_offline(
+                bot_enabled, trading_mode, configured_execution_mode
+            )
             logger.info("Marked trader offline in Supabase")
         except Exception as exc:
             logger.warning("Could not mark trader offline: %s", exc)

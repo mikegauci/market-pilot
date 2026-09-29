@@ -5,7 +5,7 @@ const defaultBotStatus = {
   id: 1,
   enabled: false,
   trading_mode: "paper" as const,
-  execution_mode: "simulated" as const,
+  execution_mode: "ibkr" as const,
   ibkr_connected: false,
   jev_connected: false,
   last_heartbeat: null,

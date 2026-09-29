@@ -27,6 +27,15 @@ from models.types import AccountSummary, BracketLegs, BracketOrderResult, Positi
 logger = logging.getLogger(__name__)
 
 TERMINAL_ORDER_STATUSES = frozenset({"Filled", "Cancelled", "Inactive", "ApiCancelled"})
+MARKET_DATA_COMPETING_SESSION_CODE = 10197
+MARKET_DATA_TYPE_DELAYED = 3
+MARKET_DATA_MIN_COVERAGE_RATIO = 0.5
+
+MARKET_DATA_COMPETING_SESSION_MSG = (
+    "IBKR error 10197 — another session (TWS, IB Gateway, or IBKR mobile) is using "
+    "live market data for this account. Close other IB clients and restart Gateway, "
+    "or the trader will use snapshot/delayed quotes when available."
+)
 
 
 def _safe_float(value: object) -> Optional[float]:
@@ -97,9 +106,53 @@ class IBKRClient:
         self._lock = threading.RLock()
         self._contracts: Dict[str, Stock] = {}
         self._tickers: Dict[str, object] = {}
+        self._market_data_blocked = False
+        self._use_snapshot_quotes = False
+        self._error_handler_registered = False
 
     def is_connected(self) -> bool:
         return self.ib.isConnected()
+
+    def market_data_is_blocked(self) -> bool:
+        return self._market_data_blocked
+
+    def market_data_mode(self) -> str:
+        if self._use_snapshot_quotes:
+            return "snapshot"
+        return "stream"
+
+    def _on_ib_error(
+        self,
+        req_id: int,
+        error_code: int,
+        error_string: str,
+        contract: object,
+    ) -> None:
+        del req_id, contract
+        if error_code == MARKET_DATA_COMPETING_SESSION_CODE:
+            self._market_data_blocked = True
+            logger.debug("IBKR %s: %s", error_code, error_string)
+
+    def _ensure_error_handler(self) -> None:
+        if self._error_handler_registered:
+            return
+        self.ib.errorEvent += self._on_ib_error
+        self._error_handler_registered = True
+
+    def _count_priced_symbols(self, symbols: List[str]) -> Tuple[int, int]:
+        priced = 0
+        for symbol in symbols:
+            ticker = self._tickers.get(symbol)
+            if ticker is not None and _ticker_price(ticker) is not None:
+                priced += 1
+        return priced, len(symbols)
+
+    def _cancel_all_market_data(self) -> None:
+        for symbol in list(self._tickers):
+            ticker = self._tickers.pop(symbol)
+            if self.is_connected():
+                self.ib.cancelMktData(ticker.contract)
+        self._contracts.clear()
 
     def _is_client_id_conflict(self, exc: BaseException) -> bool:
         message = str(exc).lower()
@@ -190,6 +243,8 @@ class IBKRClient:
                 raise RuntimeError(
                     f"Could not connect to IBKR on client ID {base_client_id}."
                 ) from last_exc
+
+        self._ensure_error_handler()
 
         # 1=live, 2=frozen, 3=delayed, 4=delayed frozen — paper accounts use delayed.
         self.ib.reqMarketDataType(self.market_data_type)
@@ -322,6 +377,8 @@ class IBKRClient:
 
     @_ibkr_synchronized
     def subscribe_watchlist(self, symbols: List[str]) -> None:
+        if self._use_snapshot_quotes:
+            return
         for symbol in symbols:
             if symbol in self._tickers:
                 continue
@@ -335,8 +392,125 @@ class IBKRClient:
             logger.debug("Subscribed to market data for %s", symbol)
 
     @_ibkr_synchronized
+    def _try_recover_streaming_market_data(self, symbols: List[str], wait_sec: float) -> bool:
+        if self.market_data_type != MARKET_DATA_TYPE_DELAYED:
+            logger.warning(
+                "Retrying IBKR market data as delayed (type %s → %s)",
+                self.market_data_type,
+                MARKET_DATA_TYPE_DELAYED,
+            )
+            self.market_data_type = MARKET_DATA_TYPE_DELAYED
+            self.ib.reqMarketDataType(MARKET_DATA_TYPE_DELAYED)
+
+        self._market_data_blocked = False
+        self._cancel_all_market_data()
+        self.subscribe_watchlist(symbols)
+        if wait_sec > 0:
+            self.ib.sleep(wait_sec)
+        priced, total = self._count_priced_symbols(symbols)
+        if total and priced / total >= MARKET_DATA_MIN_COVERAGE_RATIO:
+            logger.info(
+                "IBKR streaming market data recovered — %s/%s symbols priced",
+                priced,
+                total,
+            )
+            return True
+        return False
+
+    @_ibkr_synchronized
+    def _enable_snapshot_quotes(self) -> None:
+        if self._use_snapshot_quotes:
+            return
+        self._use_snapshot_quotes = True
+        self._cancel_all_market_data()
+        logger.warning(
+            "Streaming market data unavailable — falling back to IBKR snapshot quotes "
+            "(one request per symbol per cycle; close competing IB sessions to restore streaming)"
+        )
+
+    @_ibkr_synchronized
+    def _get_snapshot_quotes(self, symbols: List[str], wait_sec: float) -> List[Quote]:
+        per_symbol_wait = wait_sec / max(len(symbols), 1)
+        per_symbol_wait = min(max(per_symbol_wait, 0.2), 1.0)
+        quotes: List[Quote] = []
+        for symbol in symbols:
+            contract = self._try_ensure_contract(symbol)
+            if contract is None:
+                quotes.append(
+                    Quote(symbol=symbol, price=None, bid=None, ask=None, spread=None)
+                )
+                continue
+            ticker = self.ib.reqMktData(contract, "", True, False)
+            self.ib.sleep(per_symbol_wait)
+            price = _ticker_price(ticker)
+            bid = _safe_float(getattr(ticker, "bid", None))
+            ask = _safe_float(getattr(ticker, "ask", None))
+            spread = None
+            if bid is not None and ask is not None and ask >= bid:
+                spread = round(ask - bid, 6)
+            if self.is_connected():
+                self.ib.cancelMktData(contract)
+            quotes.append(
+                Quote(
+                    symbol=symbol,
+                    price=price,
+                    bid=bid,
+                    ask=ask,
+                    spread=spread,
+                    volume=None,
+                )
+            )
+        return quotes
+
+    @_ibkr_synchronized
+    def ensure_market_data_ready(self, symbols: List[str], wait_sec: float = 2.0) -> str:
+        """Verify streaming quotes; recover or fall back to snapshots when blocked.
+
+        Returns one of: ``stream``, ``snapshot``, ``unavailable``.
+        """
+        if not self.is_connected() or not symbols:
+            return "unavailable"
+
+        self._market_data_blocked = False
+        self._use_snapshot_quotes = False
+        self.subscribe_watchlist(symbols)
+        if wait_sec > 0:
+            self.ib.sleep(wait_sec)
+
+        priced, total = self._count_priced_symbols(symbols)
+        if total and priced / total >= MARKET_DATA_MIN_COVERAGE_RATIO:
+            return "stream"
+
+        if self._market_data_blocked or priced == 0:
+            logger.warning(MARKET_DATA_COMPETING_SESSION_MSG)
+            if self._try_recover_streaming_market_data(symbols, wait_sec):
+                return "stream"
+
+        self._enable_snapshot_quotes()
+        snapshot_quotes = self._get_snapshot_quotes(symbols, wait_sec=wait_sec)
+        snapshot_priced = sum(1 for quote in snapshot_quotes if quote.price is not None)
+        if total and snapshot_priced / total >= MARKET_DATA_MIN_COVERAGE_RATIO:
+            logger.info(
+                "IBKR snapshot quotes active — %s/%s symbols priced",
+                snapshot_priced,
+                total,
+            )
+            return "snapshot"
+
+        logger.error(
+            "IBKR market data unavailable for %s/%s symbols after recovery attempts. "
+            "Heartbeats continue but Jev/signals need prices — close TWS, IBKR mobile, "
+            "and other API clients, then restart IB Gateway.",
+            snapshot_priced,
+            total,
+        )
+        return "unavailable"
+
+    @_ibkr_synchronized
     def sync_watchlist_subscriptions(self, symbols: List[str]) -> None:
         """Subscribe to new symbols and cancel market data for removed ones."""
+        if self._use_snapshot_quotes:
+            return
         target = set(symbols)
         for symbol in list(self._tickers):
             if symbol in target:
@@ -350,6 +524,9 @@ class IBKRClient:
 
     @_ibkr_synchronized
     def get_quotes(self, symbols: List[str], wait_sec: float = 2.0) -> List[Quote]:
+        if self._use_snapshot_quotes:
+            return self._get_snapshot_quotes(symbols, wait_sec)
+
         self.sync_watchlist_subscriptions(symbols)
         if wait_sec > 0:
             self.ib.sleep(wait_sec)

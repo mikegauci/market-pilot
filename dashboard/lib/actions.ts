@@ -16,17 +16,6 @@ export async function toggleBot(enabled: boolean) {
   revalidatePath("/");
 }
 
-export async function setExecutionMode(mode: "simulated" | "ibkr") {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("bot_status")
-    .update({ execution_mode: mode, updated_at: new Date().toISOString() })
-    .eq("id", 1);
-
-  if (error) throw new Error(error.message);
-  revalidatePath("/");
-}
-
 export async function updateSettings(formData: FormData) {
   const supabase = await createClient();
   const parsed = parseSettingsForm(formData);

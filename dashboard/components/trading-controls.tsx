@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useLiveBotStatus } from "@/components/bot-status-provider";
-import { setExecutionMode, toggleBot } from "@/lib/actions";
+import { toggleBot } from "@/lib/actions";
+import { getBrokerNotice } from "@/lib/trade-mode";
 import { getDisplayStatus, getStableDisplayNow } from "@/lib/trader-status";
 import { cn } from "@/lib/utils";
 
@@ -36,45 +37,32 @@ function ToggleSwitch({
   );
 }
 
-function BrokerConnectionNotice({
+function BrokerNotice({
   traderOnline,
   ibkrConnected,
+  compact = false,
 }: {
   traderOnline: boolean;
   ibkrConnected: boolean;
+  compact?: boolean;
 }) {
-  if (ibkrConnected) {
-    return (
-      <p className="mt-4 rounded-md border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 text-xs leading-relaxed text-emerald-200/90">
-        Broker connected — orders will go to your paper account.
-      </p>
-    );
-  }
+  const notice = getBrokerNotice({ traderOnline, ibkrConnected });
+  if (!notice) return null;
 
-  if (!traderOnline) {
-    return (
-      <p className="mt-4 rounded-md border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-xs leading-relaxed text-amber-200/90">
-        Trading engine is not running. Start it on your computer (with IB Gateway open) so
-        the dashboard can reach your broker.
-      </p>
-    );
-  }
-
-  return (
-    <p className="mt-4 rounded-md border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-xs leading-relaxed text-amber-200/90">
-      Can&apos;t reach your broker. Open IB Gateway, log in, and wait until it shows
-      &ldquo;connected&rdquo; — then restart the trading engine.
-    </p>
+  const className = cn(
+    compact ? "mt-2 rounded px-2 py-1.5 text-[10px] leading-snug" : "mt-4 rounded-md px-3 py-2 text-xs leading-relaxed",
+    notice.tone === "emerald"
+      ? "border border-emerald-900/40 bg-emerald-950/20 text-emerald-200/90"
+      : "border border-amber-900/40 bg-amber-950/20 text-amber-200/90",
   );
+
+  return <p className={className}>{notice.message}</p>;
 }
 
 export function TradingControls({ variant = "default" }: { variant?: "default" | "sidebar" }) {
   const status = useLiveBotStatus();
 
   const [botEnabled, setBotEnabled] = useState(status.enabled);
-  const [executionMode, setExecutionModeState] = useState(
-    status.execution_mode ?? "simulated",
-  );
   const [pending, startTransition] = useTransition();
   const stableNow = getStableDisplayNow(status.last_heartbeat);
   const [mounted, setMounted] = useState(false);
@@ -86,8 +74,7 @@ export function TradingControls({ variant = "default" }: { variant?: "default" |
 
   useEffect(() => {
     setBotEnabled(status.enabled);
-    setExecutionModeState(status.execution_mode ?? "simulated");
-  }, [status.enabled, status.execution_mode]);
+  }, [status.enabled]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -98,7 +85,7 @@ export function TradingControls({ variant = "default" }: { variant?: "default" |
     return () => clearInterval(id);
   }, [status, mounted]);
 
-  const brokerOrdersOn = executionMode === "ibkr";
+  const showBrokerNotice = botEnabled && mounted && !display.ibkrConnected;
 
   if (variant === "sidebar") {
     return (
@@ -136,43 +123,11 @@ export function TradingControls({ variant = "default" }: { variant?: "default" |
           />
         </div>
 
-        <div className="mt-3 flex items-center justify-between gap-2 border-t border-zinc-800 pt-3">
-          <p
-            className="text-xs font-medium text-zinc-200"
-            title={
-              brokerOrdersOn
-                ? "Orders sent to paper brokerage account"
-                : "Trades recorded in dashboard only"
-            }
-          >
-            Send to broker
-          </p>
-          <ToggleSwitch
-            enabled={brokerOrdersOn}
-            pending={pending}
-            ariaLabel={
-              brokerOrdersOn
-                ? "Switch to dashboard-only practice mode"
-                : "Send orders to paper broker"
-            }
-            onToggle={() => {
-              const next = brokerOrdersOn ? "simulated" : "ibkr";
-              setExecutionModeState(next);
-              startTransition(async () => {
-                try {
-                  await setExecutionMode(next);
-                } catch {
-                  setExecutionModeState(executionMode);
-                }
-              });
-            }}
-          />
-        </div>
-
-        {brokerOrdersOn && mounted && (
-          <SidebarBrokerNotice
+        {showBrokerNotice && (
+          <BrokerNotice
             traderOnline={display.traderOnline}
             ibkrConnected={display.ibkrConnected}
+            compact
           />
         )}
       </div>
@@ -211,77 +166,12 @@ export function TradingControls({ variant = "default" }: { variant?: "default" |
         />
       </div>
 
-      <div
-        className={cn(
-          "mt-5 flex items-center justify-between gap-4 border-t border-zinc-800 pt-5",
-        )}
-      >
-        <div className="min-w-0 pr-2">
-          <p className="text-sm font-medium text-zinc-200">Send orders to broker</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">
-            {brokerOrdersOn
-              ? "Trades are placed on your paper brokerage account, like trading for real."
-              : "Trades are recorded here only — nothing is sent to your broker."}
-          </p>
-        </div>
-        <ToggleSwitch
-          enabled={brokerOrdersOn}
-          pending={pending}
-          ariaLabel={
-            brokerOrdersOn
-              ? "Switch to dashboard-only practice mode"
-              : "Send orders to paper broker"
-          }
-          onToggle={() => {
-            const next = brokerOrdersOn ? "simulated" : "ibkr";
-            setExecutionModeState(next);
-            startTransition(async () => {
-              try {
-                await setExecutionMode(next);
-              } catch {
-                setExecutionModeState(executionMode);
-              }
-            });
-          }}
-        />
-      </div>
-
-      {brokerOrdersOn && mounted && (
-        <BrokerConnectionNotice
+      {showBrokerNotice && (
+        <BrokerNotice
           traderOnline={display.traderOnline}
           ibkrConnected={display.ibkrConnected}
         />
       )}
     </div>
-  );
-}
-
-function SidebarBrokerNotice({
-  traderOnline,
-  ibkrConnected,
-}: {
-  traderOnline: boolean;
-  ibkrConnected: boolean;
-}) {
-  if (ibkrConnected) {
-    return (
-      <p className="mt-2 rounded border border-emerald-900/40 bg-emerald-950/20 px-2 py-1.5 text-[10px] leading-snug text-emerald-200/90">
-        Broker connected
-      </p>
-    );
-  }
-
-  if (!traderOnline) {
-    return (
-      <p className="mt-2 rounded border border-amber-900/40 bg-amber-950/20 px-2 py-1.5 text-[10px] leading-snug text-amber-200/90">
-        Engine not running
-      </p>
-    );
-  }
-
-  return (
-    <p className="mt-2 rounded border border-amber-900/40 bg-amber-950/20 px-2 py-1.5 text-[10px] leading-snug text-amber-200/90">
-      Broker unreachable
-    </p>
   );
 }

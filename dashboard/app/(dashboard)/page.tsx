@@ -72,7 +72,7 @@ export default async function OverviewPage() {
             id: 1,
             enabled: false,
             trading_mode: "paper",
-            execution_mode: "simulated",
+            execution_mode: "ibkr",
             ibkr_connected: false,
             jev_connected: false,
             last_heartbeat: null,

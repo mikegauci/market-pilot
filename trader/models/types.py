@@ -57,7 +57,7 @@ class BotStatusUpdate:
     trading_mode: TradingMode
     ibkr_connected: bool
     jev_connected: bool = False
-    execution_mode: ExecutionMode = ExecutionMode.SIMULATED
+    execution_mode: ExecutionMode = ExecutionMode.IBKR
     last_error: Optional[str] = None
 
 
@@ -167,7 +167,7 @@ class TradeRecord:
     exit_price: Optional[float] = None
     gross_pnl: Optional[float] = None
     net_pnl: Optional[float] = None
-    execution_mode: str = "simulated"
+    execution_mode: str = "ibkr"
     ibkr_parent_order_id: Optional[int] = None
     ibkr_sl_order_id: Optional[int] = None
     ibkr_tp_order_id: Optional[int] = None

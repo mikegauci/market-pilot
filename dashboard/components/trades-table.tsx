@@ -46,7 +46,7 @@ export function TradesTable({
       id: 1,
       enabled: false,
       trading_mode: "paper",
-      execution_mode: "simulated",
+      execution_mode: "ibkr",
       ibkr_connected: false,
       jev_connected: false,
       last_heartbeat: null,
@@ -168,7 +168,7 @@ export function TradesTable({
                             : "bg-zinc-800 text-zinc-400"
                         }
                       >
-                        {t.execution_mode ?? "simulated"}
+                        {t.execution_mode ?? "ibkr"}
                       </Badge>
                     </td>
                     <td className="py-2 pr-3">

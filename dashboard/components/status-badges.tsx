@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getMarketStatus, type MarketStatus } from "@/lib/market-hours";
+import { getTradeModeCopy } from "@/lib/trade-mode";
 import { getDisplayStatus, getStableDisplayNow } from "@/lib/trader-status";
 import type { BotStatus } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
@@ -102,7 +103,10 @@ function StatusPanel({
   showLiveTimes: boolean;
   variant: "default" | "sidebar";
 }) {
-  const isIbkrExecution = (status.execution_mode ?? "simulated") === "ibkr";
+  const tradeMode = getTradeModeCopy({
+    ibkrConnected: display.ibkrConnected,
+    traderOnline: display.traderOnline,
+  });
   const signalsPaused = market && !market.isOpen && display.traderOnline;
   const signalsActive = display.jevConnected;
   const signalsLabel = signalsActive
@@ -163,9 +167,7 @@ function StatusPanel({
         <p className="mt-2 text-[10px] text-zinc-500" suppressHydrationWarning>
           Updated {showLiveTimes ? display.heartbeatLabel : "—"}
         </p>
-        <p className="mt-1 text-[10px] text-zinc-500">
-          {isIbkrExecution ? "Paper broker" : "Dashboard only"}
-        </p>
+        <p className="mt-1 text-[10px] text-zinc-500">{tradeMode.sidebarLabel}</p>
 
         {status.last_error && (
           <p className="mt-2 rounded border border-red-900/50 bg-red-950/30 px-2 py-1.5 text-[10px] leading-snug text-red-300">
@@ -239,10 +241,7 @@ function StatusPanel({
       </div>
 
       <p className="mt-3 text-xs text-zinc-500">
-        Trade mode:{" "}
-        <span className="text-zinc-400">
-          {isIbkrExecution ? "Orders sent to paper broker" : "Practice — tracked in dashboard only"}
-        </span>
+        Trade mode: <span className="text-zinc-400">{tradeMode.statusLine}</span>
       </p>
 
       {status.last_error && (

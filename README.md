@@ -332,7 +332,7 @@ IBKR exit NVDA @ $228.00 (take_profit) PnL $3.37
 - [ ] SL or TP closes trade in IBKR and Supabase
 - [ ] Live mode still requires `LIVE_TRADING_CONFIRMATION` (unchanged)
 
-Execution mode is controlled from the dashboard **Overview → Trading controls** (`bot_status.execution_mode`). Env `EXECUTION_MODE` is the fallback if the database read fails.
+Execution mode defaults to `ibkr` (paper orders via IB Gateway). Env `EXECUTION_MODE` is the fallback if the database read fails. With `DATA_SOURCE=mock`, the trader uses simulated execution for local dev without IB Gateway.
 
 Status badges show **Trader online/offline** based on heartbeat age (~30s). Stopping the trader clears connection flags immediately.
 
@@ -359,7 +359,7 @@ Open [http://localhost:3000](http://localhost:3000) and sign in.
 
 - [ ] Login required — unauthenticated users redirect to `/login`
 - [ ] Overview shows equity, connection badges, open positions
-- [ ] Overview trading controls update `bot_status.enabled` and `execution_mode` (trader picks up within ~30s)
+- [ ] Overview auto-trading toggle updates `bot_status.enabled` (trader picks up within ~30s)
 - [ ] Stopping the trader shows Trader/IBKR/Jev offline on the dashboard
 - [ ] Settings save and trader reloads risk params each cycle
 - [ ] Predictions and trades populate from engine data
