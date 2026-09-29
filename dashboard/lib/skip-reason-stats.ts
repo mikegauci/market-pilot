@@ -44,7 +44,14 @@ const RISK_REASONS = new Set([
   "reentry_cooldown",
 ]);
 
-const IBKR_PREFIXES = ["ibkr_"];
+const IBKR_REASON_PREFIXES = [
+  "ibkr_insufficient_buying_power",
+  "ibkr_pending_entry_order",
+  "ibkr_not_connected",
+  "ibkr_order_failed",
+  "ibkr_ineligible",
+  "ibkr_cooldown",
+] as const;
 
 const TIER_SKIP_REASONS = new Set([
   "below_trade_threshold",
@@ -59,7 +66,10 @@ export function normalizeSkipReasonKey(reason: string | null | undefined): strin
   if (reason.startsWith("awaiting_confirmation")) return "awaiting_confirmation";
   if (reason.startsWith("reentry_cooldown")) return "reentry_cooldown";
   if (reason.startsWith("correlation_cap")) return "correlation_cap";
-  for (const prefix of [...FILTER_PREFIXES, ...IBKR_PREFIXES]) {
+  for (const prefix of IBKR_REASON_PREFIXES) {
+    if (reason.startsWith(prefix)) return prefix;
+  }
+  for (const prefix of FILTER_PREFIXES) {
     if (reason.startsWith(prefix)) return prefix;
   }
   return reason;
@@ -94,6 +104,7 @@ export function skipReasonLabel(key: string): string {
     ibkr_not_connected: "Broker not connected",
     ibkr_pending_entry_order: "Pending BUY order",
     ibkr_cooldown: "Broker cooldown",
+    ibkr_ineligible: "Broker ineligible (KID / permission)",
     ibkr_insufficient_buying_power: "Insufficient buying power",
     ibkr_order_failed: "Broker order failed",
   };
@@ -134,7 +145,7 @@ function isRiskBlocked(reason: string | null | undefined): boolean {
   const key = normalizeSkipReasonKey(reason);
   if (!key) return false;
   if (RISK_REASONS.has(key)) return true;
-  return IBKR_PREFIXES.some((p) => key.startsWith(p));
+  return IBKR_REASON_PREFIXES.some((p) => key.startsWith(p));
 }
 
 function isTierSkip(reason: string | null | undefined): boolean {

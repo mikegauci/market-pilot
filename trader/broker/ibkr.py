@@ -86,6 +86,39 @@ def _describe_trade_state(trade: Trade) -> str:
     return ", ".join(parts)
 
 
+# Permanent account/product eligibility failures — retrying will not help.
+_ELIGIBILITY_REJECTION_MARKERS = (
+    "no trading permission",
+    "customer ineligible",
+    "ineligibility reasons",
+    "does not have a kid",
+    "appropriate kid is available",
+)
+
+# Stronger product-document signals — safe to persist as untradable in em_universe.
+_KID_REJECTION_MARKERS = (
+    "does not have a kid",
+    "appropriate kid is available",
+    "ineligibility reasons",
+)
+
+
+def is_permanent_ibkr_eligibility_rejection(detail: object) -> bool:
+    """True when IB rejected the order for product/account eligibility (e.g. missing KID)."""
+    text = str(detail or "").lower()
+    if not text:
+        return False
+    return any(marker in text for marker in _ELIGIBILITY_REJECTION_MARKERS)
+
+
+def is_kid_document_rejection(detail: object) -> bool:
+    """True when rejection cites missing/unavailable KID (durable product ineligibility)."""
+    text = str(detail or "").lower()
+    if not text:
+        return False
+    return any(marker in text for marker in _KID_REJECTION_MARKERS)
+
+
 class IBKRClient:
     """Interactive Brokers client for quotes, account data, and order execution."""
 

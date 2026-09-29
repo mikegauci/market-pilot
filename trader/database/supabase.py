@@ -475,13 +475,20 @@ class SupabaseRepository:
         return symbols
 
     @_db_synchronized
-    def set_em_universe_tradable(self, symbol: str, tradable: bool) -> None:
-        self.client.table("em_universe").update(
-            {
-                "tradable": tradable,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ).eq("symbol", symbol.upper()).execute()
+    def set_em_universe_tradable(self, symbol: str, tradable: bool) -> bool:
+        """Update tradable flag. Returns True when at least one em_universe row changed."""
+        result = (
+            self.client.table("em_universe")
+            .update(
+                {
+                    "tradable": tradable,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+            .eq("symbol", symbol.upper())
+            .execute()
+        )
+        return bool(result.data)
 
     @_db_synchronized
     def get_bars(self, symbol: str, bar_size: str) -> List[Bar]:

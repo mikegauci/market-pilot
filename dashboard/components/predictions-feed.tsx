@@ -80,6 +80,7 @@ function formatSkipReason(reason: string | null | undefined): string | null {
   if (reason.startsWith("news_earnings_window")) return "Earnings window";
   if (reason.startsWith("correlation_cap")) return "Correlation cap";
   if (reason.startsWith("ibkr_cooldown")) return "Broker cooldown";
+  if (reason.startsWith("ibkr_ineligible")) return "Broker ineligible (KID / permission)";
   if (reason.startsWith("ibkr_insufficient_buying_power")) return "Insufficient buying power";
   if (reason.startsWith("ibkr_order_failed")) return "Broker order failed";
   return SKIP_REASON_LABELS[reason] ?? reason.replaceAll("_", " ");

@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from broker.execution import (
     close_ibkr_signal_exits,
@@ -16,7 +16,12 @@ from broker.execution import (
     sync_ibkr_exits,
 )
 from broker.manual_close import process_manual_close_commands
-from broker.ibkr import IBKRClient, MARKET_DATA_COMPETING_SESSION_MSG
+from broker.ibkr import (
+    IBKRClient,
+    MARKET_DATA_COMPETING_SESSION_MSG,
+    is_kid_document_rejection,
+    is_permanent_ibkr_eligibility_rejection,
+)
 from broker.reconcile import reconcile_orphan_ibkr_positions
 from config import Settings, load_settings
 from execution_mode import effective_execution_mode
@@ -58,6 +63,7 @@ from watchlist.jev_screener import (
     effective_benchmark,
     merge_core_watchlist,
     resolve_trading_watchlist,
+    strip_benchmark_symbol,
 )
 from watchlist.screener_scheduler import (
     EMWatchlistScheduler,
@@ -74,6 +80,7 @@ _last_closed_market_log = 0.0
 _last_market_data_warn = 0.0
 _ibkr_market_data_mode = "stream"
 _ibkr_entry_cooldown_until: Dict[str, float] = {}
+_ibkr_entry_blocked: Set[str] = set()
 _CLOSED_MARKET_LOG_INTERVAL_SEC = 300.0
 _MARKET_DATA_WARN_INTERVAL_SEC = 300.0
 _SHUTDOWN_SLEEP_CHUNK_SEC = 0.5
@@ -95,6 +102,28 @@ def compute_loop_sleep_sec(
     if next_heartbeat_in <= 0:
         return 0.0
     return min(sleep_for, next_heartbeat_in)
+
+
+def build_eval_symbols(
+    watchlist: Sequence[str],
+    open_symbols: Sequence[str],
+    risk_settings: Optional[RiskSettings],
+) -> List[str]:
+    """Symbols to evaluate for entries/exits.
+
+    Benchmark is stripped from the watchlist (never an entry candidate) but open
+    positions are always kept so Jev/signal exits still run on a held benchmark.
+    """
+    if risk_settings is not None:
+        entry_candidates = strip_benchmark_symbol(watchlist, risk_settings)
+    else:
+        entry_candidates = list(watchlist)
+    merged: List[str] = []
+    for raw in list(entry_candidates) + list(open_symbols):
+        symbol = str(raw).upper()
+        if symbol and symbol not in merged:
+            merged.append(symbol)
+    return merged
 
 
 def should_refresh(now_mono: float, last_sync_mono: float, interval_sec: float) -> bool:
@@ -748,11 +777,15 @@ def run() -> int:
                 )
                 watchlist = (
                     resolve_trading_watchlist(risk_settings, open_symbols)
-                    or settings.watchlist_symbols
+                    or strip_benchmark_symbol(
+                        settings.watchlist_symbols, risk_settings
+                    )
                 )
                 screener_result = em_scheduler.take_completed_screener_result()
                 if screener_result is not None:
-                    watchlist = screener_result.watchlist
+                    watchlist = strip_benchmark_symbol(
+                        screener_result.watchlist, risk_settings
+                    )
                     apply_screener_result_to_risk_settings(
                         risk_settings,
                         watchlist=screener_result.watchlist,
@@ -940,7 +973,10 @@ def run() -> int:
                     if risk_manager
                     else []
                 )
-                eval_symbols = list(dict.fromkeys(watchlist + open_symbols))
+                # Benchmark is never an entry candidate; open positions stay for exits.
+                eval_symbols = build_eval_symbols(
+                    watchlist, open_symbols, risk_settings
+                )
 
             jev_sell_symbols: Set[str] = set()
 
@@ -1096,35 +1132,41 @@ def run() -> int:
                                 try:
                                     ibkr_skip_reason: Optional[str] = None
                                     now_mono = time.monotonic()
-                                    cooldown_until = _ibkr_entry_cooldown_until.get(
-                                        trade.symbol, 0.0
-                                    )
-                                    if now_mono < cooldown_until:
-                                        remaining = cooldown_until - now_mono
+                                    if trade.symbol.upper() in _ibkr_entry_blocked:
                                         ibkr_skip_reason = (
-                                            f"ibkr_cooldown ({remaining:.0f}s left)"
+                                            "ibkr_ineligible "
+                                            "(no trading permission / KID)"
                                         )
-                                    elif ibkr.has_pending_entry_order(trade.symbol):
-                                        ibkr_skip_reason = "ibkr_pending_entry_order"
                                     else:
-                                        try:
-                                            account = ibkr.get_account_summary()
-                                            if (
-                                                trade.position_value
-                                                > account.buying_power
-                                            ):
-                                                ibkr_skip_reason = (
-                                                    "ibkr_insufficient_buying_power "
-                                                    f"(need ${trade.position_value:.0f}, "
-                                                    f"have ${account.buying_power:.0f})"
-                                                )
-                                        except Exception as exc:
-                                            logger.warning(
-                                                "Could not verify IBKR buying power "
-                                                "for %s: %s",
-                                                trade.symbol,
-                                                exc,
+                                        cooldown_until = _ibkr_entry_cooldown_until.get(
+                                            trade.symbol, 0.0
+                                        )
+                                        if now_mono < cooldown_until:
+                                            remaining = cooldown_until - now_mono
+                                            ibkr_skip_reason = (
+                                                f"ibkr_cooldown ({remaining:.0f}s left)"
                                             )
+                                        elif ibkr.has_pending_entry_order(trade.symbol):
+                                            ibkr_skip_reason = "ibkr_pending_entry_order"
+                                        else:
+                                            try:
+                                                account = ibkr.get_account_summary()
+                                                if (
+                                                    trade.position_value
+                                                    > account.buying_power
+                                                ):
+                                                    ibkr_skip_reason = (
+                                                        "ibkr_insufficient_buying_power "
+                                                        f"(need ${trade.position_value:.0f}, "
+                                                        f"have ${account.buying_power:.0f})"
+                                                    )
+                                            except Exception as exc:
+                                                logger.warning(
+                                                    "Could not verify IBKR buying power "
+                                                    "for %s: %s",
+                                                    trade.symbol,
+                                                    exc,
+                                                )
 
                                     if ibkr_skip_reason:
                                         trade_skip_reason = ibkr_skip_reason
@@ -1168,22 +1210,60 @@ def run() -> int:
                                             trade.take_profit,
                                         )
                                 except Exception as exc:
-                                    trade_skip_reason = f"ibkr_order_failed ({exc})"
-                                    _ibkr_entry_cooldown_until[symbol] = (
-                                        time.monotonic()
-                                        + settings.ibkr_entry_cooldown_sec
-                                    )
-                                    logger.error(
-                                        "IBKR order failed for %s: %s", symbol, exc
-                                    )
-                                    if "PendingSubmit" in str(exc) or "whyHeld" in str(
-                                        exc
-                                    ):
-                                        logger.error(
-                                            "Hint: if orders stay PendingSubmit, disable "
-                                            "order confirmations in TWS/Gateway "
-                                            "(Global Config → Presets → Confirmations)."
+                                    if is_permanent_ibkr_eligibility_rejection(exc):
+                                        blocked = trade.symbol.upper()
+                                        _ibkr_entry_blocked.add(blocked)
+                                        trade_skip_reason = (
+                                            "ibkr_ineligible "
+                                            f"(no trading permission / KID: {exc})"
                                         )
+                                        logger.error(
+                                            "IBKR eligibility block for %s — "
+                                            "skipping further entries this session: %s",
+                                            blocked,
+                                            exc,
+                                        )
+                                        if is_kid_document_rejection(exc):
+                                            try:
+                                                updated = db.set_em_universe_tradable(
+                                                    blocked, False
+                                                )
+                                                if updated:
+                                                    logger.info(
+                                                        "Marked %s untradable in "
+                                                        "em_universe (KID rejection)",
+                                                        blocked,
+                                                    )
+                                                else:
+                                                    logger.debug(
+                                                        "%s not in em_universe — "
+                                                        "session block only",
+                                                        blocked,
+                                                    )
+                                            except Exception as db_exc:
+                                                logger.warning(
+                                                    "Could not mark %s untradable in "
+                                                    "em_universe: %s",
+                                                    blocked,
+                                                    db_exc,
+                                                )
+                                    else:
+                                        trade_skip_reason = f"ibkr_order_failed ({exc})"
+                                        _ibkr_entry_cooldown_until[symbol] = (
+                                            time.monotonic()
+                                            + settings.ibkr_entry_cooldown_sec
+                                        )
+                                        logger.error(
+                                            "IBKR order failed for %s: %s", symbol, exc
+                                        )
+                                        if "PendingSubmit" in str(exc) or "whyHeld" in str(
+                                            exc
+                                        ):
+                                            logger.error(
+                                                "Hint: if orders stay PendingSubmit, disable "
+                                                "order confirmations in TWS/Gateway "
+                                                "(Global Config → Presets → Confirmations)."
+                                            )
                             elif execution_mode == ExecutionMode.IBKR:
                                 trade_skip_reason = "ibkr_not_connected"
                                 logger.warning(
