@@ -444,7 +444,15 @@ def run() -> int:
                 settings.ibkr_port,
                 _ibkr_market_data_mode,
             )
-            priority_symbols = merge_core_watchlist(risk_settings, [])
+            # Core + open positions + dynamic picks — otherwise symbols like JPM
+            # (on screener list / held but not always-on core) never get bars.
+            open_symbols = [trade.symbol for trade in db.get_open_trades()]
+            priority_symbols = list(
+                dict.fromkeys(
+                    merge_core_watchlist(risk_settings, open_symbols)
+                    + resolve_trading_watchlist(risk_settings, open_symbols)
+                )
+            )
             backfill_watchlist_symbols(
                 settings, bar_store, ibkr, priority_symbols
             )

@@ -8,6 +8,7 @@ import type { SymbolBar } from "@/lib/types/database";
 
 function bar(ts: string): SymbolBar {
   return {
+    id: Date.parse(ts) || 1,
     symbol: "AAPL",
     bar_size: "5 mins",
     ts,
@@ -16,6 +17,7 @@ function bar(ts: string): SymbolBar {
     low: 1,
     close: 1,
     volume: 1,
+    created_at: ts,
   };
 }
 

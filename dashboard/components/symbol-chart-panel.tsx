@@ -234,6 +234,10 @@ export function SymbolChartPanel({
             </div>
           ) : error && bars.length === 0 ? (
             <p className="py-8 text-center text-sm text-red-400">{error}</p>
+          ) : bars.length === 0 ? (
+            <p className="py-8 text-center text-sm text-zinc-500">
+              No chart data yet — bars backfill when the trading engine runs.
+            </p>
           ) : displayBars.length === 0 ? (
             <p className="py-8 text-center text-sm text-zinc-500">
               No bars in this range — try All or another interval.
