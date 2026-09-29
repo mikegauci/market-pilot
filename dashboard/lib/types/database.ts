@@ -24,6 +24,8 @@ export type Settings = {
   max_hold_minutes: number;
   /** 0 = off; block entries when 1m volume ratio is below this vs 10-bar average */
   min_volume_ratio: number;
+  /** 0 = off; block entries / EM scan picks below this USD share price */
+  min_share_price: number;
   account_capital: number;
   risk_sync_equity: number | null;
   risk_profile?: "low" | "medium" | "high" | null;

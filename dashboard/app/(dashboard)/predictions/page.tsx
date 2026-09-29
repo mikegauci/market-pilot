@@ -26,19 +26,20 @@ export default async function PredictionsPage({
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold sm:text-2xl">Predictions</h2>
-      <SkipReasonAnalytics
-        predictions={analyticsPredictions}
-        recordThreshold={recordThreshold}
-        minConfidence={minConfidence}
-      />
       <PredictionsFeed
         predictions={predictions}
         initialExpandedId={initialExpandedId}
         limit={predictionsLimit}
         filterOptions={{
           minVolumeRatio: settings?.min_volume_ratio,
+          minSharePrice: settings?.min_share_price,
           benchmarkSymbol: settings?.benchmark_symbol,
         }}
+      />
+      <SkipReasonAnalytics
+        predictions={analyticsPredictions}
+        recordThreshold={recordThreshold}
+        minConfidence={minConfidence}
       />
     </div>
   );

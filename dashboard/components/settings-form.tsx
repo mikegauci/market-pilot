@@ -57,6 +57,8 @@ const SETTING_DESCRIPTIONS_FULL = {
     "Force-close open trades after this many minutes (0 = off). When off, exits use stop loss, take profit, and Jev SELL only.",
   min_volume_ratio:
     "Block new entries when latest 1-min volume is below this fraction of the 10-bar average (0 = off). Example: 0.5 requires at least half the recent average volume.",
+  min_share_price:
+    "Block entries and drop EM scan candidates below this USD share price (0 = off). Filters out thin/low-priced names such as sub-$5 ADRs.",
   watchlist: "Effective symbols the bot watches right now (updated by Jev when dynamic mode is on).",
   watchlist_core:
     "Always-on EM symbols. Jev merges these with its top dynamic picks when dynamic mode is enabled.",
@@ -75,6 +77,7 @@ const SETTING_DESCRIPTIONS = {
   take_profit_percentage: "Exit when price rises this % above entry.",
   max_hold_minutes: "Force-close after N minutes (0 = off).",
   min_volume_ratio: "Block entries when volume is below this fraction of average (0 = off).",
+  min_share_price: "Block entries / EM picks below this USD price (0 = off).",
   watchlist: "Live symbols the trader evaluates each cycle.",
   watchlist_core: "Always monitored; merged with dynamic picks when enabled.",
   watchlist_dynamic_size: "Extra symbols added per Jev universe scan.",
@@ -262,6 +265,7 @@ export function SettingsForm({
   );
   const [maxHoldMinutes, setMaxHoldMinutes] = useState(settings.max_hold_minutes ?? 0);
   const [minVolumeRatio, setMinVolumeRatio] = useState(settings.min_volume_ratio ?? 0);
+  const [minSharePrice, setMinSharePrice] = useState(settings.min_share_price ?? 50);
   const maxHoldHints = getMaxHoldHints(maxHoldMinutes);
   const [selectedProfile, setSelectedProfile] = useState<RiskProfile>(
     resolveRiskProfile(settings.risk_profile),
@@ -486,6 +490,24 @@ export function SettingsForm({
               max={5}
               value={minVolumeRatio}
               onChange={(event) => setMinVolumeRatio(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="min_share_price"
+            label="Min share price ($)"
+            description={SETTING_DESCRIPTIONS.min_share_price}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.min_share_price}
+          >
+            <Input
+              id="min_share_price"
+              name="min_share_price"
+              type="number"
+              step="1"
+              min={0}
+              max={10000}
+              value={minSharePrice}
+              onChange={(event) => setMinSharePrice(Number(event.target.value))}
               required
             />
           </SettingsField>

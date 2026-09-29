@@ -26,6 +26,7 @@ function labelFor(name: string): string {
     take_profit_percentage: "Take profit (%)",
     max_hold_minutes: "Max hold (minutes)",
     min_volume_ratio: "Min volume ratio",
+    min_share_price: "Min share price ($)",
   };
   return labels[name] ?? name;
 }
@@ -41,6 +42,7 @@ export type ParsedSettings = {
   take_profit_percentage: number;
   max_hold_minutes: number;
   min_volume_ratio: number;
+  min_share_price: number;
   risk_profile: RiskProfile;
   watchlist: string[];
   watchlist_core: string[];
@@ -90,6 +92,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   const take_profit_percentage = parseStrategyPercent(formData, "take_profit_percentage");
   const max_hold_minutes = parseRequiredNumber(formData, "max_hold_minutes");
   const min_volume_ratio = parseRequiredNumber(formData, "min_volume_ratio");
+  const min_share_price = parseRequiredNumber(formData, "min_share_price");
 
   if (signal_record_threshold > minimum_jev_confidence) {
     throw new Error("Signal record threshold (%) must be at or below Min Jev confidence (%)");
@@ -114,6 +117,9 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   if (min_volume_ratio < 0 || min_volume_ratio > 5) {
     throw new Error("Min volume ratio must be between 0 (off) and 5");
+  }
+  if (min_share_price < 0 || min_share_price > 10000) {
+    throw new Error("Min share price must be between 0 (off) and 10000");
   }
 
   const watchlistCoreRaw = String(formData.get("watchlist_core") ?? "");
@@ -194,6 +200,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     take_profit_percentage,
     max_hold_minutes,
     min_volume_ratio,
+    min_share_price,
     risk_profile: parseRiskProfile(formData),
     watchlist: effectiveWatchlist ?? watchlist_core,
     watchlist_core,

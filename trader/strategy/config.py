@@ -20,6 +20,7 @@ class StrategyConfig:
     warmup_min_1m_bars: int = 15
     min_news_sentiment: float = -0.3
     min_volume_ratio: float = 0.0
+    min_share_price: float = 0.0
     news_block_tags: Tuple[str, ...] = (
         "downgrade",
         "lawsuit",
@@ -34,6 +35,11 @@ def strategy_config_with_risk_overrides(
     base: StrategyConfig,
     *,
     min_volume_ratio: float,
+    min_share_price: float = 0.0,
 ) -> StrategyConfig:
     """Apply dashboard settings overrides onto env-based strategy config."""
-    return replace(base, min_volume_ratio=min_volume_ratio)
+    return replace(
+        base,
+        min_volume_ratio=min_volume_ratio,
+        min_share_price=min_share_price,
+    )

@@ -210,6 +210,13 @@ def build_universe_market_states(
         quote = quotes_by_symbol.get(symbol)
         if quote is None:
             continue
+        if (
+            strategy_config.min_share_price > 0
+            and quote.price is not None
+            and quote.price < strategy_config.min_share_price
+            and symbol.upper() != benchmark_key
+        ):
+            continue
         state = build_market_state(
             quote,
             minute_bars.get(symbol),

@@ -33,6 +33,7 @@ describe("normalizeSettings", () => {
     } satisfies SettingsRow;
 
     const normalized = normalizeSettings(raw);
+    expect(normalized?.min_share_price).toBe(50);
     expect(normalized?.demotion_exits_enabled).toBe(true);
     expect(normalized?.demotion_max_hold_ratio).toBe(0.5);
     expect(normalized?.demotion_jev_sell_on_loss).toBe(true);

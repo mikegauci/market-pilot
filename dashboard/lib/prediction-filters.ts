@@ -9,6 +9,7 @@ export type FilterCheck = {
 
 type EvaluateOptions = {
   minVolumeRatio?: number;
+  minSharePrice?: number;
   benchmarkSymbol?: string;
 };
 
@@ -18,6 +19,7 @@ export function evaluateEntryFilters(
 ): FilterCheck[] {
   const thresholds = STRATEGY_FILTER_THRESHOLDS;
   const minVolumeRatio = options.minVolumeRatio ?? thresholds.minVolumeRatio;
+  const minSharePrice = options.minSharePrice ?? thresholds.minSharePrice;
   const benchmark = options.benchmarkSymbol ?? "EEM";
   const price = snapshot?.price ?? null;
 
@@ -30,6 +32,17 @@ export function evaluateEntryFilters(
     snapshot?.benchmark_change_5m ?? snapshot?.spy_change_5m ?? null;
 
   const checks: FilterCheck[] = [
+    {
+      name: "Share price",
+      pass:
+        minSharePrice <= 0 || price == null ? null : price >= minSharePrice,
+      detail:
+        minSharePrice <= 0
+          ? "off"
+          : price != null
+            ? `$${formatPrice(price)} / min $${formatPrice(minSharePrice)}`
+            : "—",
+    },
     {
       name: "RSI",
       pass:
@@ -121,6 +134,7 @@ function formatPrice(value: number): string {
 export function filterSummaryFromSettings(settings: Settings | null | undefined): EvaluateOptions {
   return {
     minVolumeRatio: settings?.min_volume_ratio ?? STRATEGY_FILTER_THRESHOLDS.minVolumeRatio,
+    minSharePrice: settings?.min_share_price ?? STRATEGY_FILTER_THRESHOLDS.minSharePrice,
     benchmarkSymbol: settings?.benchmark_symbol ?? "EEM",
   };
 }

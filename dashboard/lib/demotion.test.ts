@@ -16,6 +16,7 @@ function baseSettings(overrides: Partial<Settings> = {}): Settings {
     take_profit_percentage: 0.02,
     max_hold_minutes: 0,
     min_volume_ratio: 0,
+    min_share_price: 50,
     account_capital: 1000,
     risk_sync_equity: null,
     watchlist: ["BABA", "VALE", "EEM"],

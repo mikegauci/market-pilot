@@ -89,6 +89,19 @@ class TestFilters(unittest.TestCase):
         result = check_entry_filters(_state(volume_ratio=0.1), StrategyConfig())
         self.assertTrue(result.passed)
 
+    def test_min_share_price_off_when_zero(self) -> None:
+        result = check_entry_filters(
+            _state(price=1.69, ema_20=1.50, spread=0.0),
+            StrategyConfig(min_share_price=0.0, max_spread_pct=1.0),
+        )
+        self.assertTrue(result.passed)
+
+    def test_rejects_price_below_min_share_price(self) -> None:
+        config = StrategyConfig(min_share_price=50.0, require_price_above_ema20=False)
+        result = check_entry_filters(_state(price=1.69), config)
+        self.assertFalse(result.passed)
+        self.assertIn("price_too_low", result.reason)
+
     def test_correlation_cap(self) -> None:
         trades = [
             TradeRecord(

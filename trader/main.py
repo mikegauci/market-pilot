@@ -405,15 +405,21 @@ def run() -> int:
             settings.strategy_config.warmup_min_1m_bars,
         )
 
-    strategy_config = settings.strategy_config
+    strategy_config = strategy_config_with_risk_overrides(
+        settings.strategy_config,
+        min_volume_ratio=risk_settings.min_volume_ratio,
+        min_share_price=risk_settings.min_share_price,
+    )
     confirmation_tracker = ConfirmationTracker(strategy_config.confirmation_cycles)
     logger.info(
         "Strategy filters: min confidence from settings, margin %.0f%%, "
-        "confirmation %sx, max hold %.0fm (dashboard), min volume ratio %.2f (dashboard)",
+        "confirmation %sx, max hold %.0fm (dashboard), min volume ratio %.2f, "
+        "min share price $%.2f (dashboard)",
         strategy_config.min_buy_hold_margin * 100,
         strategy_config.confirmation_cycles,
         risk_settings.max_hold_minutes,
         risk_settings.min_volume_ratio,
+        risk_settings.min_share_price,
     )
 
     ibkr = IBKRClient(
@@ -718,6 +724,11 @@ def run() -> int:
                     settings.settings_refresh_interval_sec,
                 ):
                     risk_settings = db.get_risk_settings()
+                    strategy_config = strategy_config_with_risk_overrides(
+                        settings.strategy_config,
+                        min_volume_ratio=risk_settings.min_volume_ratio,
+                        min_share_price=risk_settings.min_share_price,
+                    )
                     last_settings_sync = now_mono
 
                 benchmark_symbol = effective_benchmark(risk_settings)
@@ -1027,8 +1038,9 @@ def run() -> int:
 
                     if eligible and risk_manager and db:
                         entry_strategy = strategy_config_with_risk_overrides(
-                            strategy_config,
+                            settings.strategy_config,
                             min_volume_ratio=risk_settings.min_volume_ratio,
+                            min_share_price=risk_settings.min_share_price,
                         )
                         entry_filter = check_entry_filters(state, entry_strategy)
                         if not entry_filter.passed:

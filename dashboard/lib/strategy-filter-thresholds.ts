@@ -10,6 +10,8 @@ export const STRATEGY_FILTER_THRESHOLDS = {
   requirePriceAboveEma20: true,
   /** 0 = disabled; set STRATEGY_MIN_VOLUME_RATIO in trader .env to enable */
   minVolumeRatio: 0,
+  /** Dashboard default; 0 = off */
+  minSharePrice: 50,
   /** Mirrors StrategyConfig.min_buy_hold_margin / STRATEGY_MIN_BUY_HOLD_MARGIN */
   minBuyHoldMargin: 0.15,
   newsBlockTags: [

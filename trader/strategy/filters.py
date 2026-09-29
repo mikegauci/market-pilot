@@ -15,6 +15,12 @@ class FilterResult:
 
 
 def check_entry_filters(state: MarketState, config: StrategyConfig) -> FilterResult:
+    if config.min_share_price > 0 and state.price < config.min_share_price:
+        return FilterResult(
+            False,
+            f"price_too_low ({state.price:.2f} < {config.min_share_price:.2f})",
+        )
+
     if state.spread is not None and state.price > 0:
         spread_pct = state.spread / state.price
         if spread_pct > config.max_spread_pct:
