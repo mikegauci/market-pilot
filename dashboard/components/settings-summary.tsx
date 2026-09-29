@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/card";
 import { RiskRecommendationStatusContent } from "@/components/risk-recommendation-status-content";
+import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
 import {
   areAllRecommendationsApplied,
   formatProfileTitle,
@@ -40,7 +41,8 @@ export function SettingsSummary({
   };
 
   const allApplied = areAllRecommendationsApplied(savedValues, baselineEquity, profile);
-  const watchlistCount = settings.watchlist.length;
+  const watchlist = resolveEffectiveWatchlist(settings);
+  const watchlistCount = watchlist.length;
 
   return (
     <Card className={cn("h-full", className)}>
@@ -77,6 +79,19 @@ export function SettingsSummary({
           value={`${watchlistCount} symbol${watchlistCount === 1 ? "" : "s"}`}
         />
       </div>
+
+      {watchlistCount > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {watchlist.map((symbol) => (
+            <span
+              key={symbol}
+              className="rounded border border-zinc-700/80 bg-zinc-950/60 px-2 py-0.5 font-mono text-xs text-zinc-200"
+            >
+              {symbol}
+            </span>
+          ))}
+        </div>
+      )}
 
       <Link
         href="/strategy"

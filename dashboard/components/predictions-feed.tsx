@@ -12,6 +12,7 @@ import {
   sentimentClass,
   sentimentLabel,
 } from "@/lib/news-feed";
+import type { EvaluateOptions } from "@/lib/prediction-filters";
 import type { MarketSnapshot, Prediction } from "@/lib/types/database";
 import { formatCurrency, formatDateTime, formatPercent } from "@/lib/utils";
 
@@ -155,10 +156,7 @@ export function PredictionsFeed({
   limit = 50,
 }: {
   predictions: Prediction[];
-  filterOptions?: {
-    minVolumeRatio?: number;
-    benchmarkSymbol?: string;
-  };
+  filterOptions?: EvaluateOptions;
   initialExpandedId?: string | null;
   limit?: number;
 }) {

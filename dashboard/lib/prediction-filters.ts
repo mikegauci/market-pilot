@@ -7,7 +7,7 @@ export type FilterCheck = {
   detail: string;
 };
 
-type EvaluateOptions = {
+export type EvaluateOptions = {
   minVolumeRatio?: number;
   minSharePrice?: number;
   benchmarkSymbol?: string;

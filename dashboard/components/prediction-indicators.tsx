@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { SymbolChartPanel } from "@/components/symbol-chart-panel";
 import {
   evaluateEntryFilters,
+  type EvaluateOptions,
   type FilterCheck,
 } from "@/lib/prediction-filters";
 import type { MarketSnapshot } from "@/lib/types/database";
@@ -12,10 +13,7 @@ import { cn } from "@/lib/utils";
 type Props = {
   snapshot: MarketSnapshot | null | undefined;
   symbol: string;
-  filterOptions: {
-    minVolumeRatio?: number;
-    benchmarkSymbol?: string;
-  };
+  filterOptions: EvaluateOptions;
   showChart?: boolean;
 };
 
