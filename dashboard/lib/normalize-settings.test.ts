@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeSettings } from "@/lib/normalize-settings";
-import type { Settings } from "@/lib/types/database";
+import type { SettingsRow } from "@/lib/normalize-settings";
 
 describe("normalizeSettings", () => {
   it("fills demotion defaults for partial rows", () => {
@@ -30,7 +30,7 @@ describe("normalizeSettings", () => {
       em_universe_synced_at: null,
       em_universe_source: null,
       updated_at: "",
-    } as Settings;
+    } satisfies SettingsRow;
 
     const normalized = normalizeSettings(raw);
     expect(normalized?.demotion_exits_enabled).toBe(true);

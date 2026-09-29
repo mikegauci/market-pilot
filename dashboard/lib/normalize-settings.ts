@@ -1,7 +1,27 @@
 import type { Settings } from "@/lib/types/database";
 
+/** Row shape from Supabase before demotion columns existed or were selected. */
+export type SettingsRow = Omit<
+  Settings,
+  | "demotion_exits_enabled"
+  | "demotion_max_hold_ratio"
+  | "demotion_jev_sell_on_loss"
+  | "demotion_jev_sell_max_loss_pct"
+  | "demotion_force_exit"
+> &
+  Partial<
+    Pick<
+      Settings,
+      | "demotion_exits_enabled"
+      | "demotion_max_hold_ratio"
+      | "demotion_jev_sell_on_loss"
+      | "demotion_jev_sell_max_loss_pct"
+      | "demotion_force_exit"
+    >
+  >;
+
 /** Apply defaults for settings columns that may be missing on older rows. */
-export function normalizeSettings(raw: Settings | null): Settings | null {
+export function normalizeSettings(raw: SettingsRow | null): Settings | null {
   if (!raw) {
     return null;
   }
