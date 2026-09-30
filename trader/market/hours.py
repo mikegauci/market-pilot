@@ -63,7 +63,7 @@ def is_entry_window_open(
 def should_force_eod_flatten(
     now: datetime | None = None,
     *,
-    flatten_minutes_before_close: float = 5.0,
+    flatten_minutes_before_close: float = 10.0,
 ) -> bool:
     if not is_us_regular_session_open(now):
         return False

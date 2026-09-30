@@ -30,6 +30,7 @@ const EXIT_REASON_LABELS: Record<string, string> = {
   time_exit: "Max hold",
   jev_sell: "Jev SELL",
   demotion_exit: "Demotion exit",
+  eod_flatten: "EOD flatten (incl. losers)",
   manual: "Manual close",
 };
 

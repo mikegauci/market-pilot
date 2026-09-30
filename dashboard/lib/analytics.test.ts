@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildEquitySeries, maxDrawdownPct } from "@/lib/portfolio-analytics";
-import { computeTradeStats } from "@/lib/trade-analytics";
+import { computeTradeStats, exitReasonLabel } from "@/lib/trade-analytics";
 import type { PortfolioSnapshot, Trade } from "@/lib/types/database";
 
 describe("portfolio-analytics", () => {
@@ -78,5 +78,9 @@ describe("trade-analytics", () => {
       },
     ];
     expect(computeTradeStats(trades).winRate).toBe(0.5);
+  });
+
+  it("labels eod_flatten exits for analytics", () => {
+    expect(exitReasonLabel("eod_flatten")).toBe("EOD flatten (incl. losers)");
   });
 });

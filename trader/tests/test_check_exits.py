@@ -233,6 +233,20 @@ class TestCheckExits(unittest.TestCase):
 
         self.assertTrue(self.manager.can_jev_sell_exit("NU", quotes))
 
+    def test_eod_flatten_closes_simulated_loser(self) -> None:
+        self.manager.open_trades = [_trade(entry_price=100.0, quantity=10.0)]
+        quotes = {
+            "META": Quote(symbol="META", price=98.0, bid=97.9, ask=98.1, spread=None),
+        }
+
+        closed = self.manager.force_close_all_simulated(quotes, reason="eod_flatten")
+
+        self.assertEqual(len(closed), 1)
+        self.assertEqual(closed[0].reason, "eod_flatten")
+        self.assertEqual(closed[0].exit_price, 97.9)
+        self.assertLess(closed[0].net_pnl, 0)
+        self.assertEqual(self.manager.open_trades, [])
+
 
 if __name__ == "__main__":
     unittest.main()

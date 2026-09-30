@@ -114,7 +114,11 @@ def force_eod_ibkr_exits(
     *,
     fill_timeout_sec: float = 30.0,
 ) -> bool:
-    """Flatten all IBKR longs before the regular session close."""
+    """Flatten all IBKR longs before the regular session close.
+
+    Unconditional on PnL — losers are closed so positions are not held naked
+    after DAY bracket orders expire at 16:00 ET.
+    """
     closed_any = False
     now_mono = time.monotonic()
     for trade in list(risk_manager.open_trades):

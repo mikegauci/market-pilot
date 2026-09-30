@@ -32,7 +32,15 @@ class MarketHoursTests(unittest.TestCase):
             is_entry_window_open(when_ok, cutoff_minutes_before_close=15.0)
         )
 
-    def test_eod_flatten_window(self) -> None:
+    def test_eod_flatten_window_default_ten_minutes(self) -> None:
+        when_in = datetime(2026, 9, 30, 15, 55, tzinfo=ET)
+        self.assertTrue(should_force_eod_flatten(when_in))
+        when_start = datetime(2026, 9, 30, 15, 50, tzinfo=ET)
+        self.assertTrue(should_force_eod_flatten(when_start))
+        when_early = datetime(2026, 9, 30, 15, 49, tzinfo=ET)
+        self.assertFalse(should_force_eod_flatten(when_early))
+
+    def test_eod_flatten_window_custom_cutoff(self) -> None:
         when = datetime(2026, 9, 30, 15, 57, tzinfo=ET)
         self.assertTrue(
             should_force_eod_flatten(when, flatten_minutes_before_close=5.0)

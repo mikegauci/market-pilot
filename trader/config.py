@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     strategy_confirmation_seconds: float = 30.0
     strategy_max_benchmark_drop_5m_pct: float = -0.12
     strategy_entry_cutoff_minutes_before_close: float = 15.0
-    strategy_eod_flatten_minutes_before_close: float = 5.0
+    strategy_eod_flatten_minutes_before_close: float = 10.0
     strategy_max_china_factor_positions: int = 3
     strategy_news_block_tags: str = "downgrade,lawsuit,sec_investigation,guidance_cut,layoffs"
     strategy_block_on_earnings: bool = False

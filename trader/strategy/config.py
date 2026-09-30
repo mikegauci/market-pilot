@@ -28,7 +28,7 @@ class StrategyConfig:
     min_buy_sell_margin: float = 0.10
     confirmation_seconds: float = 30.0
     entry_cutoff_minutes_before_close: float = 15.0
-    eod_flatten_minutes_before_close: float = 5.0
+    eod_flatten_minutes_before_close: float = 10.0
     stop_loss_atr_multiple: float = 1.0
     take_profit_atr_multiple: float = 1.5
     min_stop_loss_pct: float = 0.003

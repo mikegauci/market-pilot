@@ -185,6 +185,19 @@ When `DATA_SOURCE=ibkr`, the trader **skips Jev predictions and new entries** ou
 
 Tune the closed-market poll interval with `CLOSED_MARKET_EVAL_INTERVAL_SEC` (default `300`).
 
+### End-of-day flatten (day trading)
+
+IBKR bracket legs use **DAY** time-in-force and expire at the regular close. To avoid naked overnight longs, the trader:
+
+| Rule | Default | Env |
+|---|---|---|
+| No new entries | Last **15** min before 16:00 ET | `STRATEGY_ENTRY_CUTOFF_MINUTES_BEFORE_CLOSE` |
+| Flatten all open longs | Last **10** min (~15:50–16:00 ET) | `STRATEGY_EOD_FLATTEN_MINUTES_BEFORE_CLOSE` |
+
+**EOD flatten closes every open position**, including unrealized losers (`exit_reason=eod_flatten`). That is intentional: skipping reds would leave gap risk after brackets expire.
+
+**Jev SELL** is different intraday: the bot usually **does not** soft-exit a losing position (so the bracket stop can work). At the EOD window, flatten still runs regardless of PnL.
+
 ## Running Phase 3 (Risk Engine + Simulated Trades)
 
 Phase 3 opens **simulated** positions when Jev signals `BUY ELIGIBLE` and risk checks pass. Trades are stored in Supabase with stop-loss / take-profit exits. **No IBKR orders are placed.**

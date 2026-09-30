@@ -403,6 +403,11 @@ class RiskManager:
         *,
         reason: str = "eod_flatten",
     ) -> List[ClosedTrade]:
+        """Close every simulated open long (including unrealized losers).
+
+        Unlike Jev SELL, EOD flatten does not skip red positions — DAY brackets
+        expire at the regular close and overnight gap risk is out of scope.
+        """
         closed: List[ClosedTrade] = []
         for trade in list(self.open_trades):
             if trade.execution_mode == "ibkr":
