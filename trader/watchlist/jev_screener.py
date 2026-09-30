@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -249,22 +250,40 @@ def rank_predictions(predictions: Dict[str, JevPrediction]) -> List[JevRankedSym
     ]
 
 
-def _passes_screener_liquidity(
+@dataclass
+class UniverseScanSkips:
+    """Why universe names were not sent to Jev."""
+
+    no_quote: int = 0
+    below_price: int = 0
+    no_bars: int = 0
+    low_volume: int = 0
+    wide_spread: int = 0
+
+    def format(self) -> str:
+        return (
+            f"no_bars={self.no_bars}, below_price={self.below_price}, "
+            f"wide_spread={self.wide_spread}, low_volume={self.low_volume}, "
+            f"no_quote={self.no_quote}"
+        )
+
+
+def _screener_liquidity_skip(
     state: MarketState,
     strategy_config: StrategyConfig,
-) -> bool:
+) -> Optional[str]:
     """Skip thin/wide names before spending a Jev universe call."""
     if (
         strategy_config.min_volume_ratio > 0
         and state.volume_ratio is not None
         and state.volume_ratio < strategy_config.min_volume_ratio
     ):
-        return False
+        return "low_volume"
     if state.spread is not None and state.price > 0:
         spread_pct = state.spread / state.price
         if spread_pct > strategy_config.max_spread_pct:
-            return False
-    return True
+            return "wide_spread"
+    return None
 
 
 def build_universe_market_states(
@@ -275,13 +294,15 @@ def build_universe_market_states(
     bar_store: BarStore,
     strategy_config: StrategyConfig,
     news_service: Optional[NewsService],
-) -> List[Tuple[str, MarketState]]:
+) -> Tuple[List[Tuple[str, MarketState]], UniverseScanSkips]:
     benchmark_key = benchmark_symbol.upper()
     benchmark_minute_bars = minute_bars.get(benchmark_key)
     ready: List[Tuple[str, MarketState]] = []
+    skips = UniverseScanSkips()
     for symbol in universe:
         quote = quotes_by_symbol.get(symbol)
         if quote is None:
+            skips.no_quote += 1
             continue
         if (
             strategy_config.min_share_price > 0
@@ -289,6 +310,7 @@ def build_universe_market_states(
             and quote.price < strategy_config.min_share_price
             and symbol.upper() != benchmark_key
         ):
+            skips.below_price += 1
             continue
         state = build_market_state(
             quote,
@@ -298,16 +320,21 @@ def build_universe_market_states(
             warmup_min_1m_bars=strategy_config.warmup_min_1m_bars,
         )
         if state is None:
+            skips.no_bars += 1
             continue
         # Benchmark is scored for context; skip liquidity vetoes on it.
-        if symbol.upper() != benchmark_key and not _passes_screener_liquidity(
-            state, strategy_config
-        ):
-            continue
+        if symbol.upper() != benchmark_key:
+            reason = _screener_liquidity_skip(state, strategy_config)
+            if reason == "low_volume":
+                skips.low_volume += 1
+                continue
+            if reason == "wide_spread":
+                skips.wide_spread += 1
+                continue
         ready.append(
             (symbol, enrich_market_state_with_news(state, news_service))
         )
-    return ready
+    return ready, skips
 
 
 def run_jev_universe_scan(
@@ -322,7 +349,7 @@ def run_jev_universe_scan(
     max_workers: int,
     news_service: Optional[NewsService] = None,
     universe_loader: Callable[[], List[str]] = load_em_universe,
-) -> Tuple[List[str], List[JevRankedSymbol]]:
+) -> Tuple[List[str], List[JevRankedSymbol], UniverseScanSkips]:
     """Rank EM universe with Jev and return effective watchlist + full rankings."""
     universe = universe_loader()
     benchmark = effective_benchmark(risk_settings)
@@ -331,7 +358,7 @@ def run_jev_universe_scan(
     for symbol in scan_symbols:
         bar_store.seed_minute_aggregator(minute_bars.get(symbol), symbol)
 
-    ready_states = build_universe_market_states(
+    ready_states, skips = build_universe_market_states(
         scan_symbols,
         quotes_by_symbol,
         minute_bars,
@@ -351,13 +378,14 @@ def run_jev_universe_scan(
     effective = merge_dynamic_watchlist(risk_settings, dynamic_symbols, open_symbols)
 
     logger.info(
-        "Jev universe scan complete — %s/%s scored, top dynamic: %s (min_buy=%.0f%%)",
+        "Jev universe scan complete — %s/%s scored (%s), top dynamic: %s (min_buy=%.0f%%)",
         len(predictions),
         len(scan_symbols),
+        skips.format(),
         ", ".join(dynamic_symbols) or "(none)",
         min_buy * 100,
     )
-    return effective, rankings
+    return effective, rankings, skips
 
 
 def screener_due(

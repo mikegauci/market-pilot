@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from config import Settings
 from models.types import DataSource, Quote, RiskSettings
+from watchlist.jev_screener import UniverseScanSkips
 from watchlist.screener_scheduler import (
     EMWatchlistScheduler,
     ScreenerJobContext,
@@ -198,7 +199,7 @@ class TestScreenerScheduler(unittest.TestCase):
             with patch.object(scheduler, "_cache_ready", return_value=True):
                 with patch(
                     "watchlist.screener_scheduler.run_jev_universe_scan",
-                    return_value=(["BABA", "EEM"], []),
+                    return_value=(["BABA", "EEM"], [], UniverseScanSkips()),
                 ):
                     scheduler._run_screener(job)
         job.db.update_effective_watchlist_fallback.assert_called_once()
@@ -213,7 +214,7 @@ class TestScreenerScheduler(unittest.TestCase):
             with patch.object(scheduler, "_cache_ready", return_value=True):
                 with patch(
                     "watchlist.screener_scheduler.run_jev_universe_scan",
-                    return_value=(["BABA", "EEM"], []),
+                    return_value=(["BABA", "EEM"], [], UniverseScanSkips()),
                 ):
                     scheduler._run_screener(job)
         job.db.update_effective_watchlist_fallback.assert_not_called()
@@ -264,7 +265,7 @@ class TestScreenerScheduler(unittest.TestCase):
             with patch.object(scheduler, "_cache_ready", return_value=True):
                 with patch(
                     "watchlist.screener_scheduler.run_jev_universe_scan",
-                    return_value=(["BABA", "EEM"], []),
+                    return_value=(["BABA", "EEM"], [], UniverseScanSkips()),
                 ):
                     scheduler._run_screener(job)
 

@@ -5,9 +5,11 @@ from datetime import datetime, timedelta, timezone
 
 from market.bar_aggregator import MinuteBarStore
 from market.bars import Bar, BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, BarStore, compute_trend_changes
-from models.types import JevPrediction, JevRankedSymbol, RiskSettings
+from models.types import JevPrediction, JevRankedSymbol, Quote, RiskSettings
+from strategy.config import StrategyConfig
 from watchlist.jev_screener import (
     _filter_stale_core_from_saved,
+    build_universe_market_states,
     merge_core_watchlist,
     merge_dynamic_watchlist,
     rank_predictions,
@@ -257,6 +259,66 @@ class TestJevScreener(unittest.TestCase):
         ]
         trends = compute_trend_changes(bars)
         self.assertEqual(trends.change_1d, 10.0)
+
+    def test_build_universe_market_states_counts_skip_reasons(self) -> None:
+        symbols = ["PDD", "NU", "SCCO", "ATHM", "COLD", "EEM", "GHOST"]
+        minute_bars = MinuteBarStore(symbols)
+        start = datetime(2026, 1, 10, 14, 0, tzinfo=timezone.utc)
+        for symbol, volumes in (
+            ("PDD", [5000, 5000, 5000, 5000]),
+            ("NU", [5000, 5000, 5000, 5000]),
+            ("SCCO", [5000, 5000, 5000, 5000]),
+            ("ATHM", [5000, 5000, 5000, 100]),
+            ("EEM", [5000, 5000, 5000, 5000]),
+        ):
+            minute_bars.get(symbol).bootstrap_from_five_min_bars(
+                [
+                    Bar(
+                        symbol,
+                        BAR_SIZE_INTRADAY,
+                        start + timedelta(minutes=5 * index),
+                        10,
+                        10,
+                        10,
+                        10,
+                        volume,
+                    )
+                    for index, volume in enumerate(volumes)
+                ]
+            )
+
+        quotes = {
+            "PDD": Quote("PDD", 78.0, 77.99, 78.01, 0.01),
+            "NU": Quote("NU", 12.0, 11.99, 12.01, 0.01),
+            "SCCO": Quote("SCCO", 200.0, 199.0, 200.0, 1.0),
+            "ATHM": Quote("ATHM", 21.0, 20.99, 21.01, 0.01),
+            "COLD": Quote("COLD", 50.0, 49.99, 50.01, 0.01),
+            "EEM": Quote("EEM", 40.0, 39.0, 44.0, 5.0),
+        }
+        ready, skips = build_universe_market_states(
+            symbols,
+            quotes,
+            minute_bars,
+            "EEM",
+            BarStore(InMemoryBarRepo()),
+            StrategyConfig(
+                min_share_price=20.0,
+                min_volume_ratio=0.5,
+                max_spread_pct=0.0015,
+                warmup_min_1m_bars=15,
+            ),
+            None,
+        )
+        self.assertEqual([symbol for symbol, _state in ready], ["PDD", "EEM"])
+        self.assertEqual(skips.below_price, 1)
+        self.assertEqual(skips.wide_spread, 1)
+        self.assertEqual(skips.low_volume, 1)
+        self.assertEqual(skips.no_bars, 1)
+        self.assertEqual(skips.no_quote, 1)
+        self.assertEqual(
+            skips.format(),
+            "no_bars=1, below_price=1, wide_spread=1, low_volume=1, no_quote=1",
+        )
 
 
 if __name__ == "__main__":

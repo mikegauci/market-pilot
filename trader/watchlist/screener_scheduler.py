@@ -409,7 +409,7 @@ class EMWatchlistScheduler:
             for quote in quotes:
                 job.minute_bars.record(quote)
 
-            effective, rankings = run_jev_universe_scan(
+            effective, rankings, skips = run_jev_universe_scan(
                 risk_settings=job.risk_settings,
                 jev=job.jev,
                 minute_bars=job.minute_bars,
@@ -425,9 +425,10 @@ class EMWatchlistScheduler:
             scored_ratio = len(rankings) / max(len(scan_symbols), 1)
             if scored_ratio < MIN_SCORED_RATIO:
                 logger.warning(
-                    "Jev scan scored too few symbols (%s/%s)",
+                    "Jev scan scored too few symbols (%s/%s) (%s)",
                     len(rankings),
                     len(scan_symbols),
+                    skips.format(),
                 )
                 if not had_successful_scan:
                     self._persist_core_fallback(job, "too few scored symbols")
