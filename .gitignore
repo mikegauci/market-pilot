@@ -61,4 +61,6 @@ supabase/.branches/
 !.agents/skills/diagnose-trader/**
 !.agents/skills/add-strategy-filter/
 !.agents/skills/add-strategy-filter/**
+!.agents/skills/review-trading-session/
+!.agents/skills/review-trading-session/**
 skills-lock.json
