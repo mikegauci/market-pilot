@@ -44,6 +44,14 @@ describe("hasNewsSignal", () => {
     expect(hasNewsSignal({ news_sentiment: 0.4 })).toBe(true);
     expect(hasNewsSignal({ news_tags: ["earnings"] })).toBe(true);
   });
+
+  it("distinguishes missing vs neutral vs active status", () => {
+    expect(hasNewsSignal({ news_status: "missing" })).toBe(false);
+    expect(hasNewsSignal({ news_status: "neutral" })).toBe(true);
+    expect(hasNewsSignal({ news_status: "active", news_top_headline: "Beat" })).toBe(
+      true,
+    );
+  });
 });
 
 describe("buildNewsFeedItems", () => {

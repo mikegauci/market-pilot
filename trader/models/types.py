@@ -119,6 +119,8 @@ class MarketState:
     news_tags: Optional[List[str]] = None
     news_fetched_at: Optional[str] = None
     news_articles: Optional[List[Dict[str, Any]]] = None
+    # Phase 12: missing = fetch failed/disabled; neutral = ok but empty; active = has articles.
+    news_status: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         payload = asdict(self)

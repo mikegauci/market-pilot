@@ -15,6 +15,7 @@ from news.cache import CooldownTracker, TtlCache
 from news.sentiment import (
     NewsArticle,
     NewsContext,
+    missing_news_context,
     published_at_from_unix,
     score_articles,
     score_single_article,
@@ -261,17 +262,23 @@ class FinnhubNewsClient:
                 retry_after_sec=60.0,
             )
 
-        articles = _parse_articles(raw, self.max_headlines, since_ts=since_ts)
+        articles = _parse_articles(
+            raw, self.max_headlines, since_ts=since_ts, fetched_at=now.isoformat()
+        )
+        fetched_at = now.isoformat()
         if not articles:
             return FetchOutcome(
-                context=None,
+                context=score_articles([], fetched_at=fetched_at, status="neutral"),
                 status=FetchStatus.EMPTY,
                 retry_after_sec=300.0,
             )
 
-        fetched_at = now.isoformat()
         return FetchOutcome(
-            context=score_articles(articles, fetched_at=fetched_at),
+            context=score_articles(
+                articles,
+                fetched_at=fetched_at,
+                company_symbol=symbol,
+            ),
             status=FetchStatus.OK,
         )
 
@@ -329,7 +336,13 @@ class FinnhubNewsClient:
         return articles, FetchStatus.OK
 
 
-def _parse_articles(raw: list, max_headlines: int, *, since_ts: float) -> List[NewsArticle]:
+def _parse_articles(
+    raw: list,
+    max_headlines: int,
+    *,
+    since_ts: float,
+    fetched_at: str,
+) -> List[NewsArticle]:
     sorted_items = sorted(
         raw,
         key=lambda item: int(item.get("datetime", 0)),
@@ -355,6 +368,7 @@ def _parse_articles(raw: list, max_headlines: int, *, since_ts: float) -> List[N
                 source=source,
                 published_at=published_at_from_unix(published_ts),
                 image=image,
+                fetched_at=fetched_at,
             )
         )
         if len(articles) >= max_headlines:
@@ -401,9 +415,19 @@ class NewsService:
             return
 
         if outcome.status == FetchStatus.EMPTY:
+            # Cache neutral empty so callers can distinguish from missing/error.
+            ctx = outcome.context or score_articles(
+                [],
+                fetched_at=datetime.now(timezone.utc).isoformat(),
+                status="neutral",
+            )
+            self.cache.set(symbol, ctx)
             self.empty_cooldown.record(symbol, retry_after_sec=outcome.retry_after_sec)
             return
 
+        # Errors: cache explicit missing status briefly via outcome if present.
+        if outcome.context is not None:
+            self.cache.set(symbol, outcome.context)
         self.failure_cooldown.record(symbol, retry_after_sec=outcome.retry_after_sec)
 
     def _fetch_and_cache(self, symbol: str) -> None:
@@ -430,15 +454,29 @@ class NewsService:
 
     def get_context(self, symbol: str) -> Optional[NewsContext]:
         if symbol in self.skip_symbols:
-            return None
+            return missing_news_context()
 
         cached = self.cache.get(symbol)
         if cached is not None:
             return cached
 
-        if self.empty_cooldown.is_active(symbol) or self.failure_cooldown.is_active(symbol):
-            return None
+        if self.empty_cooldown.is_active(symbol):
+            return score_articles(
+                [],
+                fetched_at=datetime.now(timezone.utc).isoformat(),
+                status="neutral",
+            )
+        if self.failure_cooldown.is_active(symbol):
+            return missing_news_context()
 
         outcome = self.client.fetch_news(symbol)
         self._apply_outcome(symbol, outcome)
-        return outcome.context
+        if outcome.context is not None:
+            return outcome.context
+        if outcome.status == FetchStatus.EMPTY:
+            return score_articles(
+                [],
+                fetched_at=datetime.now(timezone.utc).isoformat(),
+                status="neutral",
+            )
+        return missing_news_context()

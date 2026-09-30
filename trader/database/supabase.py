@@ -696,18 +696,49 @@ class SupabaseRepository:
     @_db_synchronized
     def set_em_universe_tradable(self, symbol: str, tradable: bool) -> bool:
         """Update tradable flag. Returns True when at least one em_universe row changed."""
+        return self.set_em_universe_contract(symbol, tradable=tradable)
+
+    @_db_synchronized
+    def set_em_universe_contract(
+        self,
+        symbol: str,
+        *,
+        tradable: bool,
+        ibkr_conid: int | None = None,
+        exchange: str | None = None,
+        currency: str | None = "USD",
+    ) -> bool:
+        """Update tradable + optional IBKR contract fields."""
+        payload: dict = {
+            "tradable": tradable,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if not tradable:
+            payload["ibkr_conid"] = None
+        elif ibkr_conid is not None:
+            payload["ibkr_conid"] = int(ibkr_conid)
+        if exchange is not None:
+            payload["exchange"] = exchange
+        if currency is not None:
+            payload["currency"] = currency
         result = (
             self.client.table("em_universe")
-            .update(
-                {
-                    "tradable": tradable,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
+            .update(payload)
             .eq("symbol", symbol.upper())
             .execute()
         )
         return bool(result.data)
+
+    @_db_synchronized
+    def get_em_universe_snapshots(self, limit: int = 20) -> List[dict]:
+        result = (
+            self.client.table("em_universe_snapshots")
+            .select("id, as_of, source, symbols, created_at")
+            .order("as_of", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return list(result.data or [])
 
     @_db_synchronized
     def get_bars(self, symbol: str, bar_size: str) -> List[Bar]:

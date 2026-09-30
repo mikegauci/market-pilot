@@ -462,8 +462,9 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
               )}
               {settings.em_universe_source ? ` · source ${settings.em_universe_source}` : ""}
               {" · "}
-              Universe syncs weekly from EEM + IEMG holdings (ETFs excluded). Periodic
-              verify marks chronically untradable names off.
+              Universe = US-listed ADR/stock of EEM/IEMG underlyings (not home-market
+              shares); ETFs and duplicate issuers excluded. Syncs weekly; verify marks
+              chronically untradable names off.
             </>
           ) : (
             <>

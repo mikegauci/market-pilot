@@ -700,6 +700,7 @@ def run() -> int:
                         ibkr,
                         em_universe,
                         exclude_symbols=priority_symbols,
+                        db=db,
                     )
                 except (FileNotFoundError, ValueError) as exc:
                     logger.warning("EM backfill skipped: %s", exc)
@@ -1764,11 +1765,24 @@ def run() -> int:
                         ),
                     )
                     from dataclasses import replace as dc_replace
+                    from news.sentiment import recompute_context_from_articles
 
+                    recomputed = recompute_context_from_articles(
+                        fresh_articles,
+                        fetched_at=enriched.news_fetched_at
+                        or datetime.now(timezone.utc).isoformat(),
+                        status="active" if fresh_articles else "neutral",
+                    )
                     enriched = dc_replace(
                         enriched,
                         news_articles=fresh_articles or None,
-                        news_headline_count=len(fresh_articles) if fresh_articles else 0,
+                        news_headline_count=recomputed.headline_count,
+                        news_sentiment=recomputed.sentiment if fresh_articles else (
+                            None if enriched.news_status == "missing" else 0.0
+                        ),
+                        news_top_headline=recomputed.top_headline or None,
+                        news_tags=recomputed.tags or None,
+                        news_status=recomputed.status,
                     )
                     if stale_negs:
                         # Keep a marker for veto without putting stale text into Jev.
@@ -1783,6 +1797,7 @@ def run() -> int:
                                     + ["stale_negative_headline"]
                                 )
                             ),
+                            news_status="active",
                         )
                 ready_states.append((symbol, enriched))
 

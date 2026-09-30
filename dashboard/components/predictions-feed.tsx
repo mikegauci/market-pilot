@@ -160,6 +160,17 @@ function NewsCell({ snapshot }: { snapshot?: MarketSnapshot | null }) {
     return <span className="text-zinc-600">—</span>;
   }
 
+  if (snapshot?.news_status === "neutral") {
+    return (
+      <span
+        className="text-xs text-zinc-500"
+        title="Fetch succeeded with no relevant headlines in lookback"
+      >
+        No headlines
+      </span>
+    );
+  }
+
   const sentiment = snapshot?.news_sentiment ?? 0;
   const hasSentimentSignal = Math.abs(sentiment) > 0.1;
   const tags = snapshot?.news_tags ?? [];

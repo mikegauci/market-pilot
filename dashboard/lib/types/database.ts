@@ -148,7 +148,27 @@ export type EmUniverseRow = {
   country: string | null;
   tradable: boolean;
   instrument_type?: "adr" | "stock" | "etf" | null;
+  issuer_key?: string | null;
+  exchange?: string | null;
+  currency?: string | null;
+  ibkr_conid?: number | null;
+  listing_class?: string | null;
   updated_at: string;
+};
+
+export type EmUniverseSnapshot = {
+  id: string;
+  as_of: string;
+  source: string;
+  symbols: Array<{
+    symbol: string;
+    name?: string;
+    weight_bps?: number;
+    instrument_type?: string;
+    issuer_key?: string;
+    tradable?: boolean;
+  }>;
+  created_at: string;
 };
 
 export type JevRanking = {
@@ -181,7 +201,15 @@ export type NewsArticleSnapshot = {
   url?: string | null;
   source?: string | null;
   published_at?: string | null;
+  fetched_at?: string | null;
   image?: string | null;
+  sentiment?: number | null;
+  tags?: string[] | null;
+  relevance?: number | null;
+  event_type?: string | null;
+  severity?: number | null;
+  novelty?: number | null;
+  fingerprint?: string | null;
 };
 
 export type MarketNewsRow = {
@@ -202,6 +230,7 @@ export type MarketNewsRow = {
 
 export type MarketSnapshotNews = {
   news_sentiment?: number | null;
+  news_status?: "missing" | "neutral" | "active" | null;
   news_headline_count?: number | null;
   news_top_headline?: string | null;
   news_tags?: string[] | null;

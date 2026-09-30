@@ -215,6 +215,7 @@ class EMWatchlistScheduler:
         em_universe: Sequence[str],
         *,
         exclude_symbols: Sequence[str] = (),
+        db: Optional[object] = None,
     ) -> None:
         if settings.data_source != DataSource.IBKR or not ibkr.is_connected():
             self._backfill_done.set()
@@ -260,6 +261,16 @@ class EMWatchlistScheduler:
                             "Unqualified during EM backfill: %s",
                             ", ".join(em_summary.unqualified_symbols),
                         )
+                        if db is not None and hasattr(db, "set_em_universe_tradable"):
+                            for symbol in em_summary.unqualified_symbols:
+                                try:
+                                    db.set_em_universe_tradable(symbol, False)
+                                except Exception as exc:
+                                    logger.debug(
+                                        "Failed to mark %s untradable: %s",
+                                        symbol,
+                                        exc,
+                                    )
                 except Exception as exc:
                     logger.exception("EM bar backfill failed: %s", exc)
                 finally:

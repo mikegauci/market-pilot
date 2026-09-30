@@ -2,6 +2,10 @@
 /**
  * Sync US-listed EM equities from EEM + IEMG ETF holdings into Supabase.
  *
+ * Policy: universe = US listings (ADR / USD equity) of EM underlying issuers —
+ * not home-market local shares. ETFs excluded. Duplicate issuers collapsed to
+ * one primary listing. Dated snapshot written for historical testing.
+ *
  * Usage (from repo root):
  *   node scripts/update-em-universe.mjs
  *
@@ -134,6 +138,66 @@ function inferInstrumentType(symbol, name = "") {
   return "stock";
 }
 
+function normalizeIssuerKey(name, symbol = "") {
+  let cleaned = String(name || "").replace(
+    /\b(ADR|ADS|GDR|ORDINARY|ORD|CLASS\s+[A-Z]|CL\s+[A-Z]|AMERICAN\s+DEPOSIT(?:ARY|ORY)?\s+(?:SHARES?|RECEIPTS?)|DEPOSIT(?:ARY|ORY)\s+(?:SHARES?|RECEIPTS?)|SPONSORED|UNSPONSORED|COMMON\s+STOCK|ORD\s+SHS)\b/gi,
+    " ",
+  );
+  cleaned = cleaned
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || String(symbol || "")
+    .trim()
+    .toUpperCase();
+}
+
+function instrumentRank(instrumentType) {
+  const kind = String(instrumentType || "stock").toLowerCase();
+  if (kind === "adr") return 0;
+  if (kind === "stock") return 1;
+  return 2;
+}
+
+/** Keep one primary US listing per issuer (highest weight, then ADR, then symbol). */
+function dedupeByIssuer(rows) {
+  const best = new Map();
+  for (const row of rows) {
+    const symbol = String(row.symbol || "")
+      .trim()
+      .toUpperCase();
+    if (!symbol) continue;
+    const issuer = row.issuer_key || normalizeIssuerKey(row.name, symbol);
+    const weightBps = Math.round(Number(row.weight_bps ?? row.weight * 100) || 0);
+    const candidate = {
+      ...row,
+      symbol,
+      issuer_key: issuer,
+      weight_bps: weightBps,
+      instrument_type: row.instrument_type || inferInstrumentType(symbol, row.name),
+    };
+    const existing = best.get(issuer);
+    if (!existing) {
+      best.set(issuer, candidate);
+      continue;
+    }
+    if (weightBps > existing.weight_bps) {
+      best.set(issuer, candidate);
+      continue;
+    }
+    if (weightBps < existing.weight_bps) continue;
+    const curRank = instrumentRank(candidate.instrument_type);
+    const exRank = instrumentRank(existing.instrument_type);
+    if (curRank < exRank || (curRank === exRank && symbol < existing.symbol)) {
+      best.set(issuer, candidate);
+    }
+  }
+  return [...best.values()].sort(
+    (a, b) => b.weight_bps - a.weight_bps || a.symbol.localeCompare(b.symbol),
+  );
+}
+
 function isUsListedEquity(fields, headers) {
   const idx = (name) => headers.indexOf(name);
   const ticker = normalizeTicker(fields[idx("Ticker")] ?? "");
@@ -167,6 +231,10 @@ function isUsListedEquity(fields, headers) {
     country: fields[idx("Location")]?.trim() || null,
     weight: Number.isFinite(weight) ? weight : 0,
     instrument_type: instrumentType,
+    exchange: exchange || null,
+    currency: marketCurrency === "USD" ? "USD" : marketCurrency || "USD",
+    issuer_key: normalizeIssuerKey(name, ticker),
+    listing_class: "us_listed_underlying",
   };
 }
 
@@ -241,9 +309,18 @@ function mergeHoldings(maps) {
       }
     }
   }
-  return [...merged.values()]
-    .sort((a, b) => b.weight - a.weight)
-    .slice(0, MAX_SYMBOLS);
+  return dedupeByIssuer(
+    [...merged.values()]
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, MAX_SYMBOLS * 2)
+      .map((row) => ({
+        ...row,
+        weight_bps: Math.round(row.weight * 100),
+        issuer_key: row.issuer_key || normalizeIssuerKey(row.name, row.symbol),
+        listing_class: row.listing_class || "us_listed_underlying",
+        currency: row.currency || "USD",
+      })),
+  ).slice(0, MAX_SYMBOLS);
 }
 
 function supabaseHeaders(serviceRoleKey, extra = {}) {
@@ -270,17 +347,23 @@ async function supabaseRequest(baseUrl, serviceRoleKey, path, init) {
 }
 
 async function upsertUniverse(baseUrl, serviceRoleKey, rows, syncedAt) {
-  const payload = rows.map((row) => ({
-    symbol: row.symbol,
-    name: row.name,
-    source_etfs: row.source_etfs,
-    weight_bps: Math.round(row.weight * 100),
-    country: row.country,
-    instrument_type: row.instrument_type || inferInstrumentType(row.symbol, row.name),
-    // Do not set tradable here — verify/backfill owns that flag. Writing true
-    // would re-enable chronically untradable / KID-blocked names on every sync.
-    updated_at: syncedAt,
-  })).filter((row) => row.instrument_type !== "etf");
+  const payload = rows
+    .map((row) => ({
+      symbol: row.symbol,
+      name: row.name,
+      source_etfs: row.source_etfs,
+      weight_bps: Math.round(row.weight_bps ?? row.weight * 100),
+      country: row.country,
+      instrument_type: row.instrument_type || inferInstrumentType(row.symbol, row.name),
+      issuer_key: row.issuer_key || normalizeIssuerKey(row.name, row.symbol),
+      exchange: row.exchange || null,
+      currency: row.currency || "USD",
+      listing_class: row.listing_class || "us_listed_underlying",
+      // Do not set tradable here — verify/backfill owns that flag. Writing true
+      // would re-enable chronically untradable / KID-blocked names on every sync.
+      updated_at: syncedAt,
+    }))
+    .filter((row) => row.instrument_type !== "etf");
 
   if (!payload.length) {
     throw new Error("No ADR/stock rows left after ETF filter — refusing empty upsert");
@@ -310,6 +393,30 @@ async function upsertUniverse(baseUrl, serviceRoleKey, rows, syncedAt) {
       updated_at: syncedAt,
     }),
   });
+
+  // Dated snapshot for historical testing (Phase 13 eval harness).
+  await supabaseRequest(baseUrl, serviceRoleKey, "/rest/v1/em_universe_snapshots", {
+    method: "POST",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      as_of: syncedAt,
+      source: SOURCE_LABEL,
+      symbols: payload.map((row) => ({
+        symbol: row.symbol,
+        name: row.name,
+        weight_bps: row.weight_bps,
+        instrument_type: row.instrument_type,
+        issuer_key: row.issuer_key,
+        country: row.country,
+        exchange: row.exchange,
+        currency: row.currency,
+        listing_class: row.listing_class,
+        source_etfs: row.source_etfs,
+      })),
+    }),
+  });
+
+  return payload;
 }
 
 async function main() {
@@ -329,12 +436,12 @@ async function main() {
   }
 
   const syncedAt = new Date().toISOString();
-  await upsertUniverse(baseUrl, serviceRoleKey, ranked, syncedAt);
+  const payload = await upsertUniverse(baseUrl, serviceRoleKey, ranked, syncedAt);
 
   console.log(
-    `Synced ${ranked.length} symbol(s) to em_universe (${SOURCE_LABEL}) at ${syncedAt}`,
+    `Synced ${payload.length} symbol(s) to em_universe (${SOURCE_LABEL}) at ${syncedAt} (issuer-deduped)`,
   );
-  console.log(`Top holdings: ${ranked.slice(0, 10).map((row) => row.symbol).join(", ")}`);
+  console.log(`Top holdings: ${payload.slice(0, 10).map((row) => row.symbol).join(", ")}`);
 }
 
 main().catch((err) => {

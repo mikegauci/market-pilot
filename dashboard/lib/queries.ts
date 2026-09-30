@@ -4,6 +4,7 @@ import type {
   BotStatus,
   DecisionLogRow,
   EmUniverseRow,
+  EmUniverseSnapshot,
   MarketNewsRow,
   PortfolioSnapshot,
   Position,
@@ -198,7 +199,9 @@ export async function getEmUniverseStats(): Promise<{
     .eq("tradable", true);
   const { data } = await supabase
     .from("em_universe")
-    .select("symbol, name, source_etfs, weight_bps, country, tradable, updated_at")
+    .select(
+      "symbol, name, source_etfs, weight_bps, country, tradable, instrument_type, issuer_key, exchange, currency, ibkr_conid, listing_class, updated_at",
+    )
     .eq("tradable", true)
     .order("weight_bps", { ascending: false })
     .limit(20);
@@ -208,6 +211,18 @@ export async function getEmUniverseStats(): Promise<{
     tradableCount: tradableCount ?? 0,
     topHoldings: (data ?? []) as EmUniverseRow[],
   };
+}
+
+export async function getUniverseSnapshots(
+  limit = 10,
+): Promise<EmUniverseSnapshot[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("em_universe_snapshots")
+    .select("id, as_of, source, symbols, created_at")
+    .order("as_of", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as EmUniverseSnapshot[];
 }
 
 export async function getTradedPredictions(limit = 10): Promise<Prediction[]> {
