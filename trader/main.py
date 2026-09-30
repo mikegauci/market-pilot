@@ -968,19 +968,26 @@ def run() -> int:
                     last_settings_sync,
                     settings.settings_refresh_interval_sec,
                 ):
-                    risk_settings = db.get_risk_settings()
-                    strategy_config = strategy_config_with_risk_overrides(
-                        settings.strategy_config,
-                        min_volume_ratio=risk_settings.min_volume_ratio,
-                        min_share_price=risk_settings.min_share_price,
-                        jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
-                    )
                     try:
-                        cfg_hash, cfg_body = fingerprint_risk_settings(risk_settings)
-                        config_id = db.ensure_config_version(cfg_hash, cfg_body)
+                        risk_settings = db.get_risk_settings()
+                        strategy_config = strategy_config_with_risk_overrides(
+                            settings.strategy_config,
+                            min_volume_ratio=risk_settings.min_volume_ratio,
+                            min_share_price=risk_settings.min_share_price,
+                            jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
+                        )
+                        try:
+                            cfg_hash, cfg_body = fingerprint_risk_settings(risk_settings)
+                            config_id = db.ensure_config_version(cfg_hash, cfg_body)
+                        except Exception as exc:
+                            logger.warning("config_version refresh failed: %s", exc)
+                        last_settings_sync = now_mono
                     except Exception as exc:
-                        logger.warning("config_version refresh failed: %s", exc)
-                    last_settings_sync = now_mono
+                        logger.warning(
+                            "settings refresh failed (keeping previous): %s", exc
+                        )
+                        # Avoid hammering a timed-out DB every cycle.
+                        last_settings_sync = now_mono
 
                 benchmark_symbol = effective_benchmark(risk_settings)
                 open_symbols = (

@@ -40,8 +40,10 @@ MAX_EM_UNIVERSE_SIZE = 80
 GENERAL_NEWS_FAILURE_BACKOFF_SEC = 60.0
 
 # Transient macOS/httpx failures (EAGAIN / Errno 35) under concurrent load.
+# Keep retries short so a stuck PostgREST call cannot block heartbeats for minutes.
 _DB_TRANSIENT_RETRIES = 3
-_DB_TRANSIENT_BACKOFF_SEC = 0.05
+_DB_TRANSIENT_BACKOFF_SEC = 0.4
+_DB_HTTP_TIMEOUT = httpx.Timeout(12.0, connect=8.0)
 
 F = TypeVar("F", bound=Callable[..., object])
 
@@ -56,6 +58,7 @@ def _is_transient_db_error(exc: BaseException) -> bool:
             httpx.RemoteProtocolError,
             httpx.ReadTimeout,
             httpx.ConnectTimeout,
+            httpx.TimeoutException,
         ),
     ):
         return True
@@ -64,6 +67,10 @@ def _is_transient_db_error(exc: BaseException) -> bool:
         "resource temporarily unavailable" in message
         or "errno 35" in message
         or "connection reset" in message
+        or "statement timeout" in message
+        or "57014" in message
+        or "canceling statement" in message
+        or "timed out" in message
     )
 
 
@@ -101,7 +108,7 @@ def _build_supabase_http_client() -> httpx.Client:
     """HTTP/1.1 only — HTTP/2 multiplex + ib_insync often yields Errno 35 on macOS."""
     return httpx.Client(
         http2=False,
-        timeout=httpx.Timeout(60.0, connect=15.0),
+        timeout=_DB_HTTP_TIMEOUT,
     )
 
 
@@ -1362,20 +1369,27 @@ class SupabaseRepository:
         include_portfolio_history: bool = True,
         include_market_snapshots: bool = False,
     ) -> None:
-        if include_portfolio_history:
-            self._write_portfolio_snapshot(
-                account=account,
-                simulated_portfolio=simulated_portfolio,
-                unrealized_pnl=self._unrealized_pnl_from_positions(ibkr_positions),
-            )
-        self._sync_positions(
-            quotes,
-            ibkr_positions=ibkr_positions,
-            open_trades=open_trades,
-        )
-        if include_market_snapshots:
-            self.insert_market_snapshots(quotes)
+        # Publish liveness first so dashboard offline detection survives slow syncs.
         self.update_bot_status(status)
+        try:
+            if include_portfolio_history:
+                self._write_portfolio_snapshot(
+                    account=account,
+                    simulated_portfolio=simulated_portfolio,
+                    unrealized_pnl=self._unrealized_pnl_from_positions(ibkr_positions),
+                )
+            self._sync_positions(
+                quotes,
+                ibkr_positions=ibkr_positions,
+                open_trades=open_trades,
+            )
+            if include_market_snapshots:
+                self.insert_market_snapshots(quotes)
+        except Exception as exc:
+            logger.warning(
+                "Heartbeat liveness published; portfolio/position sync failed: %s",
+                exc,
+            )
 
     @_db_synchronized
     def insert_simulated_portfolio(self, portfolio: SimulatedPortfolio) -> None:
