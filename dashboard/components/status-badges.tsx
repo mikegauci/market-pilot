@@ -137,10 +137,18 @@ function StatusPanel({
       : display.traderOnline
         ? "Waiting"
         : "Unavailable";
+  const entryKill = Boolean(status.entry_kill_active);
+  const mdType = status.market_data_type;
 
   if (variant === "sidebar") {
     return (
       <div className="w-full rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+        {entryKill ? (
+          <p className="mb-2 rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-200">
+            Entry kill: {status.entry_kill_reason || "active"}
+            {mdType != null ? ` · MD type ${mdType}` : ""}
+          </p>
+        ) : null}
         <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
           System status
         </p>
@@ -201,6 +209,15 @@ function StatusPanel({
 
   return (
     <div className="w-full max-w-2xl rounded-xl border border-zinc-800 bg-zinc-900/80 p-4">
+      {entryKill ? (
+        <p className="mb-3 rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          Entry kill active: {status.entry_kill_reason || "active"}
+          {mdType != null ? ` · marketDataType=${mdType}` : ""}
+          {status.quote_age_p95_sec != null
+            ? ` · quote age p95=${Number(status.quote_age_p95_sec).toFixed(1)}s`
+            : ""}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">System status</p>

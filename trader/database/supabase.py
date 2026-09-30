@@ -208,6 +208,20 @@ class SupabaseRepository:
             payload["eod_flat_verify_detail"] = status.eod_flat_verify_detail
         if status.notifier_configured is not None:
             payload["notifier_configured"] = status.notifier_configured
+        if status.entry_kill_active is not None:
+            payload["entry_kill_active"] = status.entry_kill_active
+        if status.entry_kill_reason is not None or status.entry_kill_active is not None:
+            payload["entry_kill_reason"] = status.entry_kill_reason
+        if status.entry_kill_at is not None:
+            payload["entry_kill_at"] = status.entry_kill_at.isoformat()
+        elif status.entry_kill_active is False:
+            payload["entry_kill_at"] = None
+        if status.market_data_type is not None:
+            payload["market_data_type"] = status.market_data_type
+        if status.quote_age_p50_sec is not None:
+            payload["quote_age_p50_sec"] = status.quote_age_p50_sec
+        if status.quote_age_p95_sec is not None:
+            payload["quote_age_p95_sec"] = status.quote_age_p95_sec
         self.client.table("bot_status").update(payload).eq("id", 1).execute()
 
     @_db_synchronized
@@ -413,6 +427,13 @@ class SupabaseRepository:
                 "eod_closeout_enabled, eod_closeout_minutes_before_close, "
                 "eod_flat_verify_minutes_before_close, equity_divergence_alert_frac, "
                 "min_volume_ratio, min_share_price, "
+                "stale_input_gates_enabled, max_quote_age_sec, kill_stale_quote_sec, "
+                "kill_stale_quote_share_frac, quote_age_log_only_sec, max_signal_age_sec, "
+                "max_bar_gap_sec, max_news_pub_age_sec, max_news_receipt_lag_sec, "
+                "pre_submit_recheck_enabled, max_entry_price_drift_frac, "
+                "confirmation_mode, confirmation_count, kill_recover_healthy_sec, "
+                "kill_alert_min_gap_sec, jev_transport_fail_rate_kill_frac, "
+                "jev_transport_fail_window_sec, jev_timeout_sec, jev_max_retries, "
                 "account_capital, risk_sync_equity, watchlist, watchlist_core, "
                 "watchlist_dynamic_enabled, watchlist_dynamic_size, "
                 "watchlist_min_buy, "
@@ -466,6 +487,33 @@ class SupabaseRepository:
             equity_divergence_alert_frac=float(horizon["equity_divergence_alert_frac"]),
             min_volume_ratio=float(data.get("min_volume_ratio", 0.5)),
             min_share_price=float(data.get("min_share_price", 20)),
+            stale_input_gates_enabled=bool(data.get("stale_input_gates_enabled", True)),
+            max_quote_age_sec=int(data.get("max_quote_age_sec", 5)),
+            kill_stale_quote_sec=int(data.get("kill_stale_quote_sec", 15)),
+            kill_stale_quote_share_frac=float(
+                data.get("kill_stale_quote_share_frac", 0.5)
+            ),
+            quote_age_log_only_sec=int(data.get("quote_age_log_only_sec", 300)),
+            max_signal_age_sec=int(data.get("max_signal_age_sec", 30)),
+            max_bar_gap_sec=int(data.get("max_bar_gap_sec", 90)),
+            max_news_pub_age_sec=int(data.get("max_news_pub_age_sec", 3600)),
+            max_news_receipt_lag_sec=int(data.get("max_news_receipt_lag_sec", 600)),
+            pre_submit_recheck_enabled=bool(data.get("pre_submit_recheck_enabled", True)),
+            max_entry_price_drift_frac=float(
+                data.get("max_entry_price_drift_frac", 0.002)
+            ),
+            confirmation_mode=str(data.get("confirmation_mode") or "distinct_bars"),
+            confirmation_count=int(data.get("confirmation_count", 2)),
+            kill_recover_healthy_sec=int(data.get("kill_recover_healthy_sec", 120)),
+            kill_alert_min_gap_sec=int(data.get("kill_alert_min_gap_sec", 60)),
+            jev_transport_fail_rate_kill_frac=float(
+                data.get("jev_transport_fail_rate_kill_frac", 0.5)
+            ),
+            jev_transport_fail_window_sec=int(
+                data.get("jev_transport_fail_window_sec", 60)
+            ),
+            jev_timeout_sec=float(data.get("jev_timeout_sec", 3)),
+            jev_max_retries=int(data.get("jev_max_retries", 1)),
             account_capital=float(data.get("account_capital", 1000)),
             risk_sync_equity=risk_sync_equity,
             watchlist=[str(s).upper() for s in watchlist],

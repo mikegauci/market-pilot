@@ -42,5 +42,9 @@ describe("normalizeSettings", () => {
     expect(normalized?.demotion_jev_sell_on_loss).toBe(true);
     expect(normalized?.demotion_force_exit).toBe(false);
     expect(normalized?.watchlist_min_buy).toBe(0.6);
+    expect(normalized?.confirmation_count).toBe(2);
+    expect(normalized?.confirmation_mode).toBe("distinct_bars");
+    expect(normalized?.stale_input_gates_enabled).toBe(true);
+    expect(normalized?.jev_timeout_sec).toBe(3);
   });
 });

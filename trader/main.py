@@ -44,6 +44,12 @@ from news.enrich import enrich_market_state_with_news
 from news.sentiment import NewsContext
 from market.hours import get_session_clock, is_us_regular_session_open
 from market.indicators import build_market_state
+from market.live_1m_bars import (
+    bars_from_ib_historical,
+    diff_live_vs_historical,
+    drop_forming_bar,
+    sync_trade_bars_into_store,
+)
 from market.mock import MockMarketProvider
 from models.types import (
     BotStatusUpdate,
@@ -58,7 +64,17 @@ from models.types import (
 from risk.manager import RiskManager
 from strategy.confirmation import ConfirmationTracker
 from strategy.config import strategy_config_with_risk_overrides
+from strategy.data_gates import (
+    EntryKillSwitch,
+    JevTransportKillTracker,
+    check_quote_fresh_for_symbol,
+    classify_jev_error,
+    feed_stale_share,
+    filter_news_for_jev_context,
+    quote_age_sec,
+)
 from strategy.filters import check_correlation_cap, check_entry_filters
+from strategy.pre_submit import pre_submit_recheck
 from strategy.signals import (
     is_sell_exit_eligible,
     is_trade_eligible,
@@ -393,6 +409,8 @@ def _fetch_jev_predictions(
     jev: JevClient,
     ready_states: List[Tuple[str, MarketState]],
     max_workers: int,
+    *,
+    transport_tracker: Optional[JevTransportKillTracker] = None,
 ) -> Dict[str, JevPrediction]:
     """Call Jev in parallel so one slow symbol does not block the watchlist."""
     if not ready_states:
@@ -408,8 +426,13 @@ def _fetch_jev_predictions(
             symbol = futures[future]
             try:
                 predictions[symbol] = future.result()
+                if transport_tracker is not None:
+                    transport_tracker.record(transport_failure=False)
             except Exception as exc:
                 logger.error("Jev prediction failed for %s: %s", symbol, exc)
+                if transport_tracker is not None:
+                    kind = classify_jev_error(exc)
+                    transport_tracker.record(transport_failure=(kind == "transport"))
     return predictions
 
 
@@ -489,14 +512,26 @@ def run() -> int:
         min_share_price=risk_settings.min_share_price,
         jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
     )
-    confirmation_tracker = ConfirmationTracker(strategy_config.confirmation_cycles)
+    confirmation_tracker = ConfirmationTracker(
+        risk_settings.confirmation_count,
+        mode=risk_settings.confirmation_mode,
+    )
+    entry_kill = EntryKillSwitch(active=True, reason="startup")
+    jev_transport_kill = JevTransportKillTracker(
+        window_sec=float(risk_settings.jev_transport_fail_window_sec),
+        kill_frac=float(risk_settings.jev_transport_fail_rate_kill_frac),
+    )
+    # Completed trade-bar timestamps per symbol for distinct_bars confirmation.
+    last_completed_bar_ts: Dict[str, datetime] = {}
+    trade_bar_symbols: Set[str] = set()
     logger.info(
         "Strategy filters: min confidence from settings, margin %.0f%%, "
-        "confirmation %sx, max hold %.0fm (dashboard), min hold %.0fm, "
+        "confirmation %sx (%s), max hold %.0fm (dashboard), min hold %.0fm, "
         "Jev SELL exit >= %.0f%%, min volume ratio %.2f, "
-        "min share price $%.2f (dashboard)",
+        "min share price $%.2f (dashboard); entry kill ON until gates green",
         strategy_config.min_buy_hold_margin * 100,
-        strategy_config.confirmation_cycles,
+        risk_settings.confirmation_count,
+        risk_settings.confirmation_mode,
         risk_settings.max_hold_minutes,
         risk_settings.min_hold_minutes,
         strategy_config.jev_sell_exit_threshold * 100,
@@ -515,10 +550,12 @@ def run() -> int:
     jev: Optional[JevClient] = None
     if settings.jev_enabled:
         if settings.typesafe_ai_api_key:
+            # max_retries is attempt count; settings store retry extras (1 retry => 2 attempts).
             jev = JevClient(
                 api_key=settings.typesafe_ai_api_key,
                 model=settings.jev_model,
-                timeout_sec=settings.jev_timeout_sec,
+                timeout_sec=float(risk_settings.jev_timeout_sec),
+                max_retries=max(1, int(risk_settings.jev_max_retries) + 1),
             )
         else:
             logger.warning("JEV_ENABLED=true but TYPESAFE_AI_API_KEY is not set — skipping Jev calls")
@@ -567,11 +604,25 @@ def run() -> int:
             global _ibkr_market_data_mode
             _ibkr_market_data_mode = ibkr.ensure_market_data_ready(all_symbols)
             logger.info(
-                "Connected to IBKR (%s:%s) — market data mode: %s",
+                "Connected to IBKR (%s:%s) — market data mode: %s (type=%s)",
                 settings.ibkr_host,
                 settings.ibkr_port,
                 _ibkr_market_data_mode,
+                ibkr.market_data_type,
             )
+            if ibkr.market_data_type != 1:
+                logger.warning(
+                    "IBKR marketDataType=%s — prefer type 1 (real-time) for live trading",
+                    ibkr.market_data_type,
+                )
+            ibkr.sync_1m_trade_bar_subscriptions(all_symbols)
+            trade_bar_symbols = {s.upper() for s in all_symbols}
+            for symbol in all_symbols:
+                raw = ibkr.get_1m_trade_bars_raw(symbol)
+                if raw:
+                    bar = sync_trade_bars_into_store(minute_bars, symbol, raw)
+                    if bar is not None:
+                        last_completed_bar_ts[symbol.upper()] = bar.ts
             _pulse_bot_status(
                 db,
                 enabled=bot_control.enabled,
@@ -664,6 +715,8 @@ def run() -> int:
     _equity_divergence_alerted: set = set()
     _eod_entries_cancelled_for_close: Optional[datetime] = None
     _eod_flat_verified_for_close: Optional[datetime] = None
+    _eod_bar_audit_for_close: Optional[datetime] = None
+    _ibkr_was_connected = ibkr.is_connected()
 
     risk_manager: Optional[RiskManager] = None
     if db:
@@ -721,6 +774,10 @@ def run() -> int:
     last_portfolio_history = 0.0
     last_live_bar_flush = 0.0
     last_general_news_refresh = 0.0
+    last_quote_age_log = 0.0
+    gates_enforce_after_mono = startup_mono + float(
+        max(0, risk_settings.quote_age_log_only_sec)
+    )
     general_news_running = False
     general_news_lock = threading.Lock()
     data_source_label = "ibkr" if ibkr.is_connected() else "mock"
@@ -919,8 +976,23 @@ def run() -> int:
                     and ibkr.is_connected()
                 ):
                     ibkr.sync_watchlist_subscriptions(all_symbols)
+                    ibkr.sync_1m_trade_bar_subscriptions(all_symbols)
+                    trade_bar_symbols = {s.upper() for s in all_symbols}
                 if risk_manager:
                     risk_manager.update_settings(risk_settings)
+                    confirmation_tracker.configure(
+                        risk_settings.confirmation_count,
+                        risk_settings.confirmation_mode,
+                    )
+                    jev_transport_kill.window_sec = float(
+                        risk_settings.jev_transport_fail_window_sec
+                    )
+                    jev_transport_kill.kill_frac = float(
+                        risk_settings.jev_transport_fail_rate_kill_frac
+                    )
+                    if jev is not None:
+                        jev.timeout_sec = float(risk_settings.jev_timeout_sec)
+                        jev.max_retries = max(1, int(risk_settings.jev_max_retries) + 1)
                     capital, currency = _resolve_effective_capital(
                         ibkr,
                         risk_settings.account_capital,
@@ -933,6 +1005,31 @@ def run() -> int:
 
             quotes = _get_quotes(settings, ibkr, mock, all_symbols)
             quotes_by_symbol: Dict[str, Quote] = {q.symbol: q for q in quotes}
+
+            # Resubscribe keepUpToDate bars after IBKR reconnect.
+            if settings.data_source == DataSource.IBKR:
+                connected_now = ibkr.is_connected()
+                if connected_now and not _ibkr_was_connected:
+                    logger.info("IBKR reconnected — resubscribing 1m TRADES bars")
+                    ibkr.sync_watchlist_subscriptions(all_symbols)
+                    ibkr.sync_1m_trade_bar_subscriptions(all_symbols)
+                    trade_bar_symbols = {s.upper() for s in all_symbols}
+                    _ibkr_market_data_mode = ibkr.ensure_market_data_ready(
+                        all_symbols, wait_sec=1.0
+                    )
+                elif (
+                    not connected_now
+                    and _ibkr_was_connected
+                    and _connect_ibkr(ibkr, max_attempts=1)
+                ):
+                    logger.info("IBKR reconnect attempt succeeded — resubscribing bars")
+                    ibkr.sync_watchlist_subscriptions(all_symbols)
+                    ibkr.sync_1m_trade_bar_subscriptions(all_symbols)
+                    trade_bar_symbols = {s.upper() for s in all_symbols}
+                    _ibkr_market_data_mode = ibkr.ensure_market_data_ready(
+                        all_symbols, wait_sec=1.0
+                    )
+                _ibkr_was_connected = ibkr.is_connected()
 
             if (
                 settings.data_source == DataSource.IBKR
@@ -956,6 +1053,9 @@ def run() -> int:
                     if recovered != "unavailable":
                         _ibkr_market_data_mode = recovered
                         logger.info("IBKR market data mode restored: %s", recovered)
+                        # Resubscribe keepUpToDate 1m bars after market-data recovery.
+                        ibkr.sync_1m_trade_bar_subscriptions(all_symbols)
+                        trade_bar_symbols = {s.upper() for s in all_symbols}
                         quotes = _get_quotes(settings, ibkr, mock, all_symbols)
                         quotes_by_symbol = {q.symbol: q for q in quotes}
 
@@ -971,7 +1071,122 @@ def run() -> int:
                     portfolio_dirty = True
 
             for quote in quotes:
-                minute_bars.record(quote)
+                # Universe scan still uses tick-built bars; entry symbols use keepUpToDate.
+                if quote.symbol.upper() not in trade_bar_symbols:
+                    minute_bars.record(quote)
+
+            # Refresh completed 1m TRADES bars (no historical poll — subscription update).
+            now_utc = datetime.now(timezone.utc)
+            if (
+                settings.data_source == DataSource.IBKR
+                and ibkr.is_connected()
+                and trade_bar_symbols
+            ):
+                session_for_bars = get_session_clock(now_utc)
+                for symbol in list(trade_bar_symbols):
+                    raw = ibkr.get_1m_trade_bars_raw(symbol)
+                    if not raw:
+                        continue
+                    bar = sync_trade_bars_into_store(
+                        minute_bars,
+                        symbol,
+                        raw,
+                        session_open=session_for_bars.session_open_at,
+                        session_close=session_for_bars.session_close_at,
+                        now=now_utc,
+                    )
+                    if bar is not None:
+                        prev = last_completed_bar_ts.get(symbol)
+                        if prev is not None and bar.ts > prev:
+                            # Gap detection for confirmation reset
+                            gap = (bar.ts - prev).total_seconds()
+                            if gap > float(risk_settings.max_bar_gap_sec):
+                                confirmation_tracker.record(
+                                    symbol, False, missed_bar=True
+                                )
+                        last_completed_bar_ts[symbol] = bar.ts
+
+            # Quote-age feed kill + per-symbol staleness (log distributions first).
+            ages: list[float] = []
+            ages_opt: list[Optional[float]] = []
+            for quote in quotes:
+                age = quote_age_sec(
+                    now=now_utc,
+                    received_at=quote.received_at,
+                    exchange_at=quote.exchange_at,
+                )
+                ages_opt.append(age)
+                if age is not None:
+                    ages.append(age)
+            entry_kill.note_ages(ages)
+            p50, p95 = entry_kill.age_percentiles()
+            now_mono_age = time.monotonic()
+            if ages and (now_mono_age - last_quote_age_log) >= 30.0:
+                logger.info(
+                    "Quote age distribution n=%s p50=%.2fs p95=%.2fs enforce=%s",
+                    len(ages),
+                    p50 or -1,
+                    p95 or -1,
+                    now_mono_age >= gates_enforce_after_mono,
+                )
+                last_quote_age_log = now_mono_age
+
+            feed_share = feed_stale_share(
+                ages_opt, float(risk_settings.kill_stale_quote_sec)
+            )
+            md_type = ibkr.market_data_type if ibkr.is_connected() else None
+            feed_unhealthy = False
+            feed_reason = ""
+            enforce_gates = (
+                risk_settings.stale_input_gates_enabled
+                and time.monotonic() >= gates_enforce_after_mono
+            )
+            if enforce_gates:
+                if md_type is not None and md_type != 1 and settings.data_source == DataSource.IBKR:
+                    feed_unhealthy = True
+                    feed_reason = f"market_data_type_{md_type}"
+                if feed_share >= float(risk_settings.kill_stale_quote_share_frac):
+                    feed_unhealthy = True
+                    feed_reason = feed_reason or "stale_quote_share"
+                if (
+                    settings.data_source == DataSource.IBKR
+                    and not ibkr.is_connected()
+                ):
+                    feed_unhealthy = True
+                    feed_reason = "ibkr_disconnected"
+
+            if feed_unhealthy:
+                entry_kill.observe_unhealthy()
+                changed = entry_kill.activate(feed_reason or "feed_unhealthy", now_utc)
+                if changed and entry_kill.should_alert(
+                    now_utc, float(risk_settings.kill_alert_min_gap_sec)
+                ):
+                    entry_kill.mark_alerted(now_utc)
+                    notifier.send(
+                        f"Market Pilot ENTRY KILL ON: {entry_kill.reason} "
+                        f"(stale_share={feed_share:.0%})"
+                    )
+            else:
+                # Recovery can start during the log-only window once ages look healthy.
+                cleared = entry_kill.observe_healthy(
+                    now_utc, float(risk_settings.kill_recover_healthy_sec)
+                )
+                if cleared and entry_kill.should_alert(
+                    now_utc, float(risk_settings.kill_alert_min_gap_sec)
+                ):
+                    entry_kill.mark_alerted(now_utc)
+                    notifier.send("Market Pilot ENTRY KILL cleared — gates healthy")
+
+            if enforce_gates and jev_transport_kill.should_kill(now_utc):
+                changed = entry_kill.activate("jev_transport", now_utc)
+                if changed and entry_kill.should_alert(
+                    now_utc, float(risk_settings.kill_alert_min_gap_sec)
+                ):
+                    entry_kill.mark_alerted(now_utc)
+                    notifier.send(
+                        f"Market Pilot ENTRY KILL ON: jev_transport "
+                        f"(fail_rate={jev_transport_kill.failure_rate(now_utc):.0%})"
+                    )
 
             now_mono = time.monotonic()
             if (
@@ -1118,6 +1333,48 @@ def run() -> int:
                 ):
                     portfolio_dirty = True
 
+            # EOD: re-fetch 1m TRADES history and diff vs stored live bars (once per close).
+            if (
+                settings.data_source == DataSource.IBKR
+                and ibkr.is_connected()
+                and risk_settings
+                and in_eod_closeout_window(
+                    session.minutes_to_close,
+                    risk_settings.eod_closeout_minutes_before_close,
+                    enabled=risk_settings.eod_closeout_enabled,
+                )
+            ):
+                close_key = session.session_close_at
+                if close_key is not None and _eod_bar_audit_for_close != close_key:
+                    audit_symbols = sorted(trade_bar_symbols) or list(all_symbols)
+                    for symbol in audit_symbols:
+                        try:
+                            hist_raw = ibkr.fetch_1m_trades_snapshot(symbol)
+                            hist_bars = drop_forming_bar(
+                                bars_from_ib_historical(hist_raw)
+                            )
+                            live = drop_forming_bar(
+                                minute_bars.get(symbol).completed_bars()
+                            )
+                            summary = diff_live_vs_historical(live, hist_bars)
+                            logger.info(
+                                "EOD 1m bar audit %s: live=%s hist=%s common=%s "
+                                "mismatch=%s missing_live=%s missing_hist=%s "
+                                "vol_units_ok=%s avg_close_err_pct=%.4f",
+                                symbol,
+                                summary["live_bars"],
+                                summary["historical_bars"],
+                                summary["common_minutes"],
+                                summary["mismatched_minutes"],
+                                summary["missing_in_live"],
+                                summary["missing_in_historical"],
+                                summary["volume_units_ok"],
+                                summary["avg_close_abs_pct_err"] * 100,
+                            )
+                        except Exception as exc:
+                            logger.warning("EOD 1m bar audit failed for %s: %s", symbol, exc)
+                    _eod_bar_audit_for_close = close_key
+
             if (
                 risk_manager
                 and risk_settings
@@ -1190,11 +1447,36 @@ def run() -> int:
             if news_service and eval_symbols:
                 news_service.refresh_stale(eval_symbols)
 
+            # Reset confirmation for symbols that left the effective watchlist.
+            open_for_reset = (
+                [t.symbol for t in risk_manager.open_trades] if risk_manager else []
+            )
+            confirmation_tracker.reset_symbols_not_in(
+                set(eval_symbols) | {s.upper() for s in open_for_reset}
+            )
+
             ready_states: List[Tuple[str, MarketState]] = []
+            stale_symbol_skip: Dict[str, str] = {}
             for symbol in eval_symbols:
                 quote = quotes_by_symbol.get(symbol)
                 if quote is None:
                     continue
+
+                if risk_settings.stale_input_gates_enabled:
+                    age = quote_age_sec(
+                        now=datetime.now(timezone.utc),
+                        received_at=quote.received_at,
+                        exchange_at=quote.exchange_at,
+                    )
+                    qgate = check_quote_fresh_for_symbol(
+                        age,
+                        float(risk_settings.max_quote_age_sec),
+                        enforce=True,
+                    )
+                    if not qgate.passed:
+                        stale_symbol_skip[symbol] = qgate.reason
+                        confirmation_tracker.record(symbol, False)
+                        continue
 
                 state = build_market_state(
                     quote,
@@ -1213,6 +1495,15 @@ def run() -> int:
                         _warmup_logged.add(symbol)
                     continue
 
+                # Newly ranked names must be seeded via keepUpToDate before entry-eligible.
+                if (
+                    settings.data_source == DataSource.IBKR
+                    and symbol.upper() in trade_bar_symbols
+                    and minute_bars.get(symbol).bar_count()
+                    < strategy_config.warmup_min_1m_bars
+                ):
+                    continue
+
                 logger.info(
                     "%s  $%.2f  (%s)",
                     symbol,
@@ -1223,12 +1514,47 @@ def run() -> int:
                 if jev is None:
                     continue
 
-                ready_states.append(
-                    (symbol, enrich_market_state_with_news(state, news_service))
-                )
+                enriched = enrich_market_state_with_news(state, news_service)
+                # Stale news: drop from Jev context; stale negatives still veto later.
+                if enriched.news_articles:
+                    fresh_articles, stale_negs = filter_news_for_jev_context(
+                        enriched.news_articles,
+                        now=datetime.now(timezone.utc),
+                        max_pub_age_sec=float(risk_settings.max_news_pub_age_sec),
+                        max_receipt_lag_sec=float(
+                            risk_settings.max_news_receipt_lag_sec
+                        ),
+                    )
+                    from dataclasses import replace as dc_replace
+
+                    enriched = dc_replace(
+                        enriched,
+                        news_articles=fresh_articles or None,
+                        news_headline_count=len(fresh_articles) if fresh_articles else 0,
+                    )
+                    if stale_negs:
+                        # Keep a marker for veto without putting stale text into Jev.
+                        enriched = dc_replace(
+                            enriched,
+                            news_sentiment=min(
+                                float(enriched.news_sentiment or 0), -0.5
+                            ),
+                            news_tags=list(
+                                dict.fromkeys(
+                                    (enriched.news_tags or [])
+                                    + ["stale_negative_headline"]
+                                )
+                            ),
+                        )
+                ready_states.append((symbol, enriched))
 
             predictions_by_symbol = (
-                _fetch_jev_predictions(jev, ready_states, settings.jev_max_workers)
+                _fetch_jev_predictions(
+                    jev,
+                    ready_states,
+                    settings.jev_max_workers,
+                    transport_tracker=jev_transport_kill,
+                )
                 if jev is not None
                 else {}
             )
@@ -1281,23 +1607,44 @@ def run() -> int:
                     trade_created = False
                     trade_skip_reason: Optional[str] = None
                     eligible = is_trade_eligible(tier)
-                    if entry_block:
+
+                    if entry_kill.active:
+                        confirmation_tracker.record(symbol, False)
+                        trade_skip_reason = f"entry_kill ({entry_kill.reason or 'active'})"
+                        eligible = False
+                    elif entry_block:
                         confirmation_tracker.record(symbol, False)
                         trade_skip_reason = entry_block
                         eligible = False
                     elif not eligible:
                         confirmation_tracker.record(symbol, False)
                         trade_skip_reason = trade_skip_reason_from_tier(tier)
-                    elif not confirmation_tracker.record(symbol, True):
-                        current, required = confirmation_tracker.progress(symbol)
-                        trade_skip_reason = f"awaiting_confirmation ({current}/{required})"
-                        logger.info(
-                            "Filter: awaiting confirmation for %s (%s/%s cycles)",
+                    else:
+                        # Evaluate confirmation once per newly completed real-volume bar.
+                        # Same bar_ts is not double-counted; forward-fill (vol=0) skipped.
+                        completed_ts = last_completed_bar_ts.get(symbol.upper())
+                        bar_for_confirm = completed_ts
+                        agg_bars = minute_bars.get(symbol).completed_bars()
+                        if agg_bars:
+                            last_bar = agg_bars[-1]
+                            if last_bar.volume <= 0:
+                                bar_for_confirm = None
+                        if not confirmation_tracker.record(
                             symbol,
-                            current,
-                            required,
-                        )
-                        eligible = False
+                            True,
+                            completed_bar_ts=bar_for_confirm,
+                        ):
+                            current, required = confirmation_tracker.progress(symbol)
+                            trade_skip_reason = (
+                                f"awaiting_confirmation ({current}/{required})"
+                            )
+                            logger.info(
+                                "Filter: awaiting confirmation for %s (%s/%s bars)",
+                                symbol,
+                                current,
+                                required,
+                            )
+                            eligible = False
 
                     if eligible and risk_manager and db:
                         entry_strategy = strategy_config_with_risk_overrides(
@@ -1336,7 +1683,41 @@ def run() -> int:
                         )
                         if decision.approved and decision.trade:
                             trade = decision.trade
-                            if (
+                            # Pre-submit: fresh snapshot, ask sizing, re-run gates + drift.
+                            fresh_list = _get_quotes(
+                                settings, ibkr, mock, [trade.symbol]
+                            )
+                            fresh_quote = fresh_list[0] if fresh_list else None
+                            pre = pre_submit_recheck(
+                                symbol=trade.symbol,
+                                decision_price=trade.entry_price,
+                                fresh_quote=fresh_quote,
+                                risk_manager=risk_manager,
+                                risk_settings=risk_settings,
+                                bot_enabled=bot_enabled,
+                                entry_kill_active=entry_kill.active,
+                                entry_block=entry_block,
+                                prediction_ts=prediction.timestamp,
+                            )
+                            if not pre.ok:
+                                trade_skip_reason = f"pre_submit_{pre.reason}"
+                                logger.info(
+                                    "Pre-submit rejected %s — %s",
+                                    trade.symbol,
+                                    pre.reason,
+                                )
+                                confirmation_tracker.reset(trade.symbol)
+                            else:
+                                trade.entry_price = pre.entry_price
+                                trade.quantity = pre.quantity
+                                trade.position_value = pre.position_value
+                                trade.stop_loss = pre.stop_loss
+                                trade.take_profit = pre.take_profit
+                            if trade_skip_reason and trade_skip_reason.startswith(
+                                "pre_submit_"
+                            ):
+                                pass
+                            elif (
                                 execution_mode == ExecutionMode.IBKR
                                 and ibkr.is_connected()
                             ):
@@ -1544,6 +1925,14 @@ def run() -> int:
                     jev_connected=jev_connected_this_cycle or jev_connected,
                     execution_mode=configured_execution_mode,
                     last_error=None,
+                    entry_kill_active=entry_kill.active,
+                    entry_kill_reason=entry_kill.reason or None,
+                    entry_kill_at=entry_kill.activated_at,
+                    market_data_type=(
+                        ibkr.market_data_type if ibkr.is_connected() else None
+                    ),
+                    quote_age_p50_sec=entry_kill.age_percentiles()[0],
+                    quote_age_p95_sec=entry_kill.age_percentiles()[1],
                 )
                 account = None
                 ibkr_positions = None

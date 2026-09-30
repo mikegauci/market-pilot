@@ -17,6 +17,12 @@ export type BotStatus = {
   eod_flat_verify_ok?: boolean | null;
   eod_flat_verify_detail?: string | null;
   notifier_configured?: boolean | null;
+  entry_kill_active?: boolean | null;
+  entry_kill_reason?: string | null;
+  entry_kill_at?: string | null;
+  market_data_type?: number | null;
+  quote_age_p50_sec?: number | null;
+  quote_age_p95_sec?: number | null;
 };
 
 export type Settings = {
@@ -47,6 +53,26 @@ export type Settings = {
   eod_flat_verify_minutes_before_close: number;
   /** Live NetLiq vs account_capital divergence alert threshold (decimal fraction). */
   equity_divergence_alert_frac: number;
+  /** Phase 3: stale input / confirmation / kill switches */
+  stale_input_gates_enabled: boolean;
+  max_quote_age_sec: number;
+  kill_stale_quote_sec: number;
+  kill_stale_quote_share_frac: number;
+  quote_age_log_only_sec: number;
+  max_signal_age_sec: number;
+  max_bar_gap_sec: number;
+  max_news_pub_age_sec: number;
+  max_news_receipt_lag_sec: number;
+  pre_submit_recheck_enabled: boolean;
+  max_entry_price_drift_frac: number;
+  confirmation_mode: "legacy" | "distinct_bars";
+  confirmation_count: number;
+  kill_recover_healthy_sec: number;
+  kill_alert_min_gap_sec: number;
+  jev_transport_fail_rate_kill_frac: number;
+  jev_transport_fail_window_sec: number;
+  jev_timeout_sec: number;
+  jev_max_retries: number;
   /** 0 = off; block entries when 1m volume ratio is below this vs 10-bar average */
   min_volume_ratio: number;
   /** 0 = off; block entries / EM scan picks below this USD share price */

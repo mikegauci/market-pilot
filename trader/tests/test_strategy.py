@@ -151,11 +151,18 @@ class TestFilters(unittest.TestCase):
 
 class TestConfirmation(unittest.TestCase):
     def test_requires_two_cycles(self) -> None:
-        tracker = ConfirmationTracker(2)
+        tracker = ConfirmationTracker(2, mode="legacy")
         self.assertFalse(tracker.record("NVDA", True))
         self.assertTrue(tracker.record("NVDA", True))
         tracker.reset("NVDA")
         self.assertEqual(tracker.progress("NVDA"), (0, 2))
+
+    def test_distinct_bars_mode(self) -> None:
+        tracker = ConfirmationTracker(2, mode="distinct_bars")
+        t1 = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        t2 = t1 + timedelta(minutes=1)
+        self.assertFalse(tracker.record("NVDA", True, completed_bar_ts=t1))
+        self.assertTrue(tracker.record("NVDA", True, completed_bar_ts=t2))
 
 
 class TestTimeExit(unittest.TestCase):

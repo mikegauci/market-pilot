@@ -187,6 +187,29 @@ class MinuteBarAggregator:
     def is_ready(self, min_bars: int) -> bool:
         return self.bar_count() >= min_bars
 
+    def replace_completed_bars(self, bars: Sequence[MinuteBar]) -> None:
+        """Replace history with completed trade bars (no forming bar)."""
+        with self._lock:
+            ordered = sorted((_ensure_utc(b.ts), b) for b in bars)
+            self._bars.clear()
+            for _, bar in ordered[-self.max_bars :]:
+                self._bars.append(
+                    MinuteBar(
+                        ts=_ensure_utc(bar.ts),
+                        open=bar.open,
+                        high=bar.high,
+                        low=bar.low,
+                        close=bar.close,
+                        volume=int(bar.volume),
+                    )
+                )
+            self._current = None
+            self._current_bucket = None
+            # Treat trade-bar feed as live so flush/rollup paths work.
+            if self._bars:
+                self._live_from = self._bars[0].ts
+            self._last_seen_volume = None
+
 
 class MinuteBarStore:
     """Minute bar aggregators keyed by symbol."""

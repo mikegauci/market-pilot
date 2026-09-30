@@ -139,6 +139,7 @@ class IBKRClient:
         self._lock = threading.RLock()
         self._contracts: Dict[str, Stock] = {}
         self._tickers: Dict[str, object] = {}
+        self._bar_subs: Dict[str, object] = {}
         self._market_data_blocked = False
         self._use_snapshot_quotes = False
         self._error_handler_registered = False
@@ -292,6 +293,7 @@ class IBKRClient:
     @_ibkr_synchronized
     def disconnect(self) -> None:
         if self.is_connected():
+            self.cancel_all_1m_trade_bars()
             self.ib.disconnect()
             logger.info("Disconnected from IBKR")
 
@@ -483,6 +485,7 @@ class IBKRClient:
                 spread = round(ask - bid, 6)
             if self.is_connected():
                 self.ib.cancelMktData(contract)
+            now = datetime.now(timezone.utc)
             quotes.append(
                 Quote(
                     symbol=symbol,
@@ -491,6 +494,8 @@ class IBKRClient:
                     ask=ask,
                     spread=spread,
                     volume=None,
+                    received_at=now,
+                    exchange_at=None,
                 )
             )
         return quotes
@@ -565,10 +570,21 @@ class IBKRClient:
             self.ib.sleep(wait_sec)
 
         quotes: List[Quote] = []
+        now = datetime.now(timezone.utc)
         for symbol in symbols:
             ticker = self._tickers.get(symbol)
             if ticker is None:
-                quotes.append(Quote(symbol=symbol, price=None, bid=None, ask=None, spread=None))
+                quotes.append(
+                    Quote(
+                        symbol=symbol,
+                        price=None,
+                        bid=None,
+                        ask=None,
+                        spread=None,
+                        received_at=now,
+                        exchange_at=None,
+                    )
+                )
                 continue
 
             price = _ticker_price(ticker)
@@ -581,6 +597,7 @@ class IBKRClient:
             volume_raw = ticker.volume
             volume = int(volume_raw) if volume_raw and not math.isnan(float(volume_raw)) else None
 
+            # ticker.time is local arrival time on many IB builds — do not treat as exchange.
             quotes.append(
                 Quote(
                     symbol=symbol,
@@ -589,10 +606,104 @@ class IBKRClient:
                     ask=ask,
                     spread=spread,
                     volume=volume,
+                    received_at=now,
+                    exchange_at=None,
                 )
             )
 
         return quotes
+
+    @_ibkr_synchronized
+    def sync_1m_trade_bar_subscriptions(self, symbols: List[str]) -> None:
+        """keepUpToDate 1-min TRADES bars for watchlist ∪ open ∪ benchmark.
+
+        One historical seed per symbol; subsequent bars arrive via subscription
+        (no per-minute historical polling).
+        """
+        from market.live_1m_bars import BAR_1M_DURATION, BAR_SIZE_1M
+
+        target = {str(s).upper() for s in symbols}
+        for symbol in list(self._bar_subs):
+            if symbol in target:
+                continue
+            bars = self._bar_subs.pop(symbol)
+            if self.is_connected():
+                try:
+                    self.ib.cancelHistoricalData(bars)
+                except Exception as exc:
+                    logger.debug("cancelHistoricalData %s: %s", symbol, exc)
+
+        for symbol in sorted(target):
+            if symbol in self._bar_subs:
+                continue
+            contract = self._try_ensure_contract(symbol)
+            if contract is None:
+                logger.warning("Skipping 1m bars for %s — contract not qualified", symbol)
+                continue
+            try:
+                bars = self.ib.reqHistoricalData(
+                    contract,
+                    endDateTime="",
+                    durationStr=BAR_1M_DURATION,
+                    barSizeSetting=BAR_SIZE_1M,
+                    whatToShow="TRADES",
+                    useRTH=True,
+                    formatDate=2,  # UTC epoch seconds
+                    keepUpToDate=True,
+                )
+                self._bar_subs[symbol] = bars
+                logger.info("Subscribed keepUpToDate 1m TRADES bars for %s", symbol)
+            except Exception as exc:
+                logger.warning("Failed 1m bar subscribe for %s: %s", symbol, exc)
+
+    @_ibkr_synchronized
+    def cancel_all_1m_trade_bars(self) -> None:
+        for symbol in list(self._bar_subs):
+            bars = self._bar_subs.pop(symbol)
+            if self.is_connected():
+                try:
+                    self.ib.cancelHistoricalData(bars)
+                except Exception as exc:
+                    logger.debug("cancelHistoricalData %s: %s", symbol, exc)
+
+    @_ibkr_synchronized
+    def get_1m_trade_bars_raw(self, symbol: str) -> list:
+        """Return current keepUpToDate BarData list for symbol (may include forming)."""
+        bars = self._bar_subs.get(str(symbol).upper())
+        if bars is None:
+            return []
+        return list(bars)
+
+    @_ibkr_synchronized
+    def fetch_1m_trades_snapshot(
+        self,
+        symbol: str,
+        *,
+        duration: str = "1 D",
+    ) -> list:
+        """One-shot historical 1-min TRADES (no keepUpToDate) for EOD audit."""
+        from market.live_1m_bars import BAR_SIZE_1M
+
+        if not self.is_connected():
+            return []
+        contract = self._try_ensure_contract(symbol)
+        if contract is None:
+            return []
+        try:
+            raw = self.ib.reqHistoricalData(
+                contract,
+                endDateTime="",
+                durationStr=duration,
+                barSizeSetting=BAR_SIZE_1M,
+                whatToShow="TRADES",
+                useRTH=True,
+                formatDate=2,
+                keepUpToDate=False,
+            )
+            return list(raw or [])
+        except Exception as exc:
+            logger.warning("EOD 1m history fetch failed for %s: %s", symbol, exc)
+            return []
 
     @_ibkr_synchronized
     def has_pending_entry_order(self, symbol: str) -> bool:

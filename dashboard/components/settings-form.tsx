@@ -654,6 +654,239 @@ export function SettingsForm({
       </SettingsSection>
 
       <SettingsSection
+        title="Fresh inputs & confirmation"
+        description="Quote/signal age gates, distinct-bar confirmation, and entry kill recovery. Universe scan still uses tick-built bars; newly ranked names are seeded before entry-eligible."
+      >
+        <input type="hidden" name="stale_input_gates_enabled" value="on" />
+        <input type="hidden" name="pre_submit_recheck_enabled" value="on" />
+        <SettingsFieldGroup>
+          <SettingsField
+            id="confirmation_count"
+            label="Confirmation count (bars)"
+            description="Consecutive eligible completed bars required before entry."
+          >
+            <Input
+              id="confirmation_count"
+              name="confirmation_count"
+              type="number"
+              step="1"
+              min={1}
+              max={5}
+              defaultValue={settings.confirmation_count ?? 2}
+              required
+            />
+          </SettingsField>
+          <SettingsField id="confirmation_mode" label="Confirmation mode" description="">
+            <select
+              id="confirmation_mode"
+              name="confirmation_mode"
+              className="flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm"
+              defaultValue={settings.confirmation_mode ?? "distinct_bars"}
+            >
+              <option value="distinct_bars">Distinct bars</option>
+              <option value="legacy">Legacy (eval loops)</option>
+            </select>
+          </SettingsField>
+          <SettingsField id="max_quote_age_sec" label="Max quote age (sec)" description="">
+            <Input
+              id="max_quote_age_sec"
+              name="max_quote_age_sec"
+              type="number"
+              min={2}
+              max={30}
+              defaultValue={settings.max_quote_age_sec ?? 5}
+              required
+            />
+          </SettingsField>
+          <SettingsField id="kill_stale_quote_sec" label="Kill stale quote (sec)" description="">
+            <Input
+              id="kill_stale_quote_sec"
+              name="kill_stale_quote_sec"
+              type="number"
+              min={5}
+              max={60}
+              defaultValue={settings.kill_stale_quote_sec ?? 15}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="kill_stale_quote_share_pct"
+            label="Kill stale share (%)"
+            description=""
+          >
+            <Input
+              id="kill_stale_quote_share_pct"
+              name="kill_stale_quote_share_pct"
+              type="number"
+              min={10}
+              max={100}
+              defaultValue={Math.round(
+                (settings.kill_stale_quote_share_frac ?? 0.5) * 100,
+              )}
+              required
+            />
+          </SettingsField>
+          <SettingsField id="quote_age_log_only_sec" label="Quote-age log-only (sec)" description="">
+            <Input
+              id="quote_age_log_only_sec"
+              name="quote_age_log_only_sec"
+              type="number"
+              min={0}
+              max={3600}
+              defaultValue={settings.quote_age_log_only_sec ?? 300}
+              required
+            />
+          </SettingsField>
+          <SettingsField id="max_signal_age_sec" label="Max signal age (sec)" description="">
+            <Input
+              id="max_signal_age_sec"
+              name="max_signal_age_sec"
+              type="number"
+              min={5}
+              max={120}
+              defaultValue={settings.max_signal_age_sec ?? 30}
+              required
+            />
+          </SettingsField>
+          <SettingsField id="max_bar_gap_sec" label="Max bar gap (sec)" description="">
+            <Input
+              id="max_bar_gap_sec"
+              name="max_bar_gap_sec"
+              type="number"
+              min={60}
+              max={300}
+              defaultValue={settings.max_bar_gap_sec ?? 90}
+              required
+            />
+          </SettingsField>
+          <SettingsField id="max_news_pub_age_sec" label="Max news pub age (sec)" description="">
+            <Input
+              id="max_news_pub_age_sec"
+              name="max_news_pub_age_sec"
+              type="number"
+              min={300}
+              max={86400}
+              defaultValue={settings.max_news_pub_age_sec ?? 3600}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="max_news_receipt_lag_sec"
+            label="Max news receipt lag (sec)"
+            description=""
+          >
+            <Input
+              id="max_news_receipt_lag_sec"
+              name="max_news_receipt_lag_sec"
+              type="number"
+              min={60}
+              max={3600}
+              defaultValue={settings.max_news_receipt_lag_sec ?? 600}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="max_entry_price_drift_bps"
+            label="Max entry price drift (bps)"
+            description=""
+          >
+            <Input
+              id="max_entry_price_drift_bps"
+              name="max_entry_price_drift_bps"
+              type="number"
+              min={5}
+              max={200}
+              defaultValue={Math.round(
+                (settings.max_entry_price_drift_frac ?? 0.002) * 10_000,
+              )}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="kill_recover_healthy_sec"
+            label="Kill recover healthy (sec)"
+            description=""
+          >
+            <Input
+              id="kill_recover_healthy_sec"
+              name="kill_recover_healthy_sec"
+              type="number"
+              min={30}
+              max={600}
+              defaultValue={settings.kill_recover_healthy_sec ?? 120}
+              required
+            />
+          </SettingsField>
+          <SettingsField id="kill_alert_min_gap_sec" label="Kill alert min gap (sec)" description="">
+            <Input
+              id="kill_alert_min_gap_sec"
+              name="kill_alert_min_gap_sec"
+              type="number"
+              min={0}
+              max={600}
+              defaultValue={settings.kill_alert_min_gap_sec ?? 60}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="jev_transport_fail_rate_kill_pct"
+            label="Jev transport fail kill (%)"
+            description=""
+          >
+            <Input
+              id="jev_transport_fail_rate_kill_pct"
+              name="jev_transport_fail_rate_kill_pct"
+              type="number"
+              min={10}
+              max={100}
+              defaultValue={Math.round(
+                (settings.jev_transport_fail_rate_kill_frac ?? 0.5) * 100,
+              )}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="jev_transport_fail_window_sec"
+            label="Jev transport window (sec)"
+            description=""
+          >
+            <Input
+              id="jev_transport_fail_window_sec"
+              name="jev_transport_fail_window_sec"
+              type="number"
+              min={30}
+              max={600}
+              defaultValue={settings.jev_transport_fail_window_sec ?? 60}
+              required
+            />
+          </SettingsField>
+          <SettingsField id="jev_timeout_sec" label="Jev timeout (sec)" description="">
+            <Input
+              id="jev_timeout_sec"
+              name="jev_timeout_sec"
+              type="number"
+              step="0.5"
+              min={1}
+              max={30}
+              defaultValue={settings.jev_timeout_sec ?? 3}
+              required
+            />
+          </SettingsField>
+          <SettingsField id="jev_max_retries" label="Jev max retries" description="">
+            <Input
+              id="jev_max_retries"
+              name="jev_max_retries"
+              type="number"
+              min={0}
+              max={3}
+              defaultValue={settings.jev_max_retries ?? 1}
+              required
+            />
+          </SettingsField>
+        </SettingsFieldGroup>
+      </SettingsSection>
+
+      <SettingsSection
         title="Exits & entry filters"
         description="Stop/take-profit exits, time-based closes, and hard volume gate after Jev BUY."
       >

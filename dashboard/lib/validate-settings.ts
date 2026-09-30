@@ -61,6 +61,25 @@ export type ParsedSettings = {
   eod_closeout_minutes_before_close: number;
   eod_flat_verify_minutes_before_close: number;
   equity_divergence_alert_frac: number;
+  stale_input_gates_enabled: boolean;
+  max_quote_age_sec: number;
+  kill_stale_quote_sec: number;
+  kill_stale_quote_share_frac: number;
+  quote_age_log_only_sec: number;
+  max_signal_age_sec: number;
+  max_bar_gap_sec: number;
+  max_news_pub_age_sec: number;
+  max_news_receipt_lag_sec: number;
+  pre_submit_recheck_enabled: boolean;
+  max_entry_price_drift_frac: number;
+  confirmation_mode: "legacy" | "distinct_bars";
+  confirmation_count: number;
+  kill_recover_healthy_sec: number;
+  kill_alert_min_gap_sec: number;
+  jev_transport_fail_rate_kill_frac: number;
+  jev_transport_fail_window_sec: number;
+  jev_timeout_sec: number;
+  jev_max_retries: number;
   account_capital: number;
   min_volume_ratio: number;
   min_share_price: number;
@@ -309,6 +328,83 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
       : String(formData.get("demotion_jev_sell_on_loss") ?? "") === "on";
   const demotion_jev_sell_max_loss_pct = stop_loss_percentage;
 
+  const stale_input_gates_enabled =
+    String(formData.get("stale_input_gates_enabled") ?? "on") === "on";
+  const max_quote_age_sec = parseRequiredNumber(formData, "max_quote_age_sec");
+  const kill_stale_quote_sec = parseRequiredNumber(formData, "kill_stale_quote_sec");
+  const kill_stale_quote_share_frac =
+    parseRequiredNumber(formData, "kill_stale_quote_share_pct") / 100;
+  const quote_age_log_only_sec = parseRequiredNumber(formData, "quote_age_log_only_sec");
+  const max_signal_age_sec = parseRequiredNumber(formData, "max_signal_age_sec");
+  const max_bar_gap_sec = parseRequiredNumber(formData, "max_bar_gap_sec");
+  const max_news_pub_age_sec = parseRequiredNumber(formData, "max_news_pub_age_sec");
+  const max_news_receipt_lag_sec = parseRequiredNumber(
+    formData,
+    "max_news_receipt_lag_sec",
+  );
+  const pre_submit_recheck_enabled =
+    String(formData.get("pre_submit_recheck_enabled") ?? "on") === "on";
+  const max_entry_price_drift_frac =
+    parseRequiredNumber(formData, "max_entry_price_drift_bps") / 10_000;
+  const confirmation_mode_raw = String(formData.get("confirmation_mode") ?? "distinct_bars");
+  const confirmation_mode =
+    confirmation_mode_raw === "legacy" ? "legacy" : "distinct_bars";
+  const confirmation_count = parseRequiredNumber(formData, "confirmation_count");
+  const kill_recover_healthy_sec = parseRequiredNumber(
+    formData,
+    "kill_recover_healthy_sec",
+  );
+  const kill_alert_min_gap_sec = parseRequiredNumber(formData, "kill_alert_min_gap_sec");
+  const jev_transport_fail_rate_kill_frac =
+    parseRequiredNumber(formData, "jev_transport_fail_rate_kill_pct") / 100;
+  const jev_transport_fail_window_sec = parseRequiredNumber(
+    formData,
+    "jev_transport_fail_window_sec",
+  );
+  const jev_timeout_sec = parseRequiredNumber(formData, "jev_timeout_sec");
+  const jev_max_retries = parseRequiredNumber(formData, "jev_max_retries");
+
+  if (
+    !Number.isInteger(max_quote_age_sec) ||
+    max_quote_age_sec < 2 ||
+    max_quote_age_sec > 30
+  ) {
+    throw new Error("Max quote age must be an integer from 2 to 30 seconds");
+  }
+  if (
+    !Number.isInteger(kill_stale_quote_sec) ||
+    kill_stale_quote_sec < 5 ||
+    kill_stale_quote_sec > 60
+  ) {
+    throw new Error("Kill stale quote age must be an integer from 5 to 60 seconds");
+  }
+  if (kill_stale_quote_sec < max_quote_age_sec) {
+    throw new Error("Kill stale quote age must be >= max quote age");
+  }
+  if (
+    kill_stale_quote_share_frac < 0.1 ||
+    kill_stale_quote_share_frac > 1
+  ) {
+    throw new Error("Kill stale quote share must be between 10% and 100%");
+  }
+  if (
+    !Number.isInteger(confirmation_count) ||
+    confirmation_count < 1 ||
+    confirmation_count > 5
+  ) {
+    throw new Error("Confirmation count must be an integer from 1 to 5");
+  }
+  if (jev_timeout_sec < 1 || jev_timeout_sec > 30) {
+    throw new Error("Jev timeout must be between 1 and 30 seconds");
+  }
+  if (
+    !Number.isInteger(jev_max_retries) ||
+    jev_max_retries < 0 ||
+    jev_max_retries > 3
+  ) {
+    throw new Error("Jev max retries must be an integer from 0 to 3");
+  }
+
   return {
     minimum_jev_confidence,
     signal_record_threshold,
@@ -328,6 +424,25 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     eod_closeout_minutes_before_close,
     eod_flat_verify_minutes_before_close,
     equity_divergence_alert_frac,
+    stale_input_gates_enabled,
+    max_quote_age_sec,
+    kill_stale_quote_sec,
+    kill_stale_quote_share_frac,
+    quote_age_log_only_sec,
+    max_signal_age_sec,
+    max_bar_gap_sec,
+    max_news_pub_age_sec,
+    max_news_receipt_lag_sec,
+    pre_submit_recheck_enabled,
+    max_entry_price_drift_frac,
+    confirmation_mode,
+    confirmation_count,
+    kill_recover_healthy_sec,
+    kill_alert_min_gap_sec,
+    jev_transport_fail_rate_kill_frac,
+    jev_transport_fail_window_sec,
+    jev_timeout_sec,
+    jev_max_retries,
     account_capital,
     min_volume_ratio,
     min_share_price,

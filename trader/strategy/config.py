@@ -13,7 +13,7 @@ class StrategyConfig:
     require_price_above_ema20: bool = True
     max_spy_drop_5m_pct: float = -0.3
     min_buy_hold_margin: float = 0.15
-    confirmation_cycles: int = 2
+    confirmation_count: int = 2
     max_hold_minutes: float = 0.0
     jev_sell_exit_threshold: float = 0.95
     max_correlated_positions: int = 2

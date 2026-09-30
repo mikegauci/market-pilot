@@ -49,6 +49,11 @@ class Quote:
     ask: Optional[float]
     spread: Optional[float]
     volume: Optional[int] = None
+    # Local receive time (always set by engine when quoting).
+    received_at: Optional[datetime] = None
+    # Only set when a verified exchange timestamp is available.
+    # Do NOT pass IBKR ticker.time here — it is typically arrival time.
+    exchange_at: Optional[datetime] = None
 
 
 @dataclass
@@ -68,6 +73,12 @@ class BotStatusUpdate:
     eod_flat_verify_ok: Optional[bool] = None
     eod_flat_verify_detail: Optional[str] = None
     notifier_configured: Optional[bool] = None
+    entry_kill_active: Optional[bool] = None
+    entry_kill_reason: Optional[str] = None
+    entry_kill_at: Optional[datetime] = None
+    market_data_type: Optional[int] = None
+    quote_age_p50_sec: Optional[float] = None
+    quote_age_p95_sec: Optional[float] = None
 
 
 @dataclass
@@ -178,6 +189,26 @@ class RiskSettings:
     eod_flat_verify_minutes_before_close: int = 5
     # Live NetLiq vs account_capital divergence alert threshold (decimal fraction).
     equity_divergence_alert_frac: float = 0.05
+    # Phase 3 freshness / confirmation / kill
+    stale_input_gates_enabled: bool = True
+    max_quote_age_sec: int = 5
+    kill_stale_quote_sec: int = 15
+    kill_stale_quote_share_frac: float = 0.5
+    quote_age_log_only_sec: int = 300
+    max_signal_age_sec: int = 30
+    max_bar_gap_sec: int = 90
+    max_news_pub_age_sec: int = 3600
+    max_news_receipt_lag_sec: int = 600
+    pre_submit_recheck_enabled: bool = True
+    max_entry_price_drift_frac: float = 0.002
+    confirmation_mode: str = "distinct_bars"
+    confirmation_count: int = 2
+    kill_recover_healthy_sec: int = 120
+    kill_alert_min_gap_sec: int = 60
+    jev_transport_fail_rate_kill_frac: float = 0.5
+    jev_transport_fail_window_sec: int = 60
+    jev_timeout_sec: float = 3.0
+    jev_max_retries: int = 1
 
 
 @dataclass

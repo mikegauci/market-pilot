@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     jev_enabled: bool = True
     typesafe_ai_api_key: str = ""
     jev_model: str = "jev-latest"
-    jev_timeout_sec: float = 20.0
+    jev_timeout_sec: float = 3.0
     jev_max_workers: int = 5
     ibkr_fill_timeout_sec: float = 60.0
     ibkr_entry_cooldown_sec: float = 120.0
@@ -228,7 +228,7 @@ class Settings(BaseSettings):
             require_price_above_ema20=self.strategy_require_price_above_ema20,
             max_spy_drop_5m_pct=self.strategy_max_spy_drop_5m_pct,
             min_buy_hold_margin=self.strategy_min_buy_hold_margin,
-            confirmation_cycles=self.strategy_confirmation_cycles,
+            confirmation_count=self.strategy_confirmation_cycles,
             max_hold_minutes=self.strategy_max_hold_minutes,
             jev_sell_exit_threshold=self.strategy_jev_sell_exit_threshold,
             max_correlated_positions=self.strategy_max_correlated_positions,
