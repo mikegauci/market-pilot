@@ -11,6 +11,7 @@ import type {
   ReconciliationEvent,
   Settings,
   SettingsAuditLog,
+  SignalForwardReturn,
   SymbolBar,
   Trade,
   TradeCommand,
@@ -71,6 +72,18 @@ export async function getAnalyticsPredictions(limit = 2000): Promise<Prediction[
     .order("timestamp", { ascending: false })
     .limit(limit);
   return (data ?? []) as Prediction[];
+}
+
+export async function getSignalForwardReturns(
+  limit = 2000,
+): Promise<SignalForwardReturn[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("signal_forward_returns")
+    .select("*")
+    .order("signal_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as SignalForwardReturn[];
 }
 
 export async function getLatestPredictionsBySymbol(limit = 500): Promise<Prediction[]> {

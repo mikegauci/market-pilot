@@ -311,6 +311,19 @@ export type SettingsAuditLog = {
   after: Record<string, unknown>;
 };
 
+export type SignalForwardReturn = {
+  id: string;
+  prediction_id: string;
+  symbol: string;
+  signal_at: string;
+  signal_price: number;
+  horizon_minutes: number;
+  forward_at: string;
+  forward_price: number;
+  forward_return: number;
+  created_at?: string;
+};
+
 export type Position = {
   id: string;
   symbol: string;
