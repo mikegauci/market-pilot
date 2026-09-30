@@ -12,13 +12,15 @@ from market.history import HistoryStore
 from models.types import Quote
 
 if TYPE_CHECKING:
-    from market.bar_aggregator import MinuteBarAggregator
+    from market.bar_aggregator import MinuteBar, MinuteBarAggregator, MinuteBarStore
 
 logger = logging.getLogger(__name__)
 
 BAR_SIZE_DAILY = "1 day"
 BAR_SIZE_INTRADAY = "5 mins"
 MIN_INTRADAY_BARS = 30
+INTRADAY_FRESHNESS = timedelta(hours=4)
+OPEN_POSITION_INTRADAY_FRESHNESS = timedelta(minutes=5)
 
 
 @dataclass(frozen=True)
@@ -125,6 +127,66 @@ def seed_history_from_intraday_bars(store: HistoryStore, bars: Sequence[Bar]) ->
         history.record_point(ts, bar.close, bar.volume)
 
 
+def _five_min_bucket(ts: datetime) -> datetime:
+    ts = _ensure_utc(ts)
+    return ts.replace(minute=(ts.minute // 5) * 5, second=0, microsecond=0)
+
+
+def _first_full_live_five_min_bucket(live_from: datetime) -> datetime:
+    """Earliest 5m bucket composed only of post-live minutes (avoids partial overwrite)."""
+    live_from = _ensure_utc(live_from)
+    bucket = _five_min_bucket(live_from)
+    if live_from == bucket:
+        return bucket
+    return bucket + timedelta(minutes=5)
+
+
+def rollup_minute_bars_to_five_min(
+    symbol: str,
+    minute_bars: Sequence["MinuteBar"],
+) -> List[Bar]:
+    """Aggregate 1-minute OHLCV into 5-minute bars for chart persistence."""
+    buckets: Dict[datetime, List["MinuteBar"]] = {}
+    for minute_bar in minute_bars:
+        bucket = _five_min_bucket(minute_bar.ts)
+        buckets.setdefault(bucket, []).append(minute_bar)
+
+    rolled: List[Bar] = []
+    for bucket_ts in sorted(buckets):
+        group = buckets[bucket_ts]
+        rolled.append(
+            Bar(
+                symbol=symbol.upper(),
+                bar_size=BAR_SIZE_INTRADAY,
+                ts=bucket_ts,
+                open=group[0].open,
+                high=max(item.high for item in group),
+                low=min(item.low for item in group),
+                close=group[-1].close,
+                volume=sum(item.volume for item in group),
+            )
+        )
+    return rolled
+
+
+def live_five_min_bars_for_flush(
+    symbol: str,
+    aggregator: "MinuteBarAggregator",
+) -> List[Bar]:
+    """Roll only fully live 5m buckets so bootstrap placeholders never overwrite IBKR OHLC."""
+    live_from = aggregator.live_from()
+    if live_from is None:
+        return []
+    live_minutes = aggregator.live_minute_bars()
+    if not live_minutes:
+        return []
+    rolled = rollup_minute_bars_to_five_min(symbol, live_minutes)
+    if not rolled:
+        return []
+    first_safe = _first_full_live_five_min_bucket(live_from)
+    return [bar for bar in rolled if bar.ts >= first_safe]
+
+
 class BarStore:
     """Cache-first bar access with optional IBKR backfill."""
 
@@ -221,30 +283,70 @@ class BarStore:
         last = _ensure_utc(last)
         return last.date() < now.date()
 
-    def needs_intraday_refresh(self, symbol: str, now: Optional[datetime] = None) -> bool:
+    def needs_intraday_refresh(
+        self,
+        symbol: str,
+        now: Optional[datetime] = None,
+        *,
+        max_age: Optional[timedelta] = None,
+    ) -> bool:
         now = now or datetime.now(timezone.utc)
         last = self.repository.get_last_fetched_at(symbol.upper(), BAR_SIZE_INTRADAY)
         if last is None:
             return True
         last = _ensure_utc(last)
-        return (now - last) >= timedelta(hours=4)
+        age = max_age if max_age is not None else INTRADAY_FRESHNESS
+        return (now - last) >= age
 
-    def needs_backfill(self, symbol: str, now: Optional[datetime] = None) -> bool:
+    def needs_backfill(
+        self,
+        symbol: str,
+        now: Optional[datetime] = None,
+        *,
+        intraday_max_age: Optional[timedelta] = None,
+    ) -> bool:
         symbol = symbol.upper()
         return self.needs_daily_refresh(symbol, now) or self.needs_intraday_refresh(
-            symbol, now
+            symbol, now, max_age=intraday_max_age
         )
 
     def symbols_needing_backfill(
         self,
         symbols: Sequence[str],
         now: Optional[datetime] = None,
+        *,
+        intraday_max_age: Optional[timedelta] = None,
     ) -> List[str]:
         return [
             symbol.upper()
             for symbol in symbols
-            if symbol and self.needs_backfill(symbol.upper(), now)
+            if symbol
+            and self.needs_backfill(
+                symbol.upper(), now, intraday_max_age=intraday_max_age
+            )
         ]
+
+    def flush_live_intraday_bars(
+        self,
+        symbols: Sequence[str],
+        minute_bars: "MinuteBarStore",
+    ) -> int:
+        """Upsert live-only 5m bars for chart tip freshness (never marks historical fetch)."""
+        flushed = 0
+        for symbol in symbols:
+            if not symbol:
+                continue
+            key = symbol.upper()
+            aggregator = minute_bars.get(key)
+            if not aggregator.has_live_ticks():
+                continue
+            five_min = live_five_min_bars_for_flush(key, aggregator)
+            if not five_min:
+                continue
+            self.repository.upsert_bars(five_min)
+            self.invalidate_bar_cache(key, BAR_SIZE_INTRADAY)
+            flushed += 1
+        return flushed
 
     def backfill_symbol(
         self,

@@ -99,7 +99,7 @@ export function PositionsGrid({
                     symbol={p.symbol}
                     overlays={overlaysForPosition(p, trade)}
                     lazy
-                    refreshIntervalMs={60_000}
+                    refreshIntervalMs={15_000}
                   />
                 </div>
 

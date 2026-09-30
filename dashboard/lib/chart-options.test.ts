@@ -65,4 +65,26 @@ describe("chart-options", () => {
       "2026-01-01T12:00:00Z",
     ]);
   });
+
+  it("supports 1h and 3d lookbacks for 5m bars", () => {
+    const bars = [
+      bar("2026-01-01T08:00:00Z"),
+      bar("2026-01-01T11:30:00Z"),
+      bar("2026-01-01T12:00:00Z"),
+    ];
+    expect(filterBarsForChart(bars, "5 mins", "1h").map((b) => b.ts)).toEqual([
+      "2026-01-01T11:30:00Z",
+      "2026-01-01T12:00:00Z",
+    ]);
+
+    const multiDay = [
+      bar("2025-12-28T12:00:00Z"),
+      bar("2025-12-30T12:00:00Z"),
+      bar("2026-01-01T12:00:00Z"),
+    ];
+    expect(filterBarsForChart(multiDay, "5 mins", "3d").map((b) => b.ts)).toEqual([
+      "2025-12-30T12:00:00Z",
+      "2026-01-01T12:00:00Z",
+    ]);
+  });
 });

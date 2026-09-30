@@ -57,6 +57,10 @@ class TestScreenerScheduler(unittest.TestCase):
         settings = Settings(data_source=DataSource.IBKR)
         bar_store = MagicMock()
         bar_store.symbols_needing_backfill.return_value = ["AMD", "NVDA"]
+        summary = MagicMock()
+        summary.refreshed = 2
+        summary.unqualified_symbols = []
+        bar_store.backfill_universe.return_value = summary
         ibkr = MagicMock()
         ibkr.is_connected.return_value = True
 
@@ -67,6 +71,7 @@ class TestScreenerScheduler(unittest.TestCase):
             ["AMD", "NVDA"],
             ibkr,
             pacing_sec=settings.bar_backfill_pacing_sec,
+            on_progress=None,
         )
 
     def test_backfill_watchlist_symbols_skips_when_cache_fresh(self) -> None:
@@ -79,6 +84,33 @@ class TestScreenerScheduler(unittest.TestCase):
         backfill_watchlist_symbols(settings, bar_store, ibkr, ["AMD", "NVDA"])
 
         bar_store.backfill_universe.assert_not_called()
+
+    def test_backfill_watchlist_symbols_uses_open_position_freshness(self) -> None:
+        settings = Settings(data_source=DataSource.IBKR)
+        bar_store = MagicMock()
+        bar_store.symbols_needing_backfill.side_effect = [
+            ["AMD"],
+            ["NVDA"],
+        ]
+        summary = MagicMock()
+        summary.refreshed = 2
+        summary.unqualified_symbols = []
+        bar_store.backfill_universe.return_value = summary
+        ibkr = MagicMock()
+        ibkr.is_connected.return_value = True
+
+        backfill_watchlist_symbols(
+            settings,
+            bar_store,
+            ibkr,
+            ["AMD", "NVDA"],
+            open_symbols=["NVDA"],
+        )
+
+        self.assertEqual(bar_store.symbols_needing_backfill.call_count, 2)
+        bar_store.backfill_universe.assert_called_once()
+        refreshed = bar_store.backfill_universe.call_args.args[0]
+        self.assertEqual(refreshed, ["AMD", "NVDA"])
 
     def test_start_em_backfill_excludes_watchlist_symbols(self) -> None:
         scheduler = EMWatchlistScheduler()

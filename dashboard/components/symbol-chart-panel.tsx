@@ -11,6 +11,7 @@ import {
   isChartInterval,
   type ChartInterval,
 } from "@/lib/chart-options";
+import { CHART_TIMEZONE } from "@/lib/market-hours";
 import type { ChartMarker, ChartOverlayLine, SymbolBar } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
@@ -176,6 +177,22 @@ export function SymbolChartPanel({
     [bars, barInterval, range],
   );
 
+  const viewKey = `${barInterval}:${range}`;
+  const lastBarTs = displayBars.length > 0 ? displayBars[displayBars.length - 1]?.ts : null;
+  const asOfLabel = useMemo(() => {
+    if (!lastBarTs) return null;
+    const date = new Date(lastBarTs);
+    if (Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: CHART_TIMEZONE,
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+  }, [lastBarTs]);
+
   const activeOverlays = showOverlays ? overlays : [];
   const showPlaceholder = lazy && !isVisible && bars.length === 0 && !error;
 
@@ -243,12 +260,20 @@ export function SymbolChartPanel({
               No bars in this range — try All or another interval.
             </p>
           ) : (
-            <SymbolChart
-              bars={displayBars}
-              overlays={activeOverlays}
-              markers={markers}
-              height={height}
-            />
+            <>
+              <SymbolChart
+                bars={displayBars}
+                overlays={activeOverlays}
+                markers={markers}
+                height={height}
+                viewKey={viewKey}
+              />
+              {asOfLabel ? (
+                <p className="mt-1 text-[10px] text-zinc-600">
+                  As of {asOfLabel} Malta · scroll/pinch to zoom, drag to pan
+                </p>
+              ) : null}
+            </>
           )}
         </div>
       )}

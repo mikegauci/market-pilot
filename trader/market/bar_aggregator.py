@@ -42,6 +42,8 @@ class MinuteBarAggregator:
         self._current_bucket: Optional[datetime] = None
         self._current: Optional[MinuteBar] = None
         self._last_seen_volume: Optional[int] = None
+        # First live tick minute; None until record_point runs after bootstrap/start.
+        self._live_from: Optional[datetime] = None
         self._lock = threading.Lock()
 
     def bootstrap_from_five_min_bars(self, bars: Sequence[Bar]) -> None:
@@ -51,6 +53,7 @@ class MinuteBarAggregator:
             self._current_bucket = None
             self._current = None
             self._last_seen_volume = None
+            self._live_from = None
 
             for bar in sorted(bars, key=lambda item: item.ts):
                 ts = _ensure_utc(bar.ts)
@@ -88,6 +91,8 @@ class MinuteBarAggregator:
         with self._lock:
             increment = self._volume_increment(volume)
             bucket = _minute_bucket(ts)
+            if self._live_from is None:
+                self._live_from = bucket
             if self._current is None or self._current_bucket != bucket:
                 if self._current is not None:
                     self._bars.append(self._current)
@@ -117,6 +122,33 @@ class MinuteBarAggregator:
     def completed_bars(self) -> List[MinuteBar]:
         with self._lock:
             return list(self._bars)
+
+    def all_bars(self) -> List[MinuteBar]:
+        """Completed minute bars plus the in-progress bucket (if any)."""
+        with self._lock:
+            bars = list(self._bars)
+            if self._current is not None:
+                bars.append(self._current)
+            return bars
+
+    def has_live_ticks(self) -> bool:
+        with self._lock:
+            return self._live_from is not None
+
+    def live_from(self) -> Optional[datetime]:
+        with self._lock:
+            return self._live_from
+
+    def live_minute_bars(self) -> List[MinuteBar]:
+        """Minute bars at/after the first live tick (excludes bootstrap-only history)."""
+        with self._lock:
+            if self._live_from is None:
+                return []
+            live_from = self._live_from
+            bars = list(self._bars)
+            if self._current is not None:
+                bars.append(self._current)
+            return [bar for bar in bars if _ensure_utc(bar.ts) >= live_from]
 
     def closes(self, live_price: Optional[float] = None) -> List[float]:
         with self._lock:

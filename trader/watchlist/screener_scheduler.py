@@ -85,17 +85,34 @@ def backfill_watchlist_symbols(
     ibkr: IBKRClient,
     symbols: Sequence[str],
     *,
+    open_symbols: Optional[Sequence[str]] = None,
     on_progress: Optional[Callable[..., None]] = None,
 ) -> None:
     """Backfill watchlist/core symbols on the main thread (ib_insync needs its event loop)."""
+    from market.bars import OPEN_POSITION_INTRADAY_FRESHNESS
+
     priority = list(dict.fromkeys(s.upper() for s in symbols if s))
     if not priority:
         return
     if settings.data_source != DataSource.IBKR or not ibkr.is_connected():
         return
 
-    stale = bar_store.symbols_needing_backfill(priority)
-    if not stale:
+    stale = set(bar_store.symbols_needing_backfill(priority))
+    open_priority = list(dict.fromkeys(s.upper() for s in (open_symbols or []) if s))
+    if open_priority:
+        stale.update(
+            bar_store.symbols_needing_backfill(
+                open_priority,
+                intraday_max_age=OPEN_POSITION_INTRADAY_FRESHNESS,
+            )
+        )
+    stale_list = [symbol for symbol in priority if symbol in stale]
+    # Include open symbols that may not already be in priority.
+    for symbol in open_priority:
+        if symbol in stale and symbol not in stale_list:
+            stale_list.append(symbol)
+
+    if not stale_list:
         logger.info(
             "Watchlist bar cache fresh — skipping backfill (%s symbols)",
             len(priority),
@@ -104,11 +121,11 @@ def backfill_watchlist_symbols(
 
     logger.info(
         "Starting paced watchlist bar backfill for %s/%s symbol(s)",
-        len(stale),
+        len(stale_list),
         len(priority),
     )
     summary = bar_store.backfill_universe(
-        stale,
+        stale_list,
         ibkr,
         pacing_sec=settings.bar_backfill_pacing_sec,
         on_progress=on_progress,
@@ -116,7 +133,7 @@ def backfill_watchlist_symbols(
     logger.info(
         "Watchlist bar backfill complete — refreshed %s/%s symbol(s)",
         summary.refreshed,
-        len(stale),
+        len(stale_list),
     )
     if summary.unqualified_symbols:
         logger.warning(

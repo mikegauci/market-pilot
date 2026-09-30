@@ -563,6 +563,7 @@ def run() -> int:
                 bar_store,
                 ibkr,
                 priority_symbols,
+                open_symbols=open_symbols,
                 on_progress=_on_backfill_progress,
             )
             for symbol in priority_symbols:
@@ -664,6 +665,7 @@ def run() -> int:
     last_bot_control_sync = startup_mono
     last_settings_sync = startup_mono
     last_portfolio_history = 0.0
+    last_live_bar_flush = 0.0
     last_general_news_refresh = 0.0
     general_news_running = False
     general_news_lock = threading.Lock()
@@ -884,6 +886,31 @@ def run() -> int:
 
             for quote in quotes:
                 minute_bars.record(quote)
+
+            now_mono = time.monotonic()
+            if (
+                risk_manager
+                and (
+                    settings.data_source == DataSource.MOCK
+                    or is_us_regular_session_open()
+                )
+                and should_refresh(
+                    now_mono,
+                    last_live_bar_flush,
+                    settings.live_bar_flush_interval_sec,
+                )
+            ):
+                open_syms = list(
+                    dict.fromkeys(trade.symbol for trade in risk_manager.open_trades)
+                )
+                if open_syms:
+                    flushed = bar_store.flush_live_intraday_bars(open_syms, minute_bars)
+                    if flushed:
+                        logger.debug(
+                            "Flushed live 5m bars for %s open position(s)",
+                            flushed,
+                        )
+                last_live_bar_flush = now_mono
 
             if risk_manager and db:
                 def _max_hold_for_symbol(symbol: str) -> float:

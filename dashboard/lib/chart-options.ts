@@ -13,7 +13,9 @@ export const CHART_RANGES_BY_INTERVAL: Record<
 > = {
   "5 mins": [
     { value: "4h", label: "4H", ms: 4 * 60 * 60 * 1000 },
+    { value: "1h", label: "1H", ms: 1 * 60 * 60 * 1000 },
     { value: "1d", label: "1D", ms: 24 * 60 * 60 * 1000 },
+    { value: "3d", label: "3D", ms: 3 * 24 * 60 * 60 * 1000 },
     { value: "all", label: "All", ms: null },
   ],
   "1 day": [

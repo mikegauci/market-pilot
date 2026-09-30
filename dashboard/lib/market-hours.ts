@@ -1,5 +1,6 @@
 const ET = "America/New_York";
-const MALTA = "Europe/Malta";
+export const CHART_TIMEZONE = "Europe/Malta";
+const MALTA = CHART_TIMEZONE;
 const MARKET_OPEN_MINUTES = 9 * 60 + 30;
 const MARKET_CLOSE_MINUTES = 16 * 60;
 

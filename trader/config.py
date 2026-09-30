@@ -86,6 +86,7 @@ class Settings(BaseSettings):
 
     em_universe_path: str = ""
     bar_backfill_pacing_sec: float = 12.0
+    live_bar_flush_interval_sec: float = 60.0
     bar_daily_duration: str = "1 W"
     bar_intraday_duration: str = "3 D"
     em_backfill_on_startup: bool = True
