@@ -27,6 +27,7 @@ const baseFields = {
   watchlist_core: "AAPL, MSFT",
   benchmark_symbol: "EEM",
   watchlist_dynamic_size: "5",
+  watchlist_min_buy: "60",
   watchlist_refresh_minutes: "30",
 };
 
@@ -114,6 +115,25 @@ describe("parseSettingsForm demotion", () => {
       }),
     );
     expect(parsed.demotion_max_hold_ratio).toBe(1);
+  });
+});
+
+describe("parseSettingsForm watchlist min buy", () => {
+  it("parses watchlist_min_buy percent", () => {
+    const parsed = parseSettingsForm(form({ ...baseFields, watchlist_min_buy: "60" }));
+    expect(parsed.watchlist_min_buy).toBe(0.6);
+  });
+
+  it("rejects watchlist min buy above trade confidence", () => {
+    expect(() =>
+      parseSettingsForm(
+        form({
+          ...baseFields,
+          minimum_jev_confidence: "80",
+          watchlist_min_buy: "85",
+        }),
+      ),
+    ).toThrow("Watchlist min BUY (%) must be at or below Min Jev confidence (%)");
   });
 });
 

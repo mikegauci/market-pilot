@@ -19,7 +19,7 @@ class StrategyConfig:
     max_correlated_positions: int = 2
     warmup_min_1m_bars: int = 15
     min_news_sentiment: float = -0.3
-    min_volume_ratio: float = 0.0
+    min_volume_ratio: float = 0.5
     min_share_price: float = 0.0
     news_block_tags: Tuple[str, ...] = (
         "downgrade",

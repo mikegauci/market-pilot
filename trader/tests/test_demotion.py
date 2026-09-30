@@ -51,6 +51,11 @@ class TestDemotion(unittest.TestCase):
         settings = _settings(watchlist_dynamic_enabled=False)
         self.assertFalse(is_demoted_symbol("NU", settings))
 
+    def test_not_demoted_when_dynamic_list_empty(self) -> None:
+        settings = _settings(watchlist=[])
+        self.assertFalse(is_off_effective_watchlist("NU", settings))
+        self.assertFalse(is_demoted_symbol("NU", settings))
+
     def test_effective_max_hold_halved_for_demoted(self) -> None:
         settings = _settings()
         self.assertEqual(effective_max_hold_minutes("NU", settings), 50.0)

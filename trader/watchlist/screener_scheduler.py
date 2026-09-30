@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence
 
 from broker.ibkr import IBKRClient
 from config import Settings
@@ -77,6 +77,35 @@ def quotes_from_minute_bars(
             Quote(symbol=key, price=price, bid=None, ask=None, spread=None)
         )
     return quotes
+
+
+def merge_quote_liquidity(
+    bar_quotes: Sequence[Quote],
+    snapshot: Optional[Dict[str, Quote]],
+) -> List[Quote]:
+    """Overlay bid/ask/spread from a main-thread snapshot onto bar-derived prices.
+
+    Screener workers cannot safely call IBKR; capturing spreads on the main thread
+    lets volume+spread liquidity gates still apply during universe scans.
+    """
+    if not snapshot:
+        return list(bar_quotes)
+    merged: List[Quote] = []
+    for quote in bar_quotes:
+        live = snapshot.get(quote.symbol.upper())
+        if live is None:
+            merged.append(quote)
+            continue
+        merged.append(
+            Quote(
+                symbol=quote.symbol,
+                price=quote.price if quote.price is not None else live.price,
+                bid=live.bid,
+                ask=live.ask,
+                spread=live.spread,
+            )
+        )
+    return merged
 
 
 def backfill_watchlist_symbols(
@@ -163,6 +192,8 @@ class ScreenerJobContext:
     strategy_config: StrategyConfig
     news_service: Optional[NewsService]
     get_quotes: Callable[[list[str]], List[Quote]]
+    # Main-thread IBKR/mock quotes captured at schedule time (for spread/liquidity).
+    quote_snapshot: Optional[Dict[str, Quote]] = None
 
 
 class EMWatchlistScheduler:
@@ -369,7 +400,10 @@ class EMWatchlistScheduler:
                     )
                 # Do not call the main IBKR client from this worker thread —
                 # cancelMktData/reqMktData need that connection's event loop.
-                quotes = quotes_from_minute_bars(job.minute_bars, scan_symbols)
+                quotes = merge_quote_liquidity(
+                    quotes_from_minute_bars(job.minute_bars, scan_symbols),
+                    job.quote_snapshot,
+                )
 
             quotes_by_symbol = {quote.symbol: quote for quote in quotes}
             for quote in quotes:
@@ -401,7 +435,10 @@ class EMWatchlistScheduler:
                 return
 
             dynamic_size = max(0, int(job.risk_settings.watchlist_dynamic_size))
-            dynamic_symbols = top_dynamic_symbols(rankings, benchmark, dynamic_size)
+            min_buy = float(getattr(job.risk_settings, "watchlist_min_buy", 0.6) or 0.0)
+            dynamic_symbols = top_dynamic_symbols(
+                rankings, benchmark, dynamic_size, min_buy=min_buy
+            )
             persisted = merge_dynamic_watchlist(job.risk_settings, dynamic_symbols, [])
             ran_at = datetime.now(timezone.utc)
             job.db.update_effective_watchlist(persisted, rankings)

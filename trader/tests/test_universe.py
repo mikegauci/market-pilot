@@ -6,7 +6,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from watchlist.universe import MAX_UNIVERSE_SIZE, load_em_universe
+from watchlist.universe import (
+    MAX_UNIVERSE_SIZE,
+    infer_instrument_type,
+    load_em_universe,
+)
 
 
 class UniverseLoaderTests(unittest.TestCase):
@@ -32,6 +36,28 @@ class UniverseLoaderTests(unittest.TestCase):
             symbols = load_em_universe(db=db, path=path)
 
         self.assertEqual(symbols, ["VALE", "BABA"])
+
+    def test_json_strips_etfs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "em.json"
+            path.write_text(
+                json.dumps(
+                    [
+                        {"symbol": "EEM", "name": "iShares MSCI Emerging Markets ETF"},
+                        {"symbol": "PDD", "name": "PDD Holdings ADR", "instrument_type": "adr"},
+                        {"symbol": "KWEB", "name": "KraneShares CSI China Internet ETF"},
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            symbols = load_em_universe(path=path)
+
+        self.assertEqual(symbols, ["PDD"])
+
+    def test_infer_instrument_type(self) -> None:
+        self.assertEqual(infer_instrument_type("EEM", "iShares ETF"), "etf")
+        self.assertEqual(infer_instrument_type("PDD", "PDD Holdings ADR"), "adr")
+        self.assertEqual(infer_instrument_type("NU", "NU HOLDINGS CLASS A"), "stock")
 
     def test_json_caps_at_max_universe_size(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

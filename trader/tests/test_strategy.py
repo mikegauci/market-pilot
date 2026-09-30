@@ -85,8 +85,16 @@ class TestFilters(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertIn("volume_too_low", result.reason)
 
-    def test_volume_filter_off_by_default(self) -> None:
+    def test_volume_filter_on_by_default(self) -> None:
         result = check_entry_filters(_state(volume_ratio=0.1), StrategyConfig())
+        self.assertFalse(result.passed)
+        self.assertIn("volume_too_low", result.reason)
+
+    def test_volume_filter_off_when_zero(self) -> None:
+        result = check_entry_filters(
+            _state(volume_ratio=0.1),
+            StrategyConfig(min_volume_ratio=0.0),
+        )
         self.assertTrue(result.passed)
 
     def test_min_share_price_off_when_zero(self) -> None:
@@ -106,7 +114,7 @@ class TestFilters(unittest.TestCase):
         trades = [
             TradeRecord(
                 id="1",
-                symbol="META",
+                symbol="NU",
                 side="buy",
                 entry_time=datetime.now(timezone.utc),
                 entry_price=100.0,
@@ -119,7 +127,7 @@ class TestFilters(unittest.TestCase):
             ),
             TradeRecord(
                 id="2",
-                symbol="GOOGL",
+                symbol="XP",
                 side="buy",
                 entry_time=datetime.now(timezone.utc),
                 entry_price=100.0,
@@ -131,8 +139,14 @@ class TestFilters(unittest.TestCase):
                 paper_or_live="paper",
             ),
         ]
-        result = check_correlation_cap(trades, "NVDA", StrategyConfig())
+        # Two LatAm fintech names already open — third is blocked.
+        result = check_correlation_cap(trades, "STNE", StrategyConfig())
         self.assertFalse(result.passed)
+        self.assertIn("correlation_cap", result.reason)
+
+        # Different group still allowed.
+        other = check_correlation_cap(trades, "PDD", StrategyConfig())
+        self.assertTrue(other.passed)
 
 
 class TestConfirmation(unittest.TestCase):
@@ -177,6 +191,7 @@ class TestTimeExit(unittest.TestCase):
                 take_profit=101.5,
                 status="open",
                 paper_or_live="paper",
+                execution_mode="simulated",
             )
         ]
         quotes = {"NVDA": Quote(symbol="NVDA", price=100.5, bid=None, ask=None, spread=None)}

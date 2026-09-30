@@ -143,11 +143,12 @@ class RiskSettings:
     watchlist_core: List[str] = field(default_factory=list)
     watchlist_dynamic_enabled: bool = True
     watchlist_dynamic_size: int = 5
+    watchlist_min_buy: float = 0.6
     watchlist_refresh_minutes: int = 30
     benchmark_symbol: str = "EEM"
     watchlist_jev_rankings: List[JevRankedSymbol] = field(default_factory=list)
     watchlist_screener_ran_at: Optional[datetime] = None
-    min_volume_ratio: float = 0.0
+    min_volume_ratio: float = 0.5
     min_share_price: float = 20.0
     demotion_exits_enabled: bool = True
     demotion_max_hold_ratio: float = 0.5

@@ -90,10 +90,16 @@ def _filter_stale_core_from_saved(
     """Drop always-on core symbols from a pre-dynamic-only union still stored in DB."""
     core = set(resolve_watchlist_core(risk_settings))
     dynamic_size = max(0, int(risk_settings.watchlist_dynamic_size))
-    ranked_top = {
-        item.symbol.upper()
-        for item in (risk_settings.watchlist_jev_rankings or [])[:dynamic_size]
-    }
+    min_buy = float(getattr(risk_settings, "watchlist_min_buy", 0.6) or 0.0)
+    ranked_top: set[str] = set()
+    for item in risk_settings.watchlist_jev_rankings or []:
+        if item.symbol.upper() in untradeable_benchmark_symbols(risk_settings):
+            continue
+        if item.buy < min_buy:
+            continue
+        ranked_top.add(item.symbol.upper())
+        if len(ranked_top) >= dynamic_size:
+            break
     filtered: List[str] = []
     for raw in saved:
         symbol = str(raw).upper()
@@ -113,13 +119,12 @@ def resolve_base_watchlist(risk_settings: RiskSettings) -> List[str]:
         return strip_benchmark_symbol(resolve_watchlist_core(risk_settings), risk_settings)
     if risk_settings.watchlist_screener_ran_at is None:
         return strip_benchmark_symbol(resolve_watchlist_core(risk_settings), risk_settings)
+    # After a successful scan, empty list is intentional (weak day / min-buy floor).
     saved = [str(symbol).upper() for symbol in risk_settings.watchlist if str(symbol).strip()]
     if not saved:
-        return strip_benchmark_symbol(resolve_watchlist_core(risk_settings), risk_settings)
+        return []
     filtered = _filter_stale_core_from_saved(risk_settings, saved)
-    if filtered:
-        return filtered
-    return strip_benchmark_symbol(resolve_watchlist_core(risk_settings), risk_settings)
+    return filtered
 
 
 def resolve_trading_watchlist(
@@ -136,6 +141,37 @@ def resolve_trading_watchlist(
         if symbol and symbol not in merged:
             merged.append(symbol)
     return strip_benchmark_symbol(merged, risk_settings)
+
+
+def resolve_runtime_watchlist(
+    risk_settings: RiskSettings,
+    open_symbols: Sequence[str] = (),
+    *,
+    env_fallback: Sequence[str] = (),
+) -> List[str]:
+    """Runtime watchlist for the eval loop.
+
+    After a successful dynamic scan, an empty base list is intentional (min-BUY floor /
+    weak tape) — do **not** resurrect env fallback symbols. Env fallback is only used
+    when dynamic mode is off (or still waiting on first scan) and the resolved list
+    is empty.
+    """
+    resolved = resolve_trading_watchlist(risk_settings, open_symbols)
+    if resolved:
+        return resolved
+    intentional_empty = (
+        risk_settings.watchlist_dynamic_enabled
+        and risk_settings.watchlist_screener_ran_at is not None
+    )
+    if intentional_empty:
+        return []
+    fallback = [str(s).upper() for s in env_fallback if str(s).strip()]
+    if not fallback:
+        return []
+    return strip_benchmark_symbol(
+        _merge_symbol_lists(resolve_watchlist_core(risk_settings), fallback, open_symbols),
+        risk_settings,
+    )
 
 
 def apply_screener_result_to_risk_settings(
@@ -178,11 +214,16 @@ def top_dynamic_symbols(
     rankings: Sequence[JevRankedSymbol],
     benchmark: str,
     dynamic_size: int,
+    min_buy: float = 0.0,
 ) -> List[str]:
+    """Take up to dynamic_size names with BUY >= min_buy (max, not a fill quota)."""
     symbols: List[str] = []
     benchmark_key = benchmark.upper()
+    floor = max(0.0, float(min_buy))
     for item in rankings:
         if item.symbol.upper() == benchmark_key:
+            continue
+        if item.buy < floor:
             continue
         symbols.append(item.symbol)
         if len(symbols) >= max(0, dynamic_size):
@@ -206,6 +247,24 @@ def rank_predictions(predictions: Dict[str, JevPrediction]) -> List[JevRankedSym
         )
         for index, item in enumerate(ordered)
     ]
+
+
+def _passes_screener_liquidity(
+    state: MarketState,
+    strategy_config: StrategyConfig,
+) -> bool:
+    """Skip thin/wide names before spending a Jev universe call."""
+    if (
+        strategy_config.min_volume_ratio > 0
+        and state.volume_ratio is not None
+        and state.volume_ratio < strategy_config.min_volume_ratio
+    ):
+        return False
+    if state.spread is not None and state.price > 0:
+        spread_pct = state.spread / state.price
+        if spread_pct > strategy_config.max_spread_pct:
+            return False
+    return True
 
 
 def build_universe_market_states(
@@ -239,6 +298,11 @@ def build_universe_market_states(
             warmup_min_1m_bars=strategy_config.warmup_min_1m_bars,
         )
         if state is None:
+            continue
+        # Benchmark is scored for context; skip liquidity vetoes on it.
+        if symbol.upper() != benchmark_key and not _passes_screener_liquidity(
+            state, strategy_config
+        ):
             continue
         ready.append(
             (symbol, enrich_market_state_with_news(state, news_service))
@@ -280,14 +344,18 @@ def run_jev_universe_scan(
     rankings = rank_predictions(predictions)
 
     dynamic_size = max(0, int(risk_settings.watchlist_dynamic_size))
-    dynamic_symbols = top_dynamic_symbols(rankings, benchmark, dynamic_size)
+    min_buy = float(getattr(risk_settings, "watchlist_min_buy", 0.6) or 0.0)
+    dynamic_symbols = top_dynamic_symbols(
+        rankings, benchmark, dynamic_size, min_buy=min_buy
+    )
     effective = merge_dynamic_watchlist(risk_settings, dynamic_symbols, open_symbols)
 
     logger.info(
-        "Jev universe scan complete — %s/%s scored, top dynamic: %s",
+        "Jev universe scan complete — %s/%s scored, top dynamic: %s (min_buy=%.0f%%)",
         len(predictions),
         len(scan_symbols),
         ", ".join(dynamic_symbols) or "(none)",
+        min_buy * 100,
     )
     return effective, rankings
 

@@ -351,6 +351,7 @@ class SupabaseRepository:
                 "min_volume_ratio, min_share_price, "
                 "account_capital, risk_sync_equity, watchlist, watchlist_core, "
                 "watchlist_dynamic_enabled, watchlist_dynamic_size, "
+                "watchlist_min_buy, "
                 "watchlist_refresh_minutes, benchmark_symbol, watchlist_jev_rankings, "
                 "watchlist_screener_ran_at, demotion_exits_enabled, demotion_max_hold_ratio, "
                 "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit"
@@ -384,7 +385,7 @@ class SupabaseRepository:
             min_hold_minutes=float(data.get("min_hold_minutes", 15)),
             jev_sell_exit_threshold=float(data.get("jev_sell_exit_threshold", 0.95)),
             reentry_cooldown_minutes=float(data.get("reentry_cooldown_minutes", 45)),
-            min_volume_ratio=float(data.get("min_volume_ratio", 0)),
+            min_volume_ratio=float(data.get("min_volume_ratio", 0.5)),
             min_share_price=float(data.get("min_share_price", 20)),
             account_capital=float(data.get("account_capital", 1000)),
             risk_sync_equity=risk_sync_equity,
@@ -392,6 +393,7 @@ class SupabaseRepository:
             watchlist_core=[str(s).upper() for s in watchlist_core],
             watchlist_dynamic_enabled=bool(data.get("watchlist_dynamic_enabled", True)),
             watchlist_dynamic_size=int(data.get("watchlist_dynamic_size", 5)),
+            watchlist_min_buy=float(data.get("watchlist_min_buy", 0.6)),
             watchlist_refresh_minutes=int(data.get("watchlist_refresh_minutes", 30)),
             benchmark_symbol=str(data.get("benchmark_symbol") or "EEM").upper(),
             watchlist_jev_rankings=self._parse_jev_rankings(
@@ -458,9 +460,11 @@ class SupabaseRepository:
 
     @_db_synchronized
     def get_em_universe_symbols(self, tradable_only: bool = True) -> List[str]:
+        from watchlist.universe import infer_instrument_type
+
         query = (
             self.client.table("em_universe")
-            .select("symbol")
+            .select("symbol, name, instrument_type")
             .order("weight_bps", desc=True)
             .limit(MAX_EM_UNIVERSE_SIZE)
         )
@@ -470,7 +474,19 @@ class SupabaseRepository:
         symbols: List[str] = []
         for row in result.data or []:
             symbol = str(row.get("symbol", "")).strip().upper()
-            if symbol and symbol not in symbols:
+            if not symbol:
+                continue
+            name = str(row.get("name", "") or "")
+            raw_type = row.get("instrument_type")
+            kind = (
+                str(raw_type).strip().lower()
+                if raw_type
+                else infer_instrument_type(symbol, name)
+            )
+            # Defense in depth: never return ETFs for dynamic single-name ranking.
+            if kind == "etf":
+                continue
+            if symbol not in symbols:
                 symbols.append(symbol)
         return symbols
 

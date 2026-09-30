@@ -41,5 +41,6 @@ describe("normalizeSettings", () => {
     expect(normalized?.demotion_max_hold_ratio).toBe(0.5);
     expect(normalized?.demotion_jev_sell_on_loss).toBe(true);
     expect(normalized?.demotion_force_exit).toBe(false);
+    expect(normalized?.watchlist_min_buy).toBe(0.6);
   });
 });

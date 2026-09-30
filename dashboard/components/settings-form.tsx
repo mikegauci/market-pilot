@@ -67,8 +67,11 @@ const SETTING_DESCRIPTIONS_FULL = {
     "Block entries and drop EM scan candidates below this USD share price (0 = off). Filters out thin/low-priced names such as sub-$5 ADRs.",
   watchlist: "Effective symbols the bot watches right now (updated by Jev when dynamic mode is on).",
   watchlist_core:
-    "Always-on EM symbols. Jev merges these with its top dynamic picks when dynamic mode is enabled.",
-  watchlist_dynamic_size: "How many extra symbols Jev adds from each universe scan.",
+    "Fallback symbols until the first successful scan (or when dynamic mode is off).",
+  watchlist_dynamic_size:
+    "Maximum EM ADR/stock names kept after each scan that clear the min BUY floor (not a fill quota).",
+  watchlist_min_buy:
+    "Minimum Jev BUY (%) required to earn a dynamic watchlist slot. Trade entries still use Min Jev confidence.",
   watchlist_refresh_minutes: "How often Jev re-scores the full EM universe.",
 } as const;
 
@@ -78,7 +81,7 @@ const SETTING_DESCRIPTIONS = {
   risk_per_trade: "Max loss per trade if stop loss hits.",
   max_position_size: "Cap on capital deployed in one position.",
   max_daily_loss: "Stop new trades after today's losses reach this amount.",
-  max_open_positions: "Concurrent open trades allowed (recommend ≥ dynamic top-N).",
+  max_open_positions: "Concurrent open trades allowed (recommend ≥ max dynamic symbols).",
   stop_loss_percentage: "Exit when price falls this % below entry.",
   take_profit_percentage: "Exit when price rises this % above entry.",
   max_hold_minutes: "Force-close after N minutes (0 = off).",
@@ -88,8 +91,9 @@ const SETTING_DESCRIPTIONS = {
   min_volume_ratio: "Block entries when volume is below this fraction of average (0 = off).",
   min_share_price: "Block entries / EM picks below this USD price (0 = off).",
   watchlist: "Live symbols the trader evaluates each cycle.",
-  watchlist_core: "Always monitored; merged with dynamic picks when enabled.",
-  watchlist_dynamic_size: "Extra symbols added per Jev universe scan.",
+  watchlist_core: "Fallback until first scan; always-on when dynamic mode is off.",
+  watchlist_dynamic_size: "Max symbols from each Jev scan that clear min BUY.",
+  watchlist_min_buy: "Min Jev BUY % for a dynamic watchlist slot.",
   watchlist_refresh_minutes: "Minutes between full EM universe rescans.",
 } as const;
 

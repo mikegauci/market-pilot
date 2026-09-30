@@ -12,6 +12,7 @@ export type SettingsRow = Omit<
   | "demotion_jev_sell_on_loss"
   | "demotion_jev_sell_max_loss_pct"
   | "demotion_force_exit"
+  | "watchlist_min_buy"
 > &
   Partial<
     Pick<
@@ -25,6 +26,7 @@ export type SettingsRow = Omit<
       | "demotion_jev_sell_on_loss"
       | "demotion_jev_sell_max_loss_pct"
       | "demotion_force_exit"
+      | "watchlist_min_buy"
     >
   >;
 
@@ -45,5 +47,6 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     demotion_jev_sell_on_loss: raw.demotion_jev_sell_on_loss ?? true,
     demotion_jev_sell_max_loss_pct: raw.demotion_jev_sell_max_loss_pct ?? 0.02,
     demotion_force_exit: raw.demotion_force_exit ?? false,
+    watchlist_min_buy: raw.watchlist_min_buy ?? 0.6,
   };
 }

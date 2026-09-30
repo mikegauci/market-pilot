@@ -23,6 +23,10 @@ def is_off_effective_watchlist(symbol: str, risk_settings: RiskSettings) -> bool
         return False
 
     base = {str(s).upper() for s in resolve_base_watchlist(risk_settings)}
+    # Empty dynamic list = no names cleared the floor (weak tape). Do not demote
+    # the whole book as if each name were specifically dropped.
+    if not base:
+        return False
     return sym not in base
 
 

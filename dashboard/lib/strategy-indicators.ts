@@ -66,7 +66,7 @@ export const JEV_INDICATORS: StrategyIndicator[] = [
     detail: "Change vs prior daily closes",
     usedFor: "Swing regime context — secondary to intraday signals",
     plainEnglish:
-      "Shows whether the stock is up or down over the past day, week, or month. Gives Jev background on the bigger picture.",
+      "Shows whether the stock is up or down over the past day, 5 days, or week. Gives Jev background on the bigger picture — secondary to intraday signals.",
   },
   {
     name: "Benchmark 5m change",
@@ -150,9 +150,9 @@ export const HARD_FILTER_RULES: StrategyIndicator[] = [
     name: "Low volume (optional)",
     headline: "Thin trading",
     detail: "Volume ratio vs 10-bar average",
-    usedFor: "Block entry when volume_ratio below threshold — off by default (trader .env)",
+    usedFor: "Block entry when volume_ratio below threshold (default 0.5)",
     plainEnglish:
-      "When enabled, blocks trades when volume is unusually low. You can turn this on in Settings.",
+      "Blocks trades when volume is unusually low versus the recent 1-minute average. Adjust in Settings.",
     diagram: "volume",
   },
 ];

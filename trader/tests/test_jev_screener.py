@@ -11,6 +11,7 @@ from watchlist.jev_screener import (
     merge_core_watchlist,
     merge_dynamic_watchlist,
     rank_predictions,
+    resolve_runtime_watchlist,
     resolve_trading_watchlist,
     screener_due,
     top_dynamic_symbols,
@@ -78,6 +79,59 @@ class TestJevScreener(unittest.TestCase):
             JevRankedSymbol("VALE", 0.8, 0.15, 0.05, 3),
         ]
         self.assertEqual(top_dynamic_symbols(rankings, "EEM", 2), ["BABA", "VALE"])
+
+    def test_top_dynamic_symbols_respects_min_buy_floor(self) -> None:
+        rankings = [
+            JevRankedSymbol("PDD", 0.2, 0.75, 0.05, 1),
+            JevRankedSymbol("BABA", 0.65, 0.2, 0.15, 2),
+            JevRankedSymbol("VALE", 0.61, 0.2, 0.19, 3),
+            JevRankedSymbol("NU", 0.4, 0.4, 0.2, 4),
+        ]
+        self.assertEqual(
+            top_dynamic_symbols(rankings, "EEM", 5, min_buy=0.6),
+            ["BABA", "VALE"],
+        )
+        self.assertEqual(top_dynamic_symbols(rankings, "EEM", 5, min_buy=0.7), [])
+
+    def test_resolve_trading_watchlist_empty_after_scan_stays_empty(self) -> None:
+        settings = _base_settings(
+            watchlist=[],
+            watchlist_screener_ran_at=datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc),
+            watchlist_jev_rankings=[
+                JevRankedSymbol("PDD", 0.2, 0.75, 0.05, 1),
+            ],
+            watchlist_min_buy=0.6,
+        )
+        self.assertEqual(resolve_trading_watchlist(settings), [])
+        self.assertEqual(resolve_trading_watchlist(settings, ["NU"]), ["NU"])
+
+    def test_resolve_runtime_watchlist_does_not_resurrect_env_after_empty_scan(self) -> None:
+        settings = _base_settings(
+            watchlist=[],
+            watchlist_screener_ran_at=datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc),
+            watchlist_min_buy=0.6,
+        )
+        self.assertEqual(
+            resolve_runtime_watchlist(
+                settings,
+                env_fallback=["NVDA", "AAPL", "MSFT"],
+            ),
+            [],
+        )
+
+    def test_resolve_runtime_watchlist_uses_env_before_first_scan_if_core_empty(self) -> None:
+        settings = _base_settings(
+            watchlist=[],
+            watchlist_core=[],
+            watchlist_screener_ran_at=None,
+        )
+        self.assertEqual(
+            resolve_runtime_watchlist(
+                settings,
+                env_fallback=["NVDA", "AAPL", "EEM"],
+            ),
+            ["NVDA", "AAPL"],
+        )
 
     def test_merge_dynamic_watchlist_excludes_core(self) -> None:
         settings = _base_settings()

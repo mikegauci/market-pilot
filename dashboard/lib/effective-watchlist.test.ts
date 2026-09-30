@@ -31,6 +31,7 @@ function baseSettings(overrides: Partial<Settings> = {}): Settings {
     watchlist_core: ["NVDA", "AAPL", "EEM"],
     watchlist_dynamic_enabled: true,
     watchlist_dynamic_size: 5,
+    watchlist_min_buy: 0.6,
     watchlist_refresh_minutes: 30,
     benchmark_symbol: "EEM",
     watchlist_jev_rankings: [],
@@ -66,6 +67,17 @@ describe("resolveEffectiveWatchlist", () => {
       ],
     });
     expect(resolveEffectiveWatchlist(settings)).toEqual(["BABA", "VALE"]);
+  });
+
+  it("keeps empty list after a successful weak scan", () => {
+    const settings = baseSettings({
+      watchlist: [],
+      watchlist_screener_ran_at: "2026-01-10T15:00:00Z",
+      watchlist_jev_rankings: [
+        { symbol: "PDD", buy: 0.2, hold: 0.75, sell: 0.05, rank: 1 },
+      ],
+    });
+    expect(resolveEffectiveWatchlist(settings)).toEqual([]);
   });
 
   it("reports scan status modes", () => {

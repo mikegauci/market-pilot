@@ -84,7 +84,7 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
             <span className="font-medium">Enable Jev dynamic EM watchlist</span>
             <span className="mt-1 block text-xs font-normal text-zinc-500">
               {dynamicEnabled
-                ? "After Save, the trader trades top-N EM picks from each successful scan (see interval below). Fallback symbols apply only until the first successful scan, or if that first scan fails. Later scan failures keep the last good list."
+                ? "After Save, the trader watches up to N EM names that clear the min BUY floor each scan. Fallback symbols apply only until the first successful scan, or if that first scan fails. Later scan failures keep the last good list (which may be empty on weak days)."
                 : "Bot watches only your always-on symbols. Save to apply."}
             </span>
           </span>
@@ -152,9 +152,9 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
       <SettingsFieldGroup className={cn(!dynamicEnabled && "opacity-60")}>
         <SettingsField
           id="watchlist_dynamic_size"
-          label="Dynamic top-N"
-          description="EM symbols the trader watches after each successful scan."
-          descriptionTitle="How many top-ranked EM symbols replace the always-on list after each scan."
+          label="Max dynamic symbols"
+          description="Maximum EM names kept after each successful scan (not a fill quota)."
+          descriptionTitle="At most this many symbols with BUY at or above the min BUY floor replace the list after each scan. Weak days can leave fewer or none."
         >
           <Input
             id="watchlist_dynamic_size"
@@ -163,6 +163,22 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
             min={0}
             max={20}
             defaultValue={settings.watchlist_dynamic_size ?? 5}
+          />
+        </SettingsField>
+        <SettingsField
+          id="watchlist_min_buy"
+          label="Watchlist min BUY (%)"
+          description="Minimum Jev BUY to earn a dynamic watchlist slot."
+          descriptionTitle="Names below this BUY score are skipped even if they rank in the top N. Trade entries still require Min Jev confidence (usually higher)."
+        >
+          <Input
+            id="watchlist_min_buy"
+            name="watchlist_min_buy"
+            type="number"
+            min={1}
+            max={100}
+            step={1}
+            defaultValue={Math.round((settings.watchlist_min_buy ?? 0.6) * 100)}
           />
         </SettingsField>
         <SettingsField
@@ -362,6 +378,9 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
             ) : (
               "Unknown time"
             )}
+            {" · muted rows are below min BUY ("}
+            {Math.round((settings.watchlist_min_buy ?? 0.6) * 100)}
+            {"%)"}
           </p>
           <div className="max-h-48 overflow-y-auto rounded border border-zinc-800">
             <table className="w-full text-xs">
@@ -375,32 +394,46 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {settings.watchlist_jev_rankings.slice(0, 15).map((row) => (
-                  <tr key={row.symbol} className="border-t border-zinc-900">
-                    <td className="px-2 py-1 text-zinc-500">{row.rank}</td>
-                    <td className="px-2 py-1">{row.symbol}</td>
-                    <td className="px-2 py-1 text-right text-emerald-400">
-                      {Math.round(row.buy * 100)}%
-                    </td>
-                    <td className="px-2 py-1 text-right text-zinc-400">
-                      {Math.round(row.hold * 100)}%
-                    </td>
-                    <td className="px-2 py-1 text-right text-red-400">
-                      {Math.round(row.sell * 100)}%
-                    </td>
-                  </tr>
-                ))}
+                {settings.watchlist_jev_rankings.slice(0, 15).map((row) => {
+                  const belowFloor = row.buy < (settings.watchlist_min_buy ?? 0.6);
+                  return (
+                    <tr
+                      key={row.symbol}
+                      className={cn(
+                        "border-t border-zinc-900",
+                        belowFloor && "opacity-40",
+                      )}
+                    >
+                      <td className="px-2 py-1 text-zinc-500">{row.rank}</td>
+                      <td className="px-2 py-1">{row.symbol}</td>
+                      <td
+                        className={cn(
+                          "px-2 py-1 text-right",
+                          belowFloor ? "text-zinc-500" : "text-emerald-400",
+                        )}
+                      >
+                        {Math.round(row.buy * 100)}%
+                      </td>
+                      <td className="px-2 py-1 text-right text-zinc-400">
+                        {Math.round(row.hold * 100)}%
+                      </td>
+                      <td className="px-2 py-1 text-right text-red-400">
+                        {Math.round(row.sell * 100)}%
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </SettingsCollapsible>
       )}
 
-      <SettingsCollapsible summary="EM universe (EEM + IEMG holdings)">
+      <SettingsCollapsible summary="EM universe (ADR/stock holdings)">
         <p className="text-xs leading-relaxed text-zinc-400">
           {emUniverse.tradableCount > 0 ? (
             <>
-              {emUniverse.tradableCount} tradable US-listed symbol
+              {emUniverse.tradableCount} tradable US-listed ADR/stock
               {emUniverse.tradableCount === 1 ? "" : "s"}
               {settings.em_universe_synced_at ? (
                 <>
@@ -412,12 +445,13 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
               )}
               {settings.em_universe_source ? ` · source ${settings.em_universe_source}` : ""}
               {" · "}
-              Universe syncs weekly from EEM + IEMG holdings.
+              Universe syncs weekly from EEM + IEMG holdings (ETFs excluded). Periodic
+              verify marks chronically untradable names off.
             </>
           ) : (
             <>
-              No synced universe in Supabase yet — trader falls back to local JSON. Universe
-              syncs weekly from EEM + IEMG holdings.
+              No synced universe in Supabase yet — trader falls back to local ADR/stock
+              JSON. Universe syncs weekly from EEM + IEMG holdings (ETFs excluded).
             </>
           )}
         </p>

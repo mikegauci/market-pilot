@@ -87,6 +87,53 @@ function normalizeTicker(raw) {
   return raw.trim().toUpperCase().replace(/\*/g, "");
 }
 
+const KNOWN_EM_ETF_SYMBOLS = new Set([
+  "EEM",
+  "VWO",
+  "IEMG",
+  "SCHE",
+  "EMXC",
+  "FXI",
+  "MCHI",
+  "KWEB",
+  "INDA",
+  "EPI",
+  "EWZ",
+  "EWY",
+  "EWJ",
+  "EWT",
+  "EWH",
+  "EWS",
+  "EIDO",
+  "EPHE",
+  "THD",
+  "EWW",
+  "ECH",
+  "ARGT",
+  "AAXJ",
+  "EEMA",
+  "FEM",
+  "GEM",
+  "DGS",
+  "SPEM",
+]);
+
+function inferInstrumentType(symbol, name = "") {
+  const key = String(symbol || "")
+    .trim()
+    .toUpperCase();
+  const upperName = String(name || "").toUpperCase();
+  if (KNOWN_EM_ETF_SYMBOLS.has(key) || /\bETF\b|EXCHANGE[\s-]?TRADED/.test(upperName)) {
+    return "etf";
+  }
+  if (
+    /ADR|ADS|AMERICAN DEPOSIT|DEPOSITARY|DEPOSITORY|\bGDR\b/.test(upperName)
+  ) {
+    return "adr";
+  }
+  return "stock";
+}
+
 function isUsListedEquity(fields, headers) {
   const idx = (name) => headers.indexOf(name);
   const ticker = normalizeTicker(fields[idx("Ticker")] ?? "");
@@ -95,6 +142,7 @@ function isUsListedEquity(fields, headers) {
   const exchange = fields[idx("Exchange")]?.trim().toUpperCase();
   const marketCurrency = fields[idx("Market Currency")]?.trim();
   const fxRate = parseFloat((fields[idx("FX Rate")] ?? "0").replace(/,/g, ""));
+  const name = fields[idx("Name")]?.trim() ?? "";
 
   if (!ticker || rowType !== "EQUITY" || assetClass !== "Equity") {
     return null;
@@ -106,12 +154,19 @@ function isUsListedEquity(fields, headers) {
     return null;
   }
 
+  const instrumentType = inferInstrumentType(ticker, name);
+  // Never sync broad EM / country ETFs into the single-name universe.
+  if (instrumentType === "etf") {
+    return null;
+  }
+
   const weight = parseFloat((fields[idx("Weight (%)")] ?? "0").replace(/,/g, ""));
   return {
     symbol: ticker,
-    name: fields[idx("Name")]?.trim() ?? "",
+    name,
     country: fields[idx("Location")]?.trim() || null,
     weight: Number.isFinite(weight) ? weight : 0,
+    instrument_type: instrumentType,
   };
 }
 
@@ -136,6 +191,7 @@ function parseHoldingsCsv(text, etf) {
       country: row.country,
       source_etfs: [],
       weight: 0,
+      instrument_type: row.instrument_type,
     };
 
     if (!existing.source_etfs.includes(etf)) {
@@ -180,6 +236,9 @@ function mergeHoldings(maps) {
       existing.weight = Math.max(existing.weight, row.weight);
       if (!existing.name && row.name) existing.name = row.name;
       if (!existing.country && row.country) existing.country = row.country;
+      if (!existing.instrument_type && row.instrument_type) {
+        existing.instrument_type = row.instrument_type;
+      }
     }
   }
   return [...merged.values()]
@@ -217,8 +276,15 @@ async function upsertUniverse(baseUrl, serviceRoleKey, rows, syncedAt) {
     source_etfs: row.source_etfs,
     weight_bps: Math.round(row.weight * 100),
     country: row.country,
+    instrument_type: row.instrument_type || inferInstrumentType(row.symbol, row.name),
+    // Do not set tradable here — verify/backfill owns that flag. Writing true
+    // would re-enable chronically untradable / KID-blocked names on every sync.
     updated_at: syncedAt,
-  }));
+  })).filter((row) => row.instrument_type !== "etf");
+
+  if (!payload.length) {
+    throw new Error("No ADR/stock rows left after ETF filter — refusing empty upsert");
+  }
 
   await supabaseRequest(baseUrl, serviceRoleKey, "/rest/v1/em_universe?on_conflict=symbol", {
     method: "POST",
@@ -226,7 +292,7 @@ async function upsertUniverse(baseUrl, serviceRoleKey, rows, syncedAt) {
     body: JSON.stringify(payload),
   });
 
-  const symbols = rows.map((row) => row.symbol);
+  const symbols = payload.map((row) => row.symbol);
   const inList = symbols.map((symbol) => encodeURIComponent(`"${symbol}"`)).join(",");
   await supabaseRequest(
     baseUrl,

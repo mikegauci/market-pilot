@@ -22,11 +22,15 @@ function filterStaleCoreFromSaved(settings: Settings, saved: string[]): string[]
   const core = new Set(resolveWatchlistCore(settings));
   const blocked = untradeableBenchmarks(settings);
   const dynamicSize = Math.max(0, settings.watchlist_dynamic_size ?? 5);
-  const rankedTop = new Set(
-    (settings.watchlist_jev_rankings ?? [])
-      .slice(0, dynamicSize)
-      .map((row: JevRanking) => row.symbol.toUpperCase()),
-  );
+  const minBuy = settings.watchlist_min_buy ?? 0.6;
+  const rankedTop = new Set<string>();
+  for (const row of settings.watchlist_jev_rankings ?? []) {
+    const symbol = row.symbol.toUpperCase();
+    if (blocked.has(symbol)) continue;
+    if (row.buy < minBuy) continue;
+    rankedTop.add(symbol);
+    if (rankedTop.size >= dynamicSize) break;
+  }
   const filtered: string[] = [];
   for (const raw of saved) {
     const symbol = raw.toUpperCase();
@@ -95,14 +99,12 @@ export function resolveEffectiveWatchlist(settings: Settings): string[] {
   if (!settings.watchlist_screener_ran_at) {
     return stripBenchmark(settings, resolveWatchlistCore(settings));
   }
+  // After a successful scan, empty list is intentional (weak day / min-buy floor).
   const saved = (settings.watchlist ?? [])
     .map((symbol) => symbol.toUpperCase())
     .filter(Boolean);
   if (!saved.length) {
-    return stripBenchmark(settings, resolveWatchlistCore(settings));
+    return [];
   }
-  const filtered = filterStaleCoreFromSaved(settings, saved);
-  return filtered.length
-    ? filtered
-    : stripBenchmark(settings, resolveWatchlistCore(settings));
+  return filterStaleCoreFromSaved(settings, saved);
 }

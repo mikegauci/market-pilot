@@ -5,11 +5,12 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from config import Settings
-from models.types import DataSource, RiskSettings
+from models.types import DataSource, Quote, RiskSettings
 from watchlist.screener_scheduler import (
     EMWatchlistScheduler,
     ScreenerJobContext,
     backfill_watchlist_symbols,
+    merge_quote_liquidity,
     quotes_from_minute_bars,
 )
 
@@ -231,6 +232,20 @@ class TestScreenerScheduler(unittest.TestCase):
         self.assertEqual(quotes[0].price, 42.5)
         self.assertEqual(quotes[1].symbol, "MISSING")
         self.assertIsNone(quotes[1].price)
+
+    def test_merge_quote_liquidity_overlays_spread(self) -> None:
+        bar_quotes = [
+            Quote(symbol="BABA", price=100.0, bid=None, ask=None, spread=None),
+            Quote(symbol="PDD", price=50.0, bid=None, ask=None, spread=None),
+        ]
+        snapshot = {
+            "BABA": Quote(symbol="BABA", price=100.1, bid=100.0, ask=100.2, spread=0.2),
+        }
+        merged = merge_quote_liquidity(bar_quotes, snapshot)
+        self.assertEqual(merged[0].spread, 0.2)
+        self.assertEqual(merged[0].bid, 100.0)
+        self.assertEqual(merged[0].price, 100.0)  # keep bar price
+        self.assertIsNone(merged[1].spread)
 
     def test_ibkr_screener_does_not_call_get_quotes(self) -> None:
         scheduler = EMWatchlistScheduler()

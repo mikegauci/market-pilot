@@ -62,7 +62,9 @@ from watchlist.jev_screener import (
     apply_screener_result_to_risk_settings,
     effective_benchmark,
     merge_core_watchlist,
+    resolve_runtime_watchlist,
     resolve_trading_watchlist,
+    screener_due,
     strip_benchmark_symbol,
 )
 from watchlist.screener_scheduler import (
@@ -414,7 +416,10 @@ def run() -> int:
         return 1
 
     risk_settings = db.get_risk_settings()
-    watchlist = resolve_trading_watchlist(risk_settings) or settings.watchlist_symbols
+    watchlist = resolve_runtime_watchlist(
+        risk_settings,
+        env_fallback=settings.watchlist_symbols,
+    )
     benchmark_symbol = effective_benchmark(risk_settings)
     all_symbols = _all_symbols(watchlist, benchmark_symbol)
     em_scheduler = EMWatchlistScheduler()
@@ -777,11 +782,10 @@ def run() -> int:
                     if risk_manager
                     else []
                 )
-                watchlist = (
-                    resolve_trading_watchlist(risk_settings, open_symbols)
-                    or strip_benchmark_symbol(
-                        settings.watchlist_symbols, risk_settings
-                    )
+                watchlist = resolve_runtime_watchlist(
+                    risk_settings,
+                    open_symbols,
+                    env_fallback=settings.watchlist_symbols,
                 )
                 screener_result = em_scheduler.take_completed_screener_result()
                 if screener_result is not None:
@@ -795,6 +799,34 @@ def run() -> int:
                         screener_ran_at=screener_result.screener_ran_at,
                     )
                 if jev is not None and risk_settings.watchlist_dynamic_enabled:
+                    quote_snapshot = None
+                    # Capture live spreads only when a scan is about to start —
+                    # worker thread cannot call IBKR safely.
+                    if screener_due(risk_settings) and (
+                        settings.data_source != DataSource.IBKR
+                        or is_us_regular_session_open()
+                    ):
+                        try:
+                            scan_universe = load_em_universe(
+                                db=db,
+                                path=settings.resolved_em_universe_path,
+                            )
+                            snapshot_symbols = list(
+                                dict.fromkeys(
+                                    scan_universe + [benchmark_symbol] + open_symbols
+                                )
+                            )
+                            quote_snapshot = {
+                                quote.symbol.upper(): quote
+                                for quote in _get_quotes(
+                                    settings, ibkr, mock, snapshot_symbols
+                                )
+                            }
+                        except Exception as exc:
+                            logger.warning(
+                                "Could not capture screener quote snapshot: %s",
+                                exc,
+                            )
                     em_scheduler.maybe_start_screener(
                         ScreenerJobContext(
                             settings=settings,
@@ -811,6 +843,7 @@ def run() -> int:
                             get_quotes=lambda symbols: _get_quotes(
                                 settings, ibkr, mock, symbols
                             ),
+                            quote_snapshot=quote_snapshot,
                         )
                     )
                 all_symbols = _all_symbols(

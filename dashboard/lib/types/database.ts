@@ -39,6 +39,8 @@ export type Settings = {
   watchlist_core: string[];
   watchlist_dynamic_enabled: boolean;
   watchlist_dynamic_size: number;
+  /** Minimum Jev BUY (0–1) required to earn a dynamic watchlist slot. */
+  watchlist_min_buy: number;
   watchlist_refresh_minutes: number;
   benchmark_symbol: string;
   watchlist_jev_rankings: JevRanking[];
@@ -60,6 +62,7 @@ export type EmUniverseRow = {
   weight_bps: number;
   country: string | null;
   tradable: boolean;
+  instrument_type?: "adr" | "stock" | "etf" | null;
   updated_at: string;
 };
 

@@ -21,6 +21,10 @@ export function isOffEffectiveWatchlist(symbol: string, settings: Settings): boo
   }
 
   const base = new Set(resolveEffectiveWatchlist(settings).map((s) => s.toUpperCase()));
+  // Empty dynamic list = no names cleared the floor; don't demote the whole book.
+  if (base.size === 0) {
+    return false;
+  }
   return !base.has(sym);
 }
 

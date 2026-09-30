@@ -28,6 +28,8 @@ function labelFor(name: string): string {
     min_hold_minutes: "Min hold (minutes)",
     jev_sell_exit_threshold: "Jev SELL exit (%)",
     reentry_cooldown_minutes: "Re-entry cooldown (minutes)",
+    watchlist_dynamic_size: "Dynamic top-N",
+    watchlist_min_buy: "Watchlist min BUY (%)",
     min_volume_ratio: "Min volume ratio",
     min_share_price: "Min share price ($)",
   };
@@ -54,6 +56,7 @@ export type ParsedSettings = {
   watchlist_core: string[];
   watchlist_dynamic_enabled: boolean;
   watchlist_dynamic_size: number;
+  watchlist_min_buy: number;
   watchlist_refresh_minutes: number;
   benchmark_symbol: string;
   demotion_exits_enabled: boolean;
@@ -180,6 +183,10 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   ) {
     throw new Error("Dynamic watchlist size must be a whole number from 0 to 20");
   }
+  const watchlist_min_buy = parseConfidencePercent(formData, "watchlist_min_buy");
+  if (watchlist_min_buy > minimum_jev_confidence) {
+    throw new Error("Watchlist min BUY (%) must be at or below Min Jev confidence (%)");
+  }
   const watchlist_refresh_minutes = Number(formData.get("watchlist_refresh_minutes") ?? 30);
   if (
     !Number.isInteger(watchlist_refresh_minutes) ||
@@ -240,6 +247,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     watchlist_core,
     watchlist_dynamic_enabled,
     watchlist_dynamic_size,
+    watchlist_min_buy,
     watchlist_refresh_minutes,
     benchmark_symbol,
     demotion_exits_enabled,

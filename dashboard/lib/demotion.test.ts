@@ -26,6 +26,7 @@ function baseSettings(overrides: Partial<Settings> = {}): Settings {
     watchlist_core: ["NVDA", "AAPL", "EEM"],
     watchlist_dynamic_enabled: true,
     watchlist_dynamic_size: 5,
+    watchlist_min_buy: 0.6,
     watchlist_refresh_minutes: 30,
     benchmark_symbol: "EEM",
     watchlist_jev_rankings: [],
@@ -60,5 +61,11 @@ describe("demotion", () => {
     expect(
       isOffEffectiveWatchlist("NU", baseSettings({ demotion_exits_enabled: false })),
     ).toBe(true);
+  });
+
+  it("does not demote when dynamic watchlist is empty after a scan", () => {
+    const settings = baseSettings({ watchlist: [] });
+    expect(isOffEffectiveWatchlist("NU", settings)).toBe(false);
+    expect(isDemotedSymbol("NU", settings)).toBe(false);
   });
 });

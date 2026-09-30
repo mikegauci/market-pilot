@@ -51,8 +51,9 @@ TRADE_ACTION_QUESTION = {
 UNIVERSE_ACTION_QUESTION = {
     "type": "choice",
     "instructions": (
-        "Evaluate whether this US-listed emerging markets ETF or ADR deserves a "
-        "near-term long watchlist slot. Return calibrated buy, hold, or sell "
+        "Evaluate whether this US-listed emerging markets ADR or single-name stock "
+        "deserves a near-term long watchlist slot. Do not treat broad EM ETFs as "
+        "candidates — only individual names. Return calibrated buy, hold, or sell "
         "probabilities reflecting short-term intraday edge. Favor higher BUY when "
         "momentum, volume, and trend (price vs EMA-9/20 on 1-minute bars, RSI-14 on "
         "1-minute bars not overbought) align and change_1d/change_5d/change_1w support "
