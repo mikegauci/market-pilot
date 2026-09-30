@@ -34,7 +34,7 @@ from watchlist.universe import load_em_universe
 logger = logging.getLogger(__name__)
 
 SCREENER_FAILURE_BACKOFF_SEC = 300.0
-MIN_SCORED_RATIO = 0.25
+MIN_SCORED_RATIO = 0.15
 CACHE_COVERAGE_RATIO = 0.70
 MIN_INTRADAY_BARS = 30
 BACKFILL_CLIENT_ID_OFFSET = 100
@@ -66,6 +66,7 @@ def _connect_backfill_ibkr(settings: Settings) -> IBKRClient:
 def quotes_from_minute_bars(
     minute_bars: MinuteBarStore,
     symbols: Sequence[str],
+    bar_store: Optional[BarStore] = None,
 ) -> List[Quote]:
     """Build quotes from seeded minute bars — safe off the IBKR main thread."""
     quotes: List[Quote] = []
@@ -73,8 +74,20 @@ def quotes_from_minute_bars(
         key = symbol.upper()
         closes = minute_bars.get(key).closes()
         price = closes[-1] if closes else None
+        volume: Optional[int] = None
+        if bar_store is not None:
+            intraday = bar_store.get_intraday_bars(key)
+            if intraday:
+                volume = sorted(intraday, key=lambda bar: bar.ts)[-1].volume
         quotes.append(
-            Quote(symbol=key, price=price, bid=None, ask=None, spread=None)
+            Quote(
+                symbol=key,
+                price=price,
+                bid=None,
+                ask=None,
+                spread=None,
+                volume=volume,
+            )
         )
     return quotes
 
@@ -103,6 +116,7 @@ def merge_quote_liquidity(
                 bid=live.bid,
                 ask=live.ask,
                 spread=live.spread,
+                volume=live.volume if live.volume is not None else quote.volume,
             )
         )
     return merged
@@ -401,13 +415,15 @@ class EMWatchlistScheduler:
                 # Do not call the main IBKR client from this worker thread —
                 # cancelMktData/reqMktData need that connection's event loop.
                 quotes = merge_quote_liquidity(
-                    quotes_from_minute_bars(job.minute_bars, scan_symbols),
+                    quotes_from_minute_bars(
+                        job.minute_bars,
+                        scan_symbols,
+                        bar_store=job.bar_store,
+                    ),
                     job.quote_snapshot,
                 )
 
             quotes_by_symbol = {quote.symbol: quote for quote in quotes}
-            for quote in quotes:
-                job.minute_bars.record(quote)
 
             effective, rankings, skips = run_jev_universe_scan(
                 risk_settings=job.risk_settings,

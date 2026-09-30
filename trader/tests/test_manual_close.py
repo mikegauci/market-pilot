@@ -97,7 +97,11 @@ class ManualCloseTests(unittest.TestCase):
         )
         self.risk_manager.open_trades = [ibkr_trade]
         self.ibkr.is_connected.return_value = True
-        self.ibkr.close_long_position.return_value = (101.5, 10.0)
+        from models.types import OrderFill
+
+        self.ibkr.close_long_position.return_value = OrderFill(
+            price=101.5, quantity=10.0, commission=1.0
+        )
         self.db.get_pending_trade_commands.return_value = [
             {"id": "cmd-1", "trade_id": "trade-1"}
         ]

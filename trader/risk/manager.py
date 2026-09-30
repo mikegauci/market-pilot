@@ -13,6 +13,8 @@ from watchlist.demotion import (
     price_between_entry_and_take_profit,
 )
 
+from strategy.config import StrategyConfig
+
 from models.types import (
     ClosedTrade,
     JevPrediction,
@@ -127,17 +129,29 @@ class RiskManager:
     def _daily_pnl(self, quotes: Dict[str, Quote]) -> float:
         return self.daily_realized_pnl + self._unrealized_pnl(quotes)
 
-    def compute_position_size(self, price: float) -> Optional[tuple[float, float]]:
+    def compute_position_size(
+        self,
+        price: float,
+        *,
+        stop_pct: Optional[float] = None,
+    ) -> Optional[tuple[float, float]]:
         """Return (quantity, position_value) or None if size is too small."""
         if price <= 0:
             return None
 
-        stop_pct = self.settings.stop_loss_percentage
-        if stop_pct <= 0:
+        effective_stop = stop_pct if stop_pct is not None else self.settings.stop_loss_percentage
+        if effective_stop <= 0:
             return None
 
-        risk_based = self.settings.risk_per_trade / stop_pct
-        position_value = min(self.settings.max_position_size, risk_based)
+        risk_based = self.settings.risk_per_trade / effective_stop
+        position_value = risk_based
+        if position_value > self.settings.max_position_size:
+            logger.info(
+                "Position size clipped by max_position_size ($%.2f → $%.2f)",
+                position_value,
+                self.settings.max_position_size,
+            )
+            position_value = self.settings.max_position_size
         quantity = math.floor(position_value / price)
         if quantity < 1:
             return None
@@ -145,12 +159,45 @@ class RiskManager:
         actual_value = quantity * price
         return quantity, actual_value
 
+    @staticmethod
+    def resolve_stop_take_pct(
+        strategy_config: StrategyConfig,
+        settings: RiskSettings,
+        atr_pct: Optional[float],
+    ) -> tuple[float, float]:
+        stop_pct = settings.stop_loss_percentage
+        take_pct = settings.take_profit_percentage
+        if atr_pct is not None and atr_pct > 0:
+            stop_pct = max(
+                strategy_config.min_stop_loss_pct,
+                min(
+                    strategy_config.max_stop_loss_pct,
+                    atr_pct * strategy_config.stop_loss_atr_multiple,
+                ),
+            )
+            take_pct = max(
+                strategy_config.min_take_profit_pct,
+                min(
+                    strategy_config.max_take_profit_pct,
+                    atr_pct * strategy_config.take_profit_atr_multiple,
+                ),
+            )
+        return stop_pct, take_pct
+
+    @staticmethod
+    def estimate_ibkr_commission(quantity: float, *, round_trip: bool = True) -> float:
+        per_side = max(0.35, quantity * 0.0035)
+        return per_side * (2 if round_trip else 1)
+
     def evaluate_entry(
         self,
         state: MarketState,
         prediction: JevPrediction,
         bot_enabled: bool,
         quotes_by_symbol: Dict[str, Quote],
+        *,
+        strategy_config: Optional[StrategyConfig] = None,
+        atr_pct: Optional[float] = None,
     ) -> TradeDecision:
         if not bot_enabled:
             return TradeDecision(False, "bot_disabled")
@@ -171,7 +218,10 @@ class RiskManager:
         if len(self.open_trades) >= self.settings.max_open_positions:
             return TradeDecision(False, "max_open_positions")
 
-        sizing = self.compute_position_size(state.price)
+        strat = strategy_config or StrategyConfig()
+        stop_pct, take_pct = self.resolve_stop_take_pct(strat, self.settings, atr_pct)
+
+        sizing = self.compute_position_size(state.price, stop_pct=stop_pct)
         if sizing is None:
             return TradeDecision(False, "position_too_small")
 
@@ -183,9 +233,13 @@ class RiskManager:
         if self._daily_pnl(quotes_by_symbol) <= -self.settings.max_daily_loss:
             return TradeDecision(False, "max_daily_loss")
 
+        quote = quotes_by_symbol.get(state.symbol)
         entry_price = state.price
-        stop_loss = round(entry_price * (1 - self.settings.stop_loss_percentage), 6)
-        take_profit = round(entry_price * (1 + self.settings.take_profit_percentage), 6)
+        if quote is not None and quote.ask is not None and quote.ask > 0:
+            entry_price = quote.ask
+        stop_loss = round(entry_price * (1 - stop_pct), 6)
+        take_profit = round(entry_price * (1 + take_pct), 6)
+        estimated_commission = self.estimate_ibkr_commission(quantity)
         now = datetime.now(timezone.utc)
 
         trade = TradeRecord(
@@ -201,6 +255,7 @@ class RiskManager:
             status="open",
             paper_or_live=self.trading_mode.value,
             jev_buy_probability=prediction.buy,
+            entry_commission=estimated_commission / 2,
         )
         return TradeDecision(True, "approved", trade=trade)
 
@@ -342,6 +397,26 @@ class RiskManager:
             )
         return False
 
+    def force_close_all_simulated(
+        self,
+        quotes_by_symbol: Dict[str, Quote],
+        *,
+        reason: str = "eod_flatten",
+    ) -> List[ClosedTrade]:
+        closed: List[ClosedTrade] = []
+        for trade in list(self.open_trades):
+            if trade.execution_mode == "ibkr":
+                continue
+            quote = quotes_by_symbol.get(trade.symbol)
+            if quote is None or quote.price is None:
+                continue
+            exit_price = quote.bid if quote.bid is not None else quote.price
+            closed.append(self._build_closed_trade(trade, exit_price, reason))
+        closed_ids = {item.trade_id for item in closed}
+        if closed_ids:
+            self.open_trades = [t for t in self.open_trades if t.id not in closed_ids]
+        return closed
+
     def check_jev_exit(
         self,
         symbol: str,
@@ -370,17 +445,22 @@ class RiskManager:
         reason: str,
     ) -> ClosedTrade:
         gross_pnl = (exit_price - trade.entry_price) * trade.quantity
-        net_pnl = gross_pnl
+        entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
+        exit_comm = float(getattr(trade, "exit_commission", 0) or 0)
+        if exit_comm <= 0:
+            exit_comm = self.estimate_ibkr_commission(trade.quantity, round_trip=False)
+        net_pnl = gross_pnl - entry_comm - exit_comm
         now = datetime.now(timezone.utc)
 
         self.daily_realized_pnl += net_pnl
         self.total_realized_pnl += net_pnl
         logger.info(
-            "Simulated exit %s @ $%.2f (%s) PnL $%.2f",
+            "Simulated exit %s @ $%.2f (%s) PnL $%.2f (net after $%.2f fees)",
             trade.symbol,
             exit_price,
             reason,
             net_pnl,
+            entry_comm + exit_comm,
         )
         return ClosedTrade(
             trade_id=trade.id,

@@ -108,7 +108,11 @@ class TestDemotionForceExit(unittest.TestCase):
             ],
         )
         ibkr = MagicMock()
-        ibkr.close_long_position.return_value = (99.0, 1.0)
+        from models.types import OrderFill
+
+        ibkr.close_long_position.return_value = OrderFill(
+            price=99.0, quantity=1.0, commission=0.0
+        )
         db = MagicMock()
         db.get_daily_realized_pnl.return_value = 0.0
 

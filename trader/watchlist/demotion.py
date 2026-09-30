@@ -115,7 +115,10 @@ def jev_sell_exit_allowed(
         if not is_demoted_symbol(trade.symbol, risk_settings):
             return False
 
+    if is_demoted_symbol(trade.symbol, risk_settings):
+        return demoted_jev_sell_loss_allowed(trade, risk_settings, quote)
+
     pnl = (quote.price - trade.entry_price) * trade.quantity
     if pnl >= 0:
         return True
-    return demoted_jev_sell_loss_allowed(trade, risk_settings, quote)
+    return False

@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Dict, Optional
 
-from models.types import ClosedTrade, ExecutionMode, Quote, TradeRecord
+from models.types import ClosedTrade, ExecutionMode, OrderFill, Quote, TradeRecord
 
 if TYPE_CHECKING:
     from broker.ibkr import IBKRClient
@@ -64,7 +64,7 @@ def _execute_manual_close(
         if not ibkr.is_connected():
             raise RuntimeError("ibkr_not_connected")
 
-        exit_price, filled_qty = ibkr.close_long_position(
+        fill: OrderFill = ibkr.close_long_position(
             trade.symbol,
             trade.quantity,
             parent_order_id=trade.ibkr_parent_order_id,
@@ -72,19 +72,25 @@ def _execute_manual_close(
             tp_order_id=trade.ibkr_tp_order_id,
             fill_timeout_sec=fill_timeout_sec,
         )
-        gross_pnl = (exit_price - trade.entry_price) * filled_qty
-        net_pnl = gross_pnl
+        entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
+        exit_comm = (
+            fill.commission
+            if fill.commission > 0
+            else risk_manager.estimate_ibkr_commission(fill.quantity, round_trip=False)
+        )
+        gross_pnl = (fill.price - trade.entry_price) * fill.quantity
+        net_pnl = gross_pnl - entry_comm - exit_comm
         now = datetime.now(timezone.utc)
         risk_manager.record_closed_pnl(net_pnl)
         return ClosedTrade(
             trade_id=trade.id,
             symbol=trade.symbol,
-            exit_price=exit_price,
+            exit_price=fill.price,
             exit_time=now,
             gross_pnl=gross_pnl,
             net_pnl=net_pnl,
             reason="manual",
-            filled_quantity=filled_qty,
+            filled_quantity=fill.quantity,
         )
 
     closed = _close_simulated_trade(risk_manager, trade, quotes_by_symbol)

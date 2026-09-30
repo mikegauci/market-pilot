@@ -20,6 +20,7 @@ class MinuteBar:
     low: float
     close: float
     volume: int
+    synthetic: bool = False
 
 
 def _ensure_utc(ts: datetime) -> datetime:
@@ -69,6 +70,7 @@ class MinuteBarAggregator:
                             low=close,
                             close=close,
                             volume=minute_vol,
+                            synthetic=True,
                         )
                     )
 
@@ -104,6 +106,7 @@ class MinuteBarAggregator:
                     low=price,
                     close=price,
                     volume=increment,
+                    synthetic=False,
                 )
                 return
 
@@ -186,6 +189,30 @@ class MinuteBarAggregator:
 
     def is_ready(self, min_bars: int) -> bool:
         return self.bar_count() >= min_bars
+
+    def live_bar_count(self) -> int:
+        """Count non-synthetic minute bars (live ticks only)."""
+        with self._lock:
+            count = sum(1 for bar in self._bars if not bar.synthetic)
+            if self._current is not None and not self._current.synthetic:
+                count += 1
+            return count
+
+    def live_closes(self, live_price: Optional[float] = None) -> List[float]:
+        with self._lock:
+            closes = [bar.close for bar in self._bars if not bar.synthetic]
+            if self._current is not None and not self._current.synthetic:
+                closes.append(
+                    live_price if live_price is not None else self._current.close
+                )
+            return closes
+
+    def live_volumes(self) -> List[int]:
+        with self._lock:
+            volumes = [bar.volume for bar in self._bars if not bar.synthetic]
+            if self._current is not None and not self._current.synthetic:
+                volumes.append(self._current.volume)
+            return volumes
 
 
 class MinuteBarStore:

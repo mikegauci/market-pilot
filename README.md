@@ -212,6 +212,8 @@ UPDATE bot_status SET enabled = true WHERE id = 1;
 
 When IBKR is connected, **effective capital** uses your paper account `NetLiquidation` (e.g. €1M). Tune absolute limits in Supabase or the dashboard Settings page.
 
+**Position sizing:** `risk_per_trade` is authoritative — notional is `risk_per_trade / stop_loss_percentage`, clipped by `max_position_size`. If you raise `max_position_size` without raising `risk_per_trade`, risk per trade does not increase.
+
 **Risk profiles** (dashboard Settings — percentages of equity):
 
 | Profile | Risk per trade | Max position | Max daily loss |

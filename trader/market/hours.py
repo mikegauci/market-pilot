@@ -32,6 +32,45 @@ def is_us_regular_session_open(now: datetime | None = None) -> bool:
     )
 
 
+def minutes_until_regular_close(now: datetime | None = None) -> float:
+    """Minutes until 16:00 ET on a weekday session; negative after the close."""
+    when = now if now is not None else datetime.now(tz=ET)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=ET)
+    else:
+        when = when.astimezone(ET)
+
+    is_weekday, minutes = _et_parts(when)
+    if not is_weekday:
+        return -1.0
+    remaining = MARKET_CLOSE_MINUTES - minutes
+    if minutes < MARKET_OPEN_MINUTES:
+        return float(MARKET_CLOSE_MINUTES - MARKET_OPEN_MINUTES)
+    return float(remaining)
+
+
+def is_entry_window_open(
+    now: datetime | None = None,
+    *,
+    cutoff_minutes_before_close: float = 15.0,
+) -> bool:
+    if not is_us_regular_session_open(now):
+        return False
+    remaining = minutes_until_regular_close(now)
+    return remaining > cutoff_minutes_before_close
+
+
+def should_force_eod_flatten(
+    now: datetime | None = None,
+    *,
+    flatten_minutes_before_close: float = 5.0,
+) -> bool:
+    if not is_us_regular_session_open(now):
+        return False
+    remaining = minutes_until_regular_close(now)
+    return 0 < remaining <= flatten_minutes_before_close
+
+
 def seconds_until_next_open(now: datetime | None = None) -> float:
     """Seconds until the next regular session open (0 if already open)."""
     when = now if now is not None else datetime.now(tz=ET)

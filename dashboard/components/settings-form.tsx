@@ -65,6 +65,8 @@ const SETTING_DESCRIPTIONS_FULL = {
     "Block new entries when latest 1-min volume is below this fraction of the 10-bar average (0 = off). Example: 0.5 requires at least half the recent average volume.",
   min_share_price:
     "Block entries and drop EM scan candidates below this USD share price (0 = off). Filters out thin/low-priced names such as sub-$5 ADRs.",
+  min_dollar_volume:
+    "Minimum average dollar volume per 5-minute bar for EM scan picks and new entries (0 = off). Example: 250000 filters illiquid ADRs.",
   watchlist: "Effective symbols the bot watches right now (updated by Jev when dynamic mode is on).",
   watchlist_core:
     "Fallback symbols until the first successful scan (or when dynamic mode is off).",
@@ -90,6 +92,7 @@ const SETTING_DESCRIPTIONS = {
   reentry_cooldown_minutes: "No re-entry in same symbol for N minutes (0 = off).",
   min_volume_ratio: "Block entries when volume is below this fraction of average (0 = off).",
   min_share_price: "Block entries / EM picks below this USD price (0 = off).",
+  min_dollar_volume: "Min avg $ volume per 5m bar for scan + entries (0 = off).",
   watchlist: "Live symbols the trader evaluates each cycle.",
   watchlist_core: "Fallback until first scan; always-on when dynamic mode is off.",
   watchlist_dynamic_size: "Max symbols from each Jev scan that clear min BUY.",
@@ -286,6 +289,9 @@ export function SettingsForm({
   );
   const [minVolumeRatio, setMinVolumeRatio] = useState(settings.min_volume_ratio ?? 0);
   const [minSharePrice, setMinSharePrice] = useState(settings.min_share_price ?? 20);
+  const [minDollarVolume, setMinDollarVolume] = useState(
+    settings.min_dollar_volume ?? 250_000,
+  );
   const maxHoldHints = getMaxHoldHints(maxHoldMinutes);
   const [selectedProfile, setSelectedProfile] = useState<RiskProfile>(
     resolveRiskProfile(settings.risk_profile),
@@ -582,6 +588,24 @@ export function SettingsForm({
               max={10000}
               value={minSharePrice}
               onChange={(event) => setMinSharePrice(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="min_dollar_volume"
+            label="Min dollar volume ($)"
+            description={SETTING_DESCRIPTIONS.min_dollar_volume}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.min_dollar_volume}
+          >
+            <Input
+              id="min_dollar_volume"
+              name="min_dollar_volume"
+              type="number"
+              step="1000"
+              min={0}
+              max={1000000000}
+              value={minDollarVolume}
+              onChange={(event) => setMinDollarVolume(Number(event.target.value))}
               required
             />
           </SettingsField>

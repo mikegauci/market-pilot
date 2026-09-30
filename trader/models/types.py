@@ -86,6 +86,7 @@ class MarketState:
     change_5d: Optional[float] = None
     change_1w: Optional[float] = None
     benchmark_change_5m: Optional[float] = None
+    avg_dollar_volume_5m: Optional[float] = None
     news_sentiment: Optional[float] = None
     news_headline_count: Optional[int] = None
     news_top_headline: Optional[str] = None
@@ -150,6 +151,7 @@ class RiskSettings:
     watchlist_screener_ran_at: Optional[datetime] = None
     min_volume_ratio: float = 0.5
     min_share_price: float = 20.0
+    min_dollar_volume: float = 250_000.0
     demotion_exits_enabled: bool = True
     demotion_max_hold_ratio: float = 0.5
     demotion_jev_sell_on_loss: bool = True
@@ -185,6 +187,15 @@ class TradeRecord:
     ibkr_parent_order_id: Optional[int] = None
     ibkr_sl_order_id: Optional[int] = None
     ibkr_tp_order_id: Optional[int] = None
+    entry_commission: Optional[float] = None
+    exit_commission: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class OrderFill:
+    price: float
+    quantity: float
+    commission: float = 0.0
 
 
 @dataclass
@@ -194,6 +205,7 @@ class BracketOrderResult:
     tp_order_id: int
     fill_price: float
     filled_quantity: float
+    entry_commission: float = 0.0
 
 
 @dataclass

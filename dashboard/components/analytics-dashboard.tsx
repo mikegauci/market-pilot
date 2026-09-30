@@ -19,7 +19,9 @@ import { Card, CardTitle } from "@/components/ui/card";
 import {
   fetchClosedTrades,
   fetchPortfolioHistory,
+  fetchPredictions,
 } from "@/lib/data-client";
+import { computeJevCalibration } from "@/lib/jev-calibration";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import {
   buildDailyPnlSeries,
@@ -33,7 +35,7 @@ import {
   exitReasonBreakdown,
   pnlBySymbol,
 } from "@/lib/trade-analytics";
-import type { PortfolioSnapshot, Trade } from "@/lib/types/database";
+import type { PortfolioSnapshot, Prediction, Trade } from "@/lib/types/database";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 
 type Props = {
@@ -110,9 +112,11 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
 
   const loadHistory = useCallback(() => fetchPortfolioHistory(), []);
   const loadTrades = useCallback(() => fetchClosedTrades(), []);
+  const loadPredictions = useCallback(() => fetchPredictions(2000), []);
 
   const liveHistory = useLiveQuery(portfolioHistory, loadHistory, ["portfolio_history"]);
   const liveTrades = useLiveQuery(closedTrades, loadTrades, ["trades"]);
+  const livePredictions = useLiveQuery([] as Prediction[], loadPredictions, ["predictions"]);
 
   const filtered = useMemo(
     () => filterPortfolioByRange(liveHistory, range),
@@ -124,6 +128,10 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
   const symbolPnl = useMemo(() => pnlBySymbol(liveTrades).slice(0, 8), [liveTrades]);
   const exitReasons = useMemo(() => exitReasonBreakdown(liveTrades), [liveTrades]);
   const maxDd = useMemo(() => maxDrawdownPct(filtered), [filtered]);
+  const calibration = useMemo(
+    () => computeJevCalibration(livePredictions),
+    [livePredictions],
+  );
 
   const equityChartData = equitySeries.map((p) => ({
     label: new Date(p.timestamp).toLocaleString("en-GB", {
@@ -176,6 +184,34 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
         />
         <StatCard label="Max drawdown" value={`${maxDd.toFixed(1)}%`} valueClassName="text-red-400" />
       </div>
+
+      <Card>
+        <CardTitle>Jev calibration (15m forward return)</CardTitle>
+        <p className="mt-1 text-xs text-zinc-500">
+          Mean realized 15-minute return by BUY probability bucket. A flat curve means the signal
+          is not predictive yet.
+        </p>
+        {calibration.length === 0 ? (
+          <p className="mt-4 text-sm text-zinc-500">
+            No matured predictions with forward returns yet
+          </p>
+        ) : (
+          <div className="mt-4 h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={calibration}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
+                <XAxis dataKey="label" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
+                <YAxis tick={{ fill: "#a1a1aa", fontSize: 11 }} unit="%" />
+                <Tooltip
+                  contentStyle={{ background: "#18181b", border: "1px solid #3f3f46" }}
+                  formatter={(value: number) => [`${value.toFixed(3)}%`, "Avg 15m return"]}
+                />
+                <Bar dataKey="avgReturn15m" fill="#34d399" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>

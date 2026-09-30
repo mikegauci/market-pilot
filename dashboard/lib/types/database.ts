@@ -32,6 +32,8 @@ export type Settings = {
   min_volume_ratio: number;
   /** 0 = off; block entries / EM scan picks below this USD share price */
   min_share_price: number;
+  /** Minimum avg dollar volume per 5m bar for EM screener and entries (0 = off). */
+  min_dollar_volume: number;
   account_capital: number;
   risk_sync_equity: number | null;
   risk_profile?: "low" | "medium" | "high" | null;
@@ -155,6 +157,9 @@ export type Prediction = {
   trade_created: boolean;
   trade_skip_reason?: string | null;
   market_snapshot?: MarketSnapshot | null;
+  return_5m_pct?: number | null;
+  return_15m_pct?: number | null;
+  return_30m_pct?: number | null;
   created_at: string;
 };
 

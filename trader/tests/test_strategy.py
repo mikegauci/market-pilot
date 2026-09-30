@@ -114,7 +114,7 @@ class TestFilters(unittest.TestCase):
         trades = [
             TradeRecord(
                 id="1",
-                symbol="NU",
+                symbol="BABA",
                 side="buy",
                 entry_time=datetime.now(timezone.utc),
                 entry_price=100.0,
@@ -127,7 +127,7 @@ class TestFilters(unittest.TestCase):
             ),
             TradeRecord(
                 id="2",
-                symbol="XP",
+                symbol="PDD",
                 side="buy",
                 entry_time=datetime.now(timezone.utc),
                 entry_price=100.0,
@@ -139,19 +139,17 @@ class TestFilters(unittest.TestCase):
                 paper_or_live="paper",
             ),
         ]
-        # Two LatAm fintech names already open — third is blocked.
-        result = check_correlation_cap(trades, "STNE", StrategyConfig())
+        result = check_correlation_cap(trades, "BIDU", StrategyConfig())
         self.assertFalse(result.passed)
         self.assertIn("correlation_cap", result.reason)
 
-        # Different group still allowed.
-        other = check_correlation_cap(trades, "PDD", StrategyConfig())
+        other = check_correlation_cap(trades, "VALE", StrategyConfig())
         self.assertTrue(other.passed)
 
 
 class TestConfirmation(unittest.TestCase):
     def test_requires_two_cycles(self) -> None:
-        tracker = ConfirmationTracker(2)
+        tracker = ConfirmationTracker(2, required_seconds=0)
         self.assertFalse(tracker.record("NVDA", True))
         self.assertTrue(tracker.record("NVDA", True))
         tracker.reset("NVDA")

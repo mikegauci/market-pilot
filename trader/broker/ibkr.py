@@ -22,7 +22,14 @@ from ib_insync import IB, LimitOrder, MarketOrder, Stock, StopOrder, Trade
 
 from broker.symbols import from_ibkr_contract, to_ibkr_symbol
 from market.bars import BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, Bar
-from models.types import AccountSummary, BracketLegs, BracketOrderResult, Position, Quote
+from models.types import (
+    AccountSummary,
+    BracketLegs,
+    BracketOrderResult,
+    OrderFill,
+    Position,
+    Quote,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +55,18 @@ def _safe_float(value: object) -> Optional[float]:
     if math.isnan(numeric):
         return None
     return numeric
+
+
+def _commission_from_trade(trade: Trade) -> float:
+    total = 0.0
+    for fill in trade.fills or []:
+        report = getattr(fill, "commissionReport", None)
+        if report is None:
+            continue
+        commission = _safe_float(getattr(report, "commission", None))
+        if commission is not None:
+            total += abs(commission)
+    return round(total, 4)
 
 
 def _ticker_price(ticker: object) -> Optional[float]:
@@ -670,12 +689,12 @@ class IBKRClient:
                 f"Parent order for {symbol} did not fill within {fill_timeout_sec}s ({detail})"
             )
 
-        fill_price, filled_qty = fill
         logger.info(
-            "IBKR bracket BUY %s x %s @ $%.2f (parent=%s sl=%s tp=%s)",
+            "IBKR bracket BUY %s x %s @ $%.2f (commission $%.2f; parent=%s sl=%s tp=%s)",
             symbol,
-            filled_qty,
-            fill_price,
+            fill.quantity,
+            fill.price,
+            fill.commission,
             parent_trade.order.orderId,
             sl_trade.order.orderId,
             tp_trade.order.orderId,
@@ -685,8 +704,9 @@ class IBKRClient:
             parent_order_id=parent_trade.order.orderId,
             sl_order_id=sl_trade.order.orderId,
             tp_order_id=tp_trade.order.orderId,
-            fill_price=fill_price,
-            filled_quantity=filled_qty,
+            fill_price=fill.price,
+            filled_quantity=fill.quantity,
+            entry_commission=fill.commission,
         )
 
     def _wait_for_fill(
@@ -694,7 +714,7 @@ class IBKRClient:
         trade: Trade,
         timeout_sec: float,
         symbol: str = "",
-    ) -> Optional[Tuple[float, float]]:
+    ) -> Optional[OrderFill]:
         elapsed = 0.0
         step = 0.5
         last_logged_filled = 0.0
@@ -709,7 +729,8 @@ class IBKRClient:
                 avg = _safe_float(trade.orderStatus.avgFillPrice)
                 filled = _safe_float(trade.orderStatus.filled)
                 if avg is not None and filled is not None and filled > 0:
-                    return avg, filled
+                    commission = _commission_from_trade(trade)
+                    return OrderFill(price=avg, quantity=filled, commission=commission)
             if status in {"Cancelled", "Inactive", "ApiCancelled"}:
                 return None
 
@@ -735,7 +756,8 @@ class IBKRClient:
                 target_qty,
                 avg,
             )
-            return avg, filled
+            commission = _commission_from_trade(trade)
+            return OrderFill(price=avg, quantity=filled, commission=commission)
         return None
 
     def _cancel_trade(self, trade: Trade) -> None:
@@ -844,7 +866,7 @@ class IBKRClient:
         sl_order_id: Optional[int] = None,
         tp_order_id: Optional[int] = None,
         fill_timeout_sec: float = 30.0,
-    ) -> Tuple[float, float]:
+    ) -> OrderFill:
         """Cancel bracket legs (if any) and market-sell to close a long position."""
         if quantity < 1:
             raise ValueError(f"Invalid quantity for {symbol}: {quantity}")
@@ -878,14 +900,14 @@ class IBKRClient:
                 f"({status}, {detail})"
             )
 
-        fill_price, filled_qty = fill
         logger.info(
-            "IBKR market SELL %s x %s @ $%.2f",
+            "IBKR market SELL %s x %s @ $%.2f (commission $%.2f)",
             symbol,
-            filled_qty,
-            fill_price,
+            fill.quantity,
+            fill.price,
+            fill.commission,
         )
-        return fill_price, filled_qty
+        return fill
 
     @_ibkr_synchronized
     def fetch_historical_bars(

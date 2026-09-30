@@ -339,28 +339,50 @@ class SupabaseRepository:
             )
         return rankings
 
+    _SETTINGS_SELECT_BASE = (
+        "minimum_jev_confidence, signal_record_threshold, risk_per_trade, "
+        "max_position_size, max_daily_loss, max_open_positions, "
+        "stop_loss_percentage, take_profit_percentage, max_hold_minutes, "
+        "min_hold_minutes, jev_sell_exit_threshold, reentry_cooldown_minutes, "
+        "min_volume_ratio, min_share_price, "
+        "account_capital, risk_sync_equity, watchlist, watchlist_core, "
+        "watchlist_dynamic_enabled, watchlist_dynamic_size, "
+        "watchlist_min_buy, "
+        "watchlist_refresh_minutes, benchmark_symbol, watchlist_jev_rankings, "
+        "watchlist_screener_ran_at, demotion_exits_enabled, demotion_max_hold_ratio, "
+        "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit"
+    )
+
+    def _load_settings_row(self) -> dict:
+        extended = f"{self._SETTINGS_SELECT_BASE}, min_dollar_volume"
+        try:
+            result = (
+                self.client.table("settings")
+                .select(extended)
+                .eq("id", 1)
+                .single()
+                .execute()
+            )
+            return dict(result.data or {})
+        except Exception as exc:
+            logger.warning(
+                "Settings read without min_dollar_volume (%s) — using default",
+                exc,
+            )
+            result = (
+                self.client.table("settings")
+                .select(self._SETTINGS_SELECT_BASE)
+                .eq("id", 1)
+                .single()
+                .execute()
+            )
+            data = dict(result.data or {})
+            data.setdefault("min_dollar_volume", 250_000)
+            return data
+
     @_db_synchronized
     def get_risk_settings(self) -> RiskSettings:
-        result = (
-            self.client.table("settings")
-            .select(
-                "minimum_jev_confidence, signal_record_threshold, risk_per_trade, "
-                "max_position_size, max_daily_loss, max_open_positions, "
-                "stop_loss_percentage, take_profit_percentage, max_hold_minutes, "
-                "min_hold_minutes, jev_sell_exit_threshold, reentry_cooldown_minutes, "
-                "min_volume_ratio, min_share_price, "
-                "account_capital, risk_sync_equity, watchlist, watchlist_core, "
-                "watchlist_dynamic_enabled, watchlist_dynamic_size, "
-                "watchlist_min_buy, "
-                "watchlist_refresh_minutes, benchmark_symbol, watchlist_jev_rankings, "
-                "watchlist_screener_ran_at, demotion_exits_enabled, demotion_max_hold_ratio, "
-                "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit"
-            )
-            .eq("id", 1)
-            .single()
-            .execute()
-        )
-        data = result.data
+        data = self._load_settings_row()
         watchlist = data.get("watchlist") or []
         watchlist_core = data.get("watchlist_core") or []
         if not watchlist_core and watchlist:
@@ -387,6 +409,7 @@ class SupabaseRepository:
             reentry_cooldown_minutes=float(data.get("reentry_cooldown_minutes", 45)),
             min_volume_ratio=float(data.get("min_volume_ratio", 0.5)),
             min_share_price=float(data.get("min_share_price", 20)),
+            min_dollar_volume=float(data.get("min_dollar_volume", 250_000)),
             account_capital=float(data.get("account_capital", 1000)),
             risk_sync_equity=risk_sync_equity,
             watchlist=[str(s).upper() for s in watchlist],
@@ -717,7 +740,7 @@ class SupabaseRepository:
             "ibkr_parent_order_id": trade.ibkr_parent_order_id,
             "ibkr_sl_order_id": trade.ibkr_sl_order_id,
             "ibkr_tp_order_id": trade.ibkr_tp_order_id,
-            "commission": 0,
+            "commission": float(trade.entry_commission or 0),
             "slippage": 0,
             "created_at": now,
             "updated_at": now,
@@ -901,14 +924,15 @@ class SupabaseRepository:
         self.client.table("portfolio_history").insert(payload).execute()
 
     @_db_synchronized
-    def insert_prediction(
+    def build_prediction_payload(
         self,
         state: MarketState,
         prediction: JevPrediction,
+        *,
         trade_created: bool = False,
         trade_skip_reason: Optional[str] = None,
-    ) -> None:
-        payload = {
+    ) -> dict:
+        return {
             "symbol": prediction.symbol,
             "timestamp": prediction.timestamp.isoformat(),
             "price": state.price,
@@ -919,7 +943,104 @@ class SupabaseRepository:
             "trade_created": trade_created,
             "trade_skip_reason": None if trade_created else trade_skip_reason,
         }
+
+    @_db_synchronized
+    def insert_prediction(
+        self,
+        state: MarketState,
+        prediction: JevPrediction,
+        trade_created: bool = False,
+        trade_skip_reason: Optional[str] = None,
+    ) -> None:
+        payload = self.build_prediction_payload(
+            state,
+            prediction,
+            trade_created=trade_created,
+            trade_skip_reason=trade_skip_reason,
+        )
         self.client.table("predictions").insert(payload).execute()
+
+    def _prediction_payload(self, *args, **kwargs) -> dict:
+        """Backward-compatible alias for :meth:`build_prediction_payload`."""
+        return self.build_prediction_payload(*args, **kwargs)
+
+    @_db_synchronized
+    def insert_predictions_batch(
+        self,
+        rows: List[dict],
+    ) -> None:
+        if not rows:
+            return
+        self.client.table("predictions").insert(rows).execute()
+
+    @_db_synchronized
+    def backfill_prediction_forward_returns(self, *, limit: int = 400) -> int:
+        """Fill forward returns on mature predictions using cached 5-minute bars."""
+        from market.bars import BAR_SIZE_INTRADAY
+
+        try:
+            pending = (
+                self.client.table("predictions")
+                .select("id, symbol, timestamp, price, return_15m_pct")
+                .is_("return_15m_pct", "null")
+                .order("timestamp", desc=True)
+                .limit(limit)
+                .execute()
+            )
+        except Exception as exc:
+            logger.debug("Forward-return backfill skipped: %s", exc)
+            return 0
+
+        updated = 0
+        now = datetime.now(timezone.utc)
+        for row in pending.data or []:
+            ts_raw = row.get("timestamp")
+            symbol = str(row.get("symbol", "")).upper()
+            entry_price = float(row.get("price") or 0)
+            if not symbol or entry_price <= 0 or not ts_raw:
+                continue
+            entry_ts = _parse_timestamp(ts_raw)
+            if entry_ts.tzinfo is None:
+                entry_ts = entry_ts.replace(tzinfo=timezone.utc)
+            age_min = (now - entry_ts).total_seconds() / 60.0
+            if age_min < 15:
+                continue
+
+            bars = sorted(
+                self.get_bars(symbol, BAR_SIZE_INTRADAY),
+                key=lambda bar: bar.ts,
+            )
+            if not bars:
+                continue
+
+            def price_at(minutes_ahead: int) -> Optional[float]:
+                target = entry_ts + timedelta(minutes=minutes_ahead)
+                candidate = None
+                for bar in bars:
+                    bar_ts = bar.ts
+                    if bar_ts.tzinfo is None:
+                        bar_ts = bar_ts.replace(tzinfo=timezone.utc)
+                    if bar_ts >= target:
+                        candidate = bar.close
+                        break
+                return candidate
+
+            def pct(minutes_ahead: int) -> Optional[float]:
+                future = price_at(minutes_ahead)
+                if future is None:
+                    return None
+                return round((future - entry_price) / entry_price * 100, 4)
+
+            payload = {
+                "return_5m_pct": pct(5),
+                "return_15m_pct": pct(15),
+                "return_30m_pct": pct(30),
+            }
+            if all(value is None for value in payload.values()):
+                continue
+            self.client.table("predictions").update(payload).eq("id", row["id"]).execute()
+            updated += 1
+        return updated
 
     @_db_synchronized
     def upsert_market_news(self, rows: List[dict], *, keep: int = 100) -> int:

@@ -9,7 +9,10 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 from jev.client import JevClient
 from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
-from market.indicators import build_market_state
+from market.indicators import (
+    average_dollar_volume,
+    build_universe_scan_market_state,
+)
 from models.types import JevPrediction, JevRankedSymbol, MarketState, Quote, RiskSettings
 from news.enrich import enrich_market_state_with_news
 from news.client import NewsService
@@ -271,8 +274,16 @@ class UniverseScanSkips:
 def _screener_liquidity_skip(
     state: MarketState,
     strategy_config: StrategyConfig,
+    *,
+    avg_dollar_volume: Optional[float] = None,
 ) -> Optional[str]:
     """Skip thin/wide names before spending a Jev universe call."""
+    if (
+        strategy_config.min_dollar_volume > 0
+        and avg_dollar_volume is not None
+        and avg_dollar_volume < strategy_config.min_dollar_volume
+    ):
+        return "low_volume"
     if (
         strategy_config.min_volume_ratio > 0
         and state.volume_ratio is not None
@@ -296,7 +307,6 @@ def build_universe_market_states(
     news_service: Optional[NewsService],
 ) -> Tuple[List[Tuple[str, MarketState]], UniverseScanSkips]:
     benchmark_key = benchmark_symbol.upper()
-    benchmark_minute_bars = minute_bars.get(benchmark_key)
     ready: List[Tuple[str, MarketState]] = []
     skips = UniverseScanSkips()
     for symbol in universe:
@@ -304,27 +314,35 @@ def build_universe_market_states(
         if quote is None:
             skips.no_quote += 1
             continue
+        intraday_bars = bar_store.get_intraday_bars(symbol)
+        benchmark_intraday = bar_store.get_intraday_bars(benchmark_key)
+        avg_dv = average_dollar_volume(intraday_bars)
         if (
             strategy_config.min_share_price > 0
             and quote.price is not None
             and quote.price < strategy_config.min_share_price
             and symbol.upper() != benchmark_key
+            and (strategy_config.min_dollar_volume <= 0 or avg_dv is None)
         ):
             skips.below_price += 1
             continue
-        state = build_market_state(
+        state = build_universe_scan_market_state(
             quote,
-            minute_bars.get(symbol),
-            benchmark_minute_bars,
+            intraday_bars,
+            benchmark_intraday,
             trend_changes=bar_store.get_trend_changes(symbol),
-            warmup_min_1m_bars=strategy_config.warmup_min_1m_bars,
+            min_intraday_bars=strategy_config.warmup_min_1m_bars,
         )
         if state is None:
             skips.no_bars += 1
             continue
         # Benchmark is scored for context; skip liquidity vetoes on it.
         if symbol.upper() != benchmark_key:
-            reason = _screener_liquidity_skip(state, strategy_config)
+            reason = _screener_liquidity_skip(
+                state,
+                strategy_config,
+                avg_dollar_volume=avg_dv,
+            )
             if reason == "low_volume":
                 skips.low_volume += 1
                 continue
@@ -369,6 +387,17 @@ def run_jev_universe_scan(
     )
     predictions = _fetch_universe_predictions(jev, ready_states, max_workers)
     rankings = rank_predictions(predictions)
+
+    scored_symbols = {item.symbol.upper() for item in rankings}
+    current_watchlist = {
+        str(s).upper() for s in resolve_base_watchlist(risk_settings) if str(s).strip()
+    }
+    if scored_symbols and scored_symbols <= current_watchlist:
+        logger.warning(
+            "Jev universe scan scored only current watchlist names (%s) — "
+            "check screener liquidity inputs and bar cache",
+            ", ".join(sorted(scored_symbols)),
+        )
 
     dynamic_size = max(0, int(risk_settings.watchlist_dynamic_size))
     min_buy = float(getattr(risk_settings, "watchlist_min_buy", 0.6) or 0.0)

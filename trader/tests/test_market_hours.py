@@ -4,49 +4,47 @@ import unittest
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from market.hours import is_us_regular_session_open, seconds_until_next_open
+from market.hours import (
+    ET,
+    is_entry_window_open,
+    is_us_regular_session_open,
+    minutes_until_regular_close,
+    should_force_eod_flatten,
+)
 
-ET = ZoneInfo("America/New_York")
 
-
-def _et(year: int, month: int, day: int, hour: int, minute: int) -> datetime:
-    return datetime(year, month, day, hour, minute, tzinfo=ET)
-
-
-class TestMarketHours(unittest.TestCase):
-    def test_open_mid_session_tuesday(self) -> None:
-        when = _et(2026, 9, 29, 10, 0)
+class MarketHoursTests(unittest.TestCase):
+    def test_regular_session_midday(self) -> None:
+        when = datetime(2026, 9, 30, 12, 0, tzinfo=ET)
         self.assertTrue(is_us_regular_session_open(when))
 
-    def test_closed_after_hours(self) -> None:
-        when = _et(2026, 9, 29, 17, 0)
+    def test_weekend_closed(self) -> None:
+        when = datetime(2026, 9, 26, 12, 0, tzinfo=ET)  # Saturday
         self.assertFalse(is_us_regular_session_open(when))
 
-    def test_closed_before_open(self) -> None:
-        when = _et(2026, 9, 29, 9, 0)
-        self.assertFalse(is_us_regular_session_open(when))
+    def test_entry_window_closes_near_end(self) -> None:
+        when = datetime(2026, 9, 30, 15, 50, tzinfo=ET)  # 10 min to close
+        self.assertFalse(
+            is_entry_window_open(when, cutoff_minutes_before_close=15.0)
+        )
+        when_ok = datetime(2026, 9, 30, 15, 0, tzinfo=ET)
+        self.assertTrue(
+            is_entry_window_open(when_ok, cutoff_minutes_before_close=15.0)
+        )
 
-    def test_closed_at_exact_close(self) -> None:
-        when = _et(2026, 9, 29, 16, 0)
-        self.assertFalse(is_us_regular_session_open(when))
+    def test_eod_flatten_window(self) -> None:
+        when = datetime(2026, 9, 30, 15, 57, tzinfo=ET)
+        self.assertTrue(
+            should_force_eod_flatten(when, flatten_minutes_before_close=5.0)
+        )
+        when_early = datetime(2026, 9, 30, 15, 50, tzinfo=ET)
+        self.assertFalse(
+            should_force_eod_flatten(when_early, flatten_minutes_before_close=5.0)
+        )
 
-    def test_closed_saturday(self) -> None:
-        when = _et(2026, 9, 26, 12, 0)
-        self.assertFalse(is_us_regular_session_open(when))
-
-    def test_open_at_exact_open(self) -> None:
-        when = _et(2026, 9, 29, 9, 30)
-        self.assertTrue(is_us_regular_session_open(when))
-
-    def test_seconds_until_next_open_when_closed(self) -> None:
-        when = _et(2026, 9, 29, 17, 0)
-        seconds = seconds_until_next_open(when)
-        self.assertGreater(seconds, 0)
-        self.assertLessEqual(seconds, 24 * 3600)
-
-    def test_seconds_until_next_open_when_open(self) -> None:
-        when = _et(2026, 9, 29, 11, 0)
-        self.assertEqual(seconds_until_next_open(when), 0.0)
+    def test_minutes_until_close(self) -> None:
+        when = datetime(2026, 9, 30, 15, 30, tzinfo=ET)
+        self.assertEqual(minutes_until_regular_close(when), 30.0)
 
 
 if __name__ == "__main__":

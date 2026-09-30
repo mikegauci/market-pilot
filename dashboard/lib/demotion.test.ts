@@ -20,6 +20,7 @@ function baseSettings(overrides: Partial<Settings> = {}): Settings {
     reentry_cooldown_minutes: 45,
     min_volume_ratio: 0,
     min_share_price: 20,
+    min_dollar_volume: 250_000,
     account_capital: 1000,
     risk_sync_equity: null,
     watchlist: ["BABA", "VALE", "EEM"],

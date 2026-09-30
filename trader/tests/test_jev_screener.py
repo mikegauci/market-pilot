@@ -263,29 +263,30 @@ class TestJevScreener(unittest.TestCase):
     def test_build_universe_market_states_counts_skip_reasons(self) -> None:
         symbols = ["PDD", "NU", "SCCO", "ATHM", "COLD", "EEM", "GHOST"]
         minute_bars = MinuteBarStore(symbols)
+        repo = InMemoryBarRepo()
         start = datetime(2026, 1, 10, 14, 0, tzinfo=timezone.utc)
-        for symbol, volumes in (
-            ("PDD", [5000, 5000, 5000, 5000]),
-            ("NU", [5000, 5000, 5000, 5000]),
-            ("SCCO", [5000, 5000, 5000, 5000]),
-            ("ATHM", [5000, 5000, 5000, 100]),
-            ("EEM", [5000, 5000, 5000, 5000]),
-        ):
-            minute_bars.get(symbol).bootstrap_from_five_min_bars(
-                [
+
+        def seed_intraday(symbol: str, volumes: list[int], price: float = 10.0) -> None:
+            for index, volume in enumerate(volumes):
+                repo.bars.append(
                     Bar(
                         symbol,
                         BAR_SIZE_INTRADAY,
                         start + timedelta(minutes=5 * index),
-                        10,
-                        10,
-                        10,
-                        10,
+                        price,
+                        price,
+                        price,
+                        price,
                         volume,
                     )
-                    for index, volume in enumerate(volumes)
-                ]
-            )
+                )
+
+        base_volumes = [5000] * 20
+        seed_intraday("PDD", base_volumes, price=78.0)
+        seed_intraday("NU", base_volumes, price=12.0)
+        seed_intraday("SCCO", base_volumes, price=200.0)
+        seed_intraday("ATHM", base_volumes[:-1] + [100], price=21.0)
+        seed_intraday("EEM", base_volumes, price=40.0)
 
         quotes = {
             "PDD": Quote("PDD", 78.0, 77.99, 78.01, 0.01),
@@ -300,24 +301,25 @@ class TestJevScreener(unittest.TestCase):
             quotes,
             minute_bars,
             "EEM",
-            BarStore(InMemoryBarRepo()),
+            BarStore(repo),
             StrategyConfig(
                 min_share_price=20.0,
                 min_volume_ratio=0.5,
+                min_dollar_volume=100_000.0,
                 max_spread_pct=0.0015,
                 warmup_min_1m_bars=15,
             ),
             None,
         )
         self.assertEqual([symbol for symbol, _state in ready], ["PDD", "EEM"])
-        self.assertEqual(skips.below_price, 1)
+        self.assertEqual(skips.below_price, 0)
         self.assertEqual(skips.wide_spread, 1)
-        self.assertEqual(skips.low_volume, 1)
+        self.assertEqual(skips.low_volume, 2)
         self.assertEqual(skips.no_bars, 1)
         self.assertEqual(skips.no_quote, 1)
         self.assertEqual(
             skips.format(),
-            "no_bars=1, below_price=1, wide_spread=1, low_volume=1, no_quote=1",
+            "no_bars=1, below_price=0, wide_spread=1, low_volume=2, no_quote=1",
         )
 
 

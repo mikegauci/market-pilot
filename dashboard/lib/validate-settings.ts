@@ -32,6 +32,7 @@ function labelFor(name: string): string {
     watchlist_min_buy: "Watchlist min BUY (%)",
     min_volume_ratio: "Min volume ratio",
     min_share_price: "Min share price ($)",
+    min_dollar_volume: "Min dollar volume ($)",
   };
   return labels[name] ?? name;
 }
@@ -51,6 +52,7 @@ export type ParsedSettings = {
   reentry_cooldown_minutes: number;
   min_volume_ratio: number;
   min_share_price: number;
+  min_dollar_volume: number;
   risk_profile: RiskProfile;
   watchlist: string[];
   watchlist_core: string[];
@@ -111,6 +113,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   );
   const min_volume_ratio = parseRequiredNumber(formData, "min_volume_ratio");
   const min_share_price = parseRequiredNumber(formData, "min_share_price");
+  const min_dollar_volume = parseRequiredNumber(formData, "min_dollar_volume");
 
   if (signal_record_threshold > minimum_jev_confidence) {
     throw new Error("Signal record threshold (%) must be at or below Min Jev confidence (%)");
@@ -154,6 +157,9 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   if (min_share_price < 0 || min_share_price > 10000) {
     throw new Error("Min share price must be between 0 (off) and 10000");
+  }
+  if (min_dollar_volume < 0 || min_dollar_volume > 1_000_000_000) {
+    throw new Error("Min dollar volume must be between 0 (off) and 1,000,000,000");
   }
 
   const watchlistCoreRaw = String(formData.get("watchlist_core") ?? "");
@@ -242,6 +248,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     reentry_cooldown_minutes,
     min_volume_ratio,
     min_share_price,
+    min_dollar_volume,
     risk_profile: parseRiskProfile(formData),
     watchlist: effectiveWatchlist ?? watchlist_core,
     watchlist_core,

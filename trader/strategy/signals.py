@@ -8,6 +8,7 @@ def signal_tier(
     record_threshold: float,
     trade_threshold: float,
     min_buy_hold_margin: float = 0.0,
+    min_buy_sell_margin: float = 0.0,
 ) -> str:
     """Classify the dominant Jev signal by confidence tier."""
     dominant = max(
@@ -20,6 +21,8 @@ def signal_tier(
         return f"{side.upper()} {confidence:.0%} — IGNORE"
 
     if confidence >= trade_threshold:
+        if min_buy_sell_margin > 0 and (prediction.buy - prediction.sell) < min_buy_sell_margin:
+            return f"BUY {confidence:.0%} — IGNORE (margin)"
         if min_buy_hold_margin > 0 and (prediction.buy - prediction.hold) < min_buy_hold_margin:
             return f"BUY {confidence:.0%} — IGNORE (margin)"
         return f"BUY {confidence:.0%} — ELIGIBLE"

@@ -11,8 +11,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from broker.execution import (
+    EOD_RETRY_SEC,
     close_ibkr_signal_exits,
     collect_demotion_exit_symbols,
+    force_eod_ibkr_exits,
     sync_ibkr_exits,
 )
 from broker.manual_close import process_manual_close_commands
@@ -34,8 +36,12 @@ from news.cache import TtlCache
 from news.client import FetchStatus, FinnhubNewsClient, NewsService
 from news.enrich import enrich_market_state_with_news
 from news.sentiment import NewsContext
-from market.hours import is_us_regular_session_open
-from market.indicators import build_market_state
+from market.hours import (
+    is_entry_window_open,
+    is_us_regular_session_open,
+    should_force_eod_flatten,
+)
+from market.indicators import build_market_state, compute_atr_pct
 from market.mock import MockMarketProvider
 from models.types import (
     BotStatusUpdate,
@@ -83,6 +89,9 @@ _last_market_data_warn = 0.0
 _ibkr_market_data_mode = "stream"
 _ibkr_entry_cooldown_until: Dict[str, float] = {}
 _ibkr_entry_blocked: Set[str] = set()
+_eod_sim_last_attempt_mono = 0.0
+_last_prediction_backfill_mono = 0.0
+_PREDICTION_BACKFILL_INTERVAL_SEC = 60.0
 _CLOSED_MARKET_LOG_INTERVAL_SEC = 300.0
 _MARKET_DATA_WARN_INTERVAL_SEC = 300.0
 _SHUTDOWN_SLEEP_CHUNK_SEC = 0.5
@@ -447,9 +456,13 @@ def run() -> int:
         settings.strategy_config,
         min_volume_ratio=risk_settings.min_volume_ratio,
         min_share_price=risk_settings.min_share_price,
+        min_dollar_volume=risk_settings.min_dollar_volume,
         jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
     )
-    confirmation_tracker = ConfirmationTracker(strategy_config.confirmation_cycles)
+    confirmation_tracker = ConfirmationTracker(
+        strategy_config.confirmation_cycles,
+        required_seconds=strategy_config.confirmation_seconds,
+    )
     logger.info(
         "Strategy filters: min confidence from settings, margin %.0f%%, "
         "confirmation %sx, max hold %.0fm (dashboard), min hold %.0fm, "
@@ -772,6 +785,7 @@ def run() -> int:
                         settings.strategy_config,
                         min_volume_ratio=risk_settings.min_volume_ratio,
                         min_share_price=risk_settings.min_share_price,
+                        min_dollar_volume=risk_settings.min_dollar_volume,
                         jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
                     )
                     last_settings_sync = now_mono
@@ -986,6 +1000,47 @@ def run() -> int:
                 if closed_demotion:
                     risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
 
+                if is_us_regular_session_open() and should_force_eod_flatten(
+                    flatten_minutes_before_close=strategy_config.eod_flatten_minutes_before_close
+                ):
+                    global _eod_sim_last_attempt_mono
+                    eod_closed: list = []
+                    now_eod_mono = time.monotonic()
+                    if (
+                        now_eod_mono - _eod_sim_last_attempt_mono
+                    ) >= EOD_RETRY_SEC:
+                        _eod_sim_last_attempt_mono = now_eod_mono
+                        eod_closed = risk_manager.force_close_all_simulated(
+                            quotes_by_symbol,
+                            reason="eod_flatten",
+                        )
+                    for closed_trade in eod_closed:
+                        db.close_trade(
+                            closed_trade.trade_id,
+                            closed_trade.exit_price,
+                            closed_trade.exit_time,
+                            closed_trade.gross_pnl,
+                            closed_trade.net_pnl,
+                            exit_reason=closed_trade.reason,
+                        )
+                        risk_manager.note_symbol_exit(
+                            closed_trade.symbol, closed_trade.exit_time
+                        )
+                    if eod_closed:
+                        portfolio_dirty = True
+                        risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
+                    if (
+                        execution_mode == ExecutionMode.IBKR
+                        and ibkr.is_connected()
+                        and force_eod_ibkr_exits(
+                            ibkr,
+                            risk_manager,
+                            db,
+                            fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                        )
+                    ):
+                        portfolio_dirty = True
+
                 if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
                     if sync_ibkr_exits(ibkr, risk_manager, db):
                         portfolio_dirty = True
@@ -1012,7 +1067,22 @@ def run() -> int:
             benchmark_symbol = (
                 effective_benchmark(risk_settings) if db and risk_settings else "SPY"
             )
-            benchmark_minute_bars = minute_bars.get(benchmark_symbol.upper())
+            benchmark_key = benchmark_symbol.upper()
+            benchmark_minute_bars = minute_bars.get(benchmark_key)
+            benchmark_intraday_bars = (
+                bar_store.get_intraday_bars(benchmark_key) if bar_store else None
+            )
+            runtime_entry_strategy = (
+                strategy_config_with_risk_overrides(
+                    settings.strategy_config,
+                    min_volume_ratio=risk_settings.min_volume_ratio,
+                    min_share_price=risk_settings.min_share_price,
+                    min_dollar_volume=risk_settings.min_dollar_volume,
+                    jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
+                )
+                if db and risk_settings
+                else strategy_config
+            )
 
             market_open = (
                 settings.data_source != DataSource.IBKR or is_us_regular_session_open()
@@ -1038,7 +1108,10 @@ def run() -> int:
                     watchlist, open_symbols, risk_settings
                 )
 
+            open_symbol_set = {s.upper() for s in open_symbols} if market_open else set()
+
             jev_sell_symbols: Set[str] = set()
+            prediction_rows: List[dict] = []
 
             if news_service and eval_symbols:
                 news_service.refresh_stale(eval_symbols)
@@ -1049,12 +1122,22 @@ def run() -> int:
                 if quote is None:
                     continue
 
+                sym_upper = symbol.upper()
+                is_open_position = sym_upper in open_symbol_set
                 state = build_market_state(
                     quote,
                     minute_bars.get(symbol),
                     benchmark_minute_bars,
                     trend_changes=bar_store.get_trend_changes(symbol),
                     warmup_min_1m_bars=strategy_config.warmup_min_1m_bars,
+                    min_live_1m_bars=(
+                        strategy_config.min_live_1m_bars_open
+                        if is_open_position
+                        else strategy_config.warmup_min_1m_bars
+                    ),
+                    allow_five_min_fallback=is_open_position,
+                    symbol_intraday_bars=bar_store.get_intraday_bars(sym_upper),
+                    benchmark_intraday_bars=benchmark_intraday_bars,
                 )
                 if state is None:
                     if symbol not in _warmup_logged:
@@ -1102,6 +1185,7 @@ def run() -> int:
                         risk_settings.signal_record_threshold,
                         risk_settings.minimum_jev_confidence,
                         strategy_config.min_buy_hold_margin,
+                        strategy_config.min_buy_sell_margin,
                     )
                     _log_jev_prediction(prediction, tier)
 
@@ -1139,23 +1223,35 @@ def run() -> int:
                         trade_skip_reason = trade_skip_reason_from_tier(tier)
                     elif not confirmation_tracker.record(symbol, True):
                         current, required = confirmation_tracker.progress(symbol)
-                        trade_skip_reason = f"awaiting_confirmation ({current}/{required})"
+                        seconds_left = confirmation_tracker.seconds_remaining(symbol)
+                        if seconds_left is not None and seconds_left > 0:
+                            trade_skip_reason = (
+                                f"awaiting_confirmation ({current}/{required}, "
+                                f"{seconds_left:.0f}s left)"
+                            )
+                        else:
+                            trade_skip_reason = (
+                                f"awaiting_confirmation ({current}/{required})"
+                            )
                         logger.info(
-                            "Filter: awaiting confirmation for %s (%s/%s cycles)",
+                            "Filter: awaiting confirmation for %s (%s)",
                             symbol,
-                            current,
-                            required,
+                            trade_skip_reason,
                         )
                         eligible = False
 
-                    if eligible and risk_manager and db:
-                        entry_strategy = strategy_config_with_risk_overrides(
-                            settings.strategy_config,
-                            min_volume_ratio=risk_settings.min_volume_ratio,
-                            min_share_price=risk_settings.min_share_price,
-                            jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
+                    if eligible and not is_entry_window_open(
+                        cutoff_minutes_before_close=(
+                            strategy_config.entry_cutoff_minutes_before_close
                         )
-                        entry_filter = check_entry_filters(state, entry_strategy)
+                    ):
+                        trade_skip_reason = "entry_window_closed"
+                        logger.info("Filter: rejected %s — entry window closed", symbol)
+                        confirmation_tracker.reset(symbol)
+                        eligible = False
+
+                    if eligible and risk_manager and db:
+                        entry_filter = check_entry_filters(state, runtime_entry_strategy)
                         if not entry_filter.passed:
                             trade_skip_reason = entry_filter.reason
                             logger.info(
@@ -1167,7 +1263,7 @@ def run() -> int:
                             eligible = False
 
                         corr_filter = check_correlation_cap(
-                            risk_manager.open_trades, symbol, entry_strategy
+                            risk_manager.open_trades, symbol, runtime_entry_strategy
                         )
                         if eligible and not corr_filter.passed:
                             trade_skip_reason = corr_filter.reason
@@ -1180,8 +1276,14 @@ def run() -> int:
                             eligible = False
 
                     if eligible and risk_manager and db:
+                        atr_pct = compute_atr_pct(bar_store.get_intraday_bars(symbol))
                         decision = risk_manager.evaluate_entry(
-                            state, prediction, bot_enabled, quotes_by_symbol
+                            state,
+                            prediction,
+                            bot_enabled,
+                            quotes_by_symbol,
+                            strategy_config=runtime_entry_strategy,
+                            atr_pct=atr_pct,
                         )
                         if decision.approved and decision.trade:
                             trade = decision.trade
@@ -1255,6 +1357,7 @@ def run() -> int:
                                         )
                                         trade.ibkr_sl_order_id = bracket.sl_order_id
                                         trade.ibkr_tp_order_id = bracket.tp_order_id
+                                        trade.entry_commission = bracket.entry_commission
                                         db.insert_trade(trade)
                                         risk_manager.register_open_trade(trade)
                                         confirmation_tracker.reset(trade.symbol)
@@ -1350,16 +1453,31 @@ def run() -> int:
                             logger.info("Risk: rejected %s — %s", symbol, decision.reason)
 
                     if db:
-                        db.insert_prediction(
-                            state,
-                            prediction,
-                            trade_created=trade_created,
-                            trade_skip_reason=trade_skip_reason,
+                        prediction_rows.append(
+                            db.build_prediction_payload(
+                                state,
+                                prediction,
+                                trade_created=trade_created,
+                                trade_skip_reason=trade_skip_reason,
+                            )
                         )
-                        logger.info("Prediction stored")
+                        logger.info("Prediction queued")
 
                 except Exception as exc:
                     logger.error("Post-Jev processing failed for %s: %s", symbol, exc)
+
+            if db and prediction_rows:
+                db.insert_predictions_batch(prediction_rows)
+                logger.info("Stored %s prediction(s)", len(prediction_rows))
+                global _last_prediction_backfill_mono
+                backfill_now = time.monotonic()
+                if (
+                    backfill_now - _last_prediction_backfill_mono
+                ) >= _PREDICTION_BACKFILL_INTERVAL_SEC:
+                    _last_prediction_backfill_mono = backfill_now
+                    db.backfill_prediction_forward_returns(
+                        limit=len(prediction_rows) * 4
+                    )
 
             if (
                 jev_sell_symbols

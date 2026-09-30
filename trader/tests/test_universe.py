@@ -6,8 +6,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from strategy.correlation import CORRELATION_GROUPS
 from watchlist.universe import (
     MAX_UNIVERSE_SIZE,
+    default_universe_path,
     infer_instrument_type,
     load_em_universe,
 )
@@ -67,6 +69,14 @@ class UniverseLoaderTests(unittest.TestCase):
             symbols = load_em_universe(path=path)
 
         self.assertEqual(len(symbols), MAX_UNIVERSE_SIZE)
+
+    def test_correlation_groups_subset_of_em_universe(self) -> None:
+        universe = set(load_em_universe(path=default_universe_path()))
+        grouped = set().union(*CORRELATION_GROUPS.values())
+        self.assertTrue(
+            grouped <= universe,
+            sorted(grouped - universe),
+        )
 
 
 if __name__ == "__main__":

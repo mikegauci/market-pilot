@@ -2,19 +2,12 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, Set
 
-# EM single-name buckets — symbols in the same group tend to move together.
-# Keep membership aligned with the live ADR/stock EM universe.
+# EM single-name buckets — keep membership aligned with em_universe (ADR/stock only).
 CORRELATION_GROUPS: Dict[str, Set[str]] = {
     "china_internet": {
         "PDD",
-        "JOYY",
         "TME",
-        "IQ",
         "VIPS",
-        "ATHM",
-        "MOMO",
-        "VNET",
-        "YMM",
         "BABA",
         "JD",
         "BIDU",
@@ -24,50 +17,23 @@ CORRELATION_GROUPS: Dict[str, Set[str]] = {
         "ZTO",
     },
     "china_fintech": {
-        "QFIN",
-        "FINV",
-        "LU",
-        "TIGR",
-        "NOAH",
-        "TUYA",
         "FUTU",
     },
     "china_consumer_travel": {
-        "ATAT",
-        "HTHT",
         "TAL",
-        "RLX",
-        "BZ",
         "YUMC",
         "EDU",
-        "CYD",
     },
     "china_ev_cleantech": {
         "LI",
         "NIO",
         "XPEV",
-        "DQ",
-        "JKS",
-        "LEGN",
     },
     "latam_fintech": {
         "NU",
-        "XP",
-        "STNE",
-        "PAGS",
-        "INTR",
-        "PAX",
         "MELI",
     },
-    "andean_financials": {
-        "BAP",
-        "IFS",
-    },
     "materials_mining": {
-        "BVN",
-        "SCCO",
-        "AUGO",
-        "SGML",
         "VALE",
         "GGB",
         "SBSW",
@@ -81,7 +47,6 @@ CORRELATION_GROUPS: Dict[str, Set[str]] = {
         "AMX",
         "CX",
         "TV",
-        "JBS",
         "SBS",
     },
     "sea_tech": {
@@ -92,7 +57,6 @@ CORRELATION_GROUPS: Dict[str, Set[str]] = {
         "TSM",
         "UMC",
         "LPL",
-        "ASML",
     },
     "india_it_finance": {
         "INFY",
@@ -104,14 +68,21 @@ CORRELATION_GROUPS: Dict[str, Set[str]] = {
         "KB",
         "SHG",
     },
-    "japan_bluechips": {
-        "MUFG",
-        "SMFG",
-        "SAP",
-        "SONY",
-        "TM",
-    },
 }
+
+CHINA_FACTOR_GROUPS = frozenset(
+    {
+        "china_internet",
+        "china_fintech",
+        "china_consumer_travel",
+        "china_ev_cleantech",
+    }
+)
+
+CHINA_FACTOR_SYMBOLS: Set[str] = set()
+for _group_name, _members in CORRELATION_GROUPS.items():
+    if _group_name in CHINA_FACTOR_GROUPS:
+        CHINA_FACTOR_SYMBOLS.update(_members)
 
 
 def correlation_group(symbol: str) -> str | None:
@@ -128,3 +99,12 @@ def count_correlated_open(open_symbols: Iterable[str], candidate: str) -> int:
         return 0
     members = CORRELATION_GROUPS[group]
     return sum(1 for sym in open_symbols if sym.upper() in members)
+
+
+def count_china_factor_open(open_symbols: Iterable[str], candidate: str) -> int:
+    """Names with China ADR exposure (across china_* groups)."""
+    symbols = {str(sym).upper() for sym in open_symbols}
+    candidate_key = candidate.upper()
+    if candidate_key in CHINA_FACTOR_SYMBOLS:
+        symbols.add(candidate_key)
+    return sum(1 for sym in symbols if sym in CHINA_FACTOR_SYMBOLS)

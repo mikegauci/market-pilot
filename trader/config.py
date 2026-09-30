@@ -66,8 +66,16 @@ class Settings(BaseSettings):
     strategy_jev_sell_exit_threshold: float = 0.95
     strategy_max_correlated_positions: int = 2
     strategy_warmup_min_1m_bars: int = 15
+    strategy_min_live_1m_bars_open: int = 3
     strategy_min_news_sentiment: float = -0.3
     strategy_min_volume_ratio: float = 0.0
+    strategy_min_dollar_volume: float = 0.0
+    strategy_min_buy_sell_margin: float = 0.10
+    strategy_confirmation_seconds: float = 30.0
+    strategy_max_benchmark_drop_5m_pct: float = -0.12
+    strategy_entry_cutoff_minutes_before_close: float = 15.0
+    strategy_eod_flatten_minutes_before_close: float = 5.0
+    strategy_max_china_factor_positions: int = 3
     strategy_news_block_tags: str = "downgrade,lawsuit,sec_investigation,guidance_cut,layoffs"
     strategy_block_on_earnings: bool = False
 
@@ -233,8 +241,16 @@ class Settings(BaseSettings):
             jev_sell_exit_threshold=self.strategy_jev_sell_exit_threshold,
             max_correlated_positions=self.strategy_max_correlated_positions,
             warmup_min_1m_bars=self.strategy_warmup_min_1m_bars,
+            min_live_1m_bars_open=self.strategy_min_live_1m_bars_open,
             min_news_sentiment=self.strategy_min_news_sentiment,
             min_volume_ratio=self.strategy_min_volume_ratio,
+            min_dollar_volume=self.strategy_min_dollar_volume,
+            min_buy_sell_margin=self.strategy_min_buy_sell_margin,
+            confirmation_seconds=self.strategy_confirmation_seconds,
+            max_benchmark_drop_5m_pct=self.strategy_max_benchmark_drop_5m_pct,
+            entry_cutoff_minutes_before_close=self.strategy_entry_cutoff_minutes_before_close,
+            eod_flatten_minutes_before_close=self.strategy_eod_flatten_minutes_before_close,
+            max_china_factor_positions=self.strategy_max_china_factor_positions,
             news_block_tags=tuple(
                 tag.strip()
                 for tag in self.strategy_news_block_tags.split(",")

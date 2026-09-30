@@ -34,6 +34,7 @@ describe("normalizeSettings", () => {
 
     const normalized = normalizeSettings(raw);
     expect(normalized?.min_share_price).toBe(20);
+    expect(normalized?.min_dollar_volume).toBe(250_000);
     expect(normalized?.min_hold_minutes).toBe(15);
     expect(normalized?.jev_sell_exit_threshold).toBe(0.95);
     expect(normalized?.reentry_cooldown_minutes).toBe(45);

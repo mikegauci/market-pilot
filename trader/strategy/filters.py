@@ -5,7 +5,7 @@ from typing import Iterable, List
 
 from models.types import MarketState, TradeRecord
 from strategy.config import StrategyConfig
-from strategy.correlation import count_correlated_open
+from strategy.correlation import count_china_factor_open, count_correlated_open
 
 
 @dataclass(frozen=True)
@@ -15,7 +15,21 @@ class FilterResult:
 
 
 def check_entry_filters(state: MarketState, config: StrategyConfig) -> FilterResult:
-    if config.min_share_price > 0 and state.price < config.min_share_price:
+    if (
+        config.min_dollar_volume > 0
+        and state.avg_dollar_volume_5m is not None
+        and state.avg_dollar_volume_5m < config.min_dollar_volume
+    ):
+        return FilterResult(
+            False,
+            f"dollar_volume_too_low ({state.avg_dollar_volume_5m:.0f} < {config.min_dollar_volume:.0f})",
+        )
+
+    if (
+        config.min_share_price > 0
+        and state.price < config.min_share_price
+        and (config.min_dollar_volume <= 0 or state.avg_dollar_volume_5m is None)
+    ):
         return FilterResult(
             False,
             f"price_too_low ({state.price:.2f} < {config.min_share_price:.2f})",
@@ -43,7 +57,10 @@ def check_entry_filters(state: MarketState, config: StrategyConfig) -> FilterRes
     benchmark_change = state.benchmark_change_5m
     if benchmark_change is None:
         benchmark_change = state.spy_change_5m
-    if benchmark_change is not None and benchmark_change < config.max_spy_drop_5m_pct:
+    headwind_limit = config.max_benchmark_drop_5m_pct
+    if headwind_limit == 0.0:
+        headwind_limit = config.max_spy_drop_5m_pct
+    if benchmark_change is not None and benchmark_change < headwind_limit:
         return FilterResult(
             False,
             f"benchmark_headwind ({benchmark_change:.2f}% 5m)",
@@ -79,5 +96,11 @@ def check_correlation_cap(
         return FilterResult(
             False,
             f"correlation_cap ({correlated} open in same group)",
+        )
+    china_exposure = count_china_factor_open(open_symbols, symbol)
+    if china_exposure > config.max_china_factor_positions:
+        return FilterResult(
+            False,
+            f"china_factor_cap ({china_exposure} open)",
         )
     return FilterResult(True, "ok")

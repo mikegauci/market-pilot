@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
-from models.types import ClosedTrade, TradeRecord
+from models.types import ClosedTrade, OrderFill, TradeRecord
 
 if TYPE_CHECKING:
     from broker.ibkr import IBKRClient
@@ -12,6 +13,46 @@ if TYPE_CHECKING:
     from risk.manager import RiskManager
 
 logger = logging.getLogger(__name__)
+
+_eod_last_attempt_mono: Dict[str, float] = {}
+EOD_RETRY_SEC = 30.0
+
+
+def _exit_commission(
+    fill: OrderFill,
+    risk_manager: RiskManager,
+    quantity: float,
+) -> float:
+    if fill.commission > 0:
+        return fill.commission
+    return risk_manager.estimate_ibkr_commission(quantity, round_trip=False)
+
+
+def _record_ibkr_close(
+    trade: TradeRecord,
+    fill: OrderFill,
+    reason: str,
+    risk_manager: RiskManager,
+    db: SupabaseRepository,
+) -> None:
+    entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
+    exit_comm = _exit_commission(fill, risk_manager, fill.quantity)
+    gross_pnl = (fill.price - trade.entry_price) * fill.quantity
+    net_pnl = gross_pnl - entry_comm - exit_comm
+    now = datetime.now(timezone.utc)
+
+    db.close_trade(
+        trade.id,
+        fill.price,
+        now,
+        gross_pnl,
+        net_pnl,
+        exit_reason=reason,
+        filled_quantity=fill.quantity,
+    )
+    risk_manager.remove_open_trade(trade.id)
+    risk_manager.record_closed_pnl(net_pnl)
+    risk_manager.note_symbol_exit(trade.symbol, now)
 
 
 def sync_ibkr_exits(
@@ -39,8 +80,10 @@ def sync_ibkr_exits(
             continue
 
         exit_price, reason = exit_info
+        entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
+        exit_comm = risk_manager.estimate_ibkr_commission(trade.quantity, round_trip=False)
         gross_pnl = (exit_price - trade.entry_price) * trade.quantity
-        net_pnl = gross_pnl
+        net_pnl = gross_pnl - entry_comm - exit_comm
         now = datetime.now(timezone.utc)
 
         db.close_trade(
@@ -51,7 +94,7 @@ def sync_ibkr_exits(
         risk_manager.note_symbol_exit(trade.symbol, now)
         closed_any = True
         logger.info(
-            "IBKR exit %s @ $%.2f (%s) PnL $%.2f",
+            "IBKR exit %s @ $%.2f (%s) PnL $%.2f (net)",
             trade.symbol,
             exit_price,
             reason,
@@ -61,6 +104,50 @@ def sync_ibkr_exits(
     if closed_any:
         risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
 
+    return closed_any
+
+
+def force_eod_ibkr_exits(
+    ibkr: IBKRClient,
+    risk_manager: RiskManager,
+    db: SupabaseRepository,
+    *,
+    fill_timeout_sec: float = 30.0,
+) -> bool:
+    """Flatten all IBKR longs before the regular session close."""
+    closed_any = False
+    now_mono = time.monotonic()
+    for trade in list(risk_manager.open_trades):
+        if trade.execution_mode != "ibkr":
+            continue
+        symbol_key = trade.symbol.upper()
+        last_attempt = _eod_last_attempt_mono.get(symbol_key, 0.0)
+        if now_mono - last_attempt < EOD_RETRY_SEC:
+            continue
+        _eod_last_attempt_mono[symbol_key] = now_mono
+        try:
+            fill = ibkr.close_long_position(
+                trade.symbol,
+                trade.quantity,
+                parent_order_id=trade.ibkr_parent_order_id,
+                sl_order_id=trade.ibkr_sl_order_id,
+                tp_order_id=trade.ibkr_tp_order_id,
+                fill_timeout_sec=fill_timeout_sec,
+            )
+        except Exception as exc:
+            logger.error("EOD flatten failed for %s: %s", trade.symbol, exc)
+            continue
+
+        _record_ibkr_close(trade, fill, "eod_flatten", risk_manager, db)
+        closed_any = True
+        logger.info(
+            "EOD flatten %s @ $%.2f PnL recorded (net incl. commission)",
+            trade.symbol,
+            fill.price,
+        )
+
+    if closed_any:
+        risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
     return closed_any
 
 
@@ -109,7 +196,7 @@ def close_ibkr_signal_exits(
         else:
             reason = "jev_sell"
         try:
-            exit_price, filled_qty = ibkr.close_long_position(
+            fill = ibkr.close_long_position(
                 trade.symbol,
                 trade.quantity,
                 parent_order_id=trade.ibkr_parent_order_id,
@@ -121,23 +208,13 @@ def close_ibkr_signal_exits(
             logger.error("IBKR signal exit failed for %s: %s", trade.symbol, exc)
             continue
 
-        gross_pnl = (exit_price - trade.entry_price) * filled_qty
-        net_pnl = gross_pnl
-        now = datetime.now(timezone.utc)
-
-        db.close_trade(
-            trade.id, exit_price, now, gross_pnl, net_pnl, exit_reason=reason
-        )
-        risk_manager.remove_open_trade(trade.id)
-        risk_manager.record_closed_pnl(net_pnl)
-        risk_manager.note_symbol_exit(trade.symbol, now)
+        _record_ibkr_close(trade, fill, reason, risk_manager, db)
         closed_any = True
         logger.info(
-            "IBKR exit %s @ $%.2f (%s) PnL $%.2f",
+            "IBKR exit %s @ $%.2f (%s)",
             trade.symbol,
-            exit_price,
+            fill.price,
             reason,
-            net_pnl,
         )
 
     if closed_any:

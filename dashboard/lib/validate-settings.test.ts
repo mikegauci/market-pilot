@@ -24,6 +24,7 @@ const baseFields = {
   reentry_cooldown_minutes: "45",
   min_volume_ratio: "0.5",
   min_share_price: "20",
+  min_dollar_volume: "250000",
   watchlist_core: "AAPL, MSFT",
   benchmark_symbol: "EEM",
   watchlist_dynamic_size: "5",

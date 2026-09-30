@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 # Medium profile only — dashboard owns Low/Medium/High presets; trader uses saved dollar amounts.
+# Share count is driven by risk_per_trade and stop distance; max_position_size is a notional cap
+# (see RiskManager.compute_position_size). Keep max_position_size above typical risk-sized notionals
+# or expect clip logs when the cap binds before the risk budget does.
 RISK_RECOMMENDATIONS = {
     "risk_per_trade": 0.0025,
     "max_position_size": 0.005,

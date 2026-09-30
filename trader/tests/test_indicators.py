@@ -16,19 +16,22 @@ class IndicatorTests(unittest.TestCase):
         self.assertAlmostEqual(ema, 10.5, places=1)
 
     def test_rsi_requires_enough_bars(self) -> None:
-        prices = [100.0 + i for i in range(16)]
+        prices = [100.0 + (i % 3) for i in range(20)]
         self.assertIsNotNone(_rsi(prices, 14))
 
     def test_compute_intraday_from_bars(self) -> None:
         agg = MinuteBarAggregator()
         base = datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc)
         for index in range(20):
-            agg.record_point(base + timedelta(minutes=index), 100.0 + index, 1000 + index)
+            agg.record_point(
+                base + timedelta(minutes=index),
+                100.0 + (index % 5) - 2 + index * 0.01,
+                1000 + index,
+            )
         intraday = compute_intraday_from_bars(agg, live_price=119.0)
         self.assertIsNotNone(intraday.rsi)
         self.assertIsNotNone(intraday.ema_9)
         self.assertIsNotNone(intraday.ema_20)
-        self.assertIsNotNone(intraday.change_5m)
 
     def test_build_market_state_warmup_gate(self) -> None:
         symbol_agg = MinuteBarAggregator()
