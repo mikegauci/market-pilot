@@ -150,37 +150,67 @@ class MinuteBarAggregator:
                 bars.append(self._current)
             return [bar for bar in bars if _ensure_utc(bar.ts) >= live_from]
 
-    def closes(self, live_price: Optional[float] = None) -> List[float]:
+    def closes(
+        self,
+        live_price: Optional[float] = None,
+        *,
+        real_volume_only: bool = False,
+    ) -> List[float]:
         with self._lock:
-            closes = [bar.close for bar in self._bars]
+            bars = self._bars
+            if real_volume_only:
+                closes = [bar.close for bar in bars if bar.volume > 0]
+            else:
+                closes = [bar.close for bar in bars]
             if self._current is not None:
-                closes.append(live_price if live_price is not None else self._current.close)
+                if not real_volume_only or self._current.volume > 0:
+                    closes.append(
+                        live_price if live_price is not None else self._current.close
+                    )
+            elif live_price is not None:
+                # Trade-bar path clears forming bar; still fold live quote into indicators.
+                closes.append(live_price)
             return closes
 
-    def volumes(self) -> List[int]:
+    def volumes(self, *, real_volume_only: bool = False) -> List[int]:
         with self._lock:
-            volumes = [bar.volume for bar in self._bars]
+            if real_volume_only:
+                volumes = [bar.volume for bar in self._bars if bar.volume > 0]
+            else:
+                volumes = [bar.volume for bar in self._bars]
             if self._current is not None:
-                volumes.append(self._current.volume)
+                if not real_volume_only or self._current.volume > 0:
+                    volumes.append(self._current.volume)
             return volumes
 
-    def change_pct(self, minutes: int, live_price: Optional[float] = None) -> Optional[float]:
-        with self._lock:
-            closes = [bar.close for bar in self._bars]
-            if self._current is not None:
-                closes.append(live_price if live_price is not None else self._current.close)
-            if len(closes) <= minutes:
-                return None
-            past = closes[-1 - minutes]
-            current = closes[-1]
-            if past == 0:
-                return None
-            return round((current - past) / past * 100, 4)
+    def change_pct(
+        self,
+        minutes: int,
+        live_price: Optional[float] = None,
+        *,
+        real_volume_only: bool = False,
+    ) -> Optional[float]:
+        closes = self.closes(live_price=live_price, real_volume_only=real_volume_only)
+        if len(closes) <= minutes:
+            return None
+        past = closes[-1 - minutes]
+        current = closes[-1]
+        if past == 0:
+            return None
+        return round((current - past) / past * 100, 4)
 
     def bar_count(self) -> int:
         with self._lock:
             count = len(self._bars)
             if self._current is not None:
+                count += 1
+            return count
+
+    def real_volume_bar_count(self) -> int:
+        """Completed (+ forming) bars with volume > 0 (excludes forward-fills)."""
+        with self._lock:
+            count = sum(1 for bar in self._bars if bar.volume > 0)
+            if self._current is not None and self._current.volume > 0:
                 count += 1
             return count
 

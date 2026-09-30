@@ -65,6 +65,26 @@ class TestForwardFill(unittest.TestCase):
         self.assertEqual(by_min[31].volume, 0)
         self.assertEqual(by_min[31].close, 10.0)
         self.assertEqual(by_min[32].volume, 60)
+        # Trailing wall-clock minutes after last real bar must not be invented.
+        self.assertNotIn(33, by_min)
+        self.assertNotIn(34, by_min)
+
+    def test_forward_fill_does_not_trail_past_last_real_bar(self) -> None:
+        open_ts = datetime(2026, 6, 15, 13, 30, tzinfo=timezone.utc)
+        close_ts = datetime(2026, 6, 15, 20, 0, tzinfo=timezone.utc)
+        # Delayed feed: last real bar is 15 minutes behind wall clock.
+        last_real = datetime(2026, 6, 15, 14, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 6, 15, 14, 15, tzinfo=timezone.utc)
+        bars = [
+            _bar(datetime(2026, 6, 15, 13, 30, tzinfo=timezone.utc), close=10.0, volume=50),
+            _bar(last_real, close=10.5, volume=80),
+        ]
+        filled = forward_fill_zero_volume(
+            bars, session_open=open_ts, session_close=close_ts, now=now
+        )
+        self.assertEqual(filled[-1].ts, last_real)
+        self.assertEqual(filled[-1].volume, 80)
+        self.assertTrue(all(b.ts <= last_real for b in filled))
 
 
 class TestUtcAcrossDst(unittest.TestCase):

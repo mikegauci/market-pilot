@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 TERMINAL_ORDER_STATUSES = frozenset({"Filled", "Cancelled", "Inactive", "ApiCancelled"})
 MARKET_DATA_COMPETING_SESSION_CODE = 10197
+MARKET_DATA_TYPE_LIVE = 1
 MARKET_DATA_TYPE_DELAYED = 3
 MARKET_DATA_MIN_COVERAGE_RATIO = 0.5
 
@@ -134,7 +135,9 @@ class IBKRClient:
         self.port = port
         self.client_id = client_id
         self.account = account
-        self.market_data_type = market_data_type
+        # Preferred type from config; market_data_type may degrade to delayed temporarily.
+        self.preferred_market_data_type = int(market_data_type)
+        self.market_data_type = int(market_data_type)
         self.ib = IB()
         self._lock = threading.RLock()
         self._contracts: Dict[str, Stock] = {}
@@ -450,6 +453,62 @@ class IBKRClient:
                 total,
             )
             return True
+        return False
+
+    @_ibkr_synchronized
+    def try_restore_preferred_market_data(
+        self, symbols: List[str], wait_sec: float = 1.0
+    ) -> bool:
+        """Re-request preferred (usually live) market data after a delayed fallback.
+
+        Returns True when coverage is healthy on the preferred type. On failure,
+        leaves the client on delayed so quotes keep flowing.
+        """
+        preferred = int(self.preferred_market_data_type)
+        if not self.is_connected() or not symbols:
+            return False
+        if self.market_data_type == preferred:
+            return True
+        if preferred == MARKET_DATA_TYPE_DELAYED:
+            return False
+
+        logger.info(
+            "Attempting IBKR market data restore (type %s → preferred %s)",
+            self.market_data_type,
+            preferred,
+        )
+        prior = self.market_data_type
+        self._market_data_blocked = False
+        self._use_snapshot_quotes = False
+        self.market_data_type = preferred
+        self.ib.reqMarketDataType(preferred)
+        self._cancel_all_market_data()
+        self.subscribe_watchlist(symbols)
+        if wait_sec > 0:
+            self.ib.sleep(wait_sec)
+
+        priced, total = self._count_priced_symbols(symbols)
+        if total and priced / total >= MARKET_DATA_MIN_COVERAGE_RATIO:
+            logger.info(
+                "IBKR preferred market data restored — type %s, %s/%s symbols priced",
+                preferred,
+                priced,
+                total,
+            )
+            return True
+
+        logger.warning(
+            "IBKR preferred market data restore failed (%s/%s priced) — staying on type %s",
+            priced,
+            total,
+            prior,
+        )
+        self.market_data_type = prior
+        self.ib.reqMarketDataType(prior)
+        self._cancel_all_market_data()
+        self.subscribe_watchlist(symbols)
+        if wait_sec > 0:
+            self.ib.sleep(min(wait_sec, 0.5))
         return False
 
     @_ibkr_synchronized

@@ -70,6 +70,29 @@ class TestIBKRMarketDataRecovery(unittest.TestCase):
         self.assertEqual(self.client.market_data_type, MARKET_DATA_TYPE_DELAYED)
         self.client.ib.reqMarketDataType.assert_called_with(MARKET_DATA_TYPE_DELAYED)
 
+    def test_try_restore_preferred_market_data_success(self) -> None:
+        self.client.market_data_type = MARKET_DATA_TYPE_DELAYED
+        self.client.preferred_market_data_type = 1
+        self.client._count_priced_symbols = MagicMock(return_value=(2, 2))
+        with patch.object(self.client, "subscribe_watchlist"), patch.object(
+            self.client, "_cancel_all_market_data"
+        ):
+            restored = self.client.try_restore_preferred_market_data(["AAPL", "MSFT"], wait_sec=0)
+        self.assertTrue(restored)
+        self.assertEqual(self.client.market_data_type, 1)
+        self.client.ib.reqMarketDataType.assert_called_with(1)
+
+    def test_try_restore_preferred_market_data_rolls_back_on_failure(self) -> None:
+        self.client.market_data_type = MARKET_DATA_TYPE_DELAYED
+        self.client.preferred_market_data_type = 1
+        self.client._count_priced_symbols = MagicMock(return_value=(0, 2))
+        with patch.object(self.client, "subscribe_watchlist"), patch.object(
+            self.client, "_cancel_all_market_data"
+        ):
+            restored = self.client.try_restore_preferred_market_data(["AAPL", "MSFT"], wait_sec=0)
+        self.assertFalse(restored)
+        self.assertEqual(self.client.market_data_type, MARKET_DATA_TYPE_DELAYED)
+
     def test_get_quotes_uses_snapshot_path_when_enabled(self) -> None:
         self.client._use_snapshot_quotes = True
         expected = [

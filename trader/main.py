@@ -111,11 +111,13 @@ _shutdown_requested = False
 _warmup_logged: Set[str] = set()
 _last_closed_market_log = 0.0
 _last_market_data_warn = 0.0
+_last_market_data_restore_attempt = 0.0
 _ibkr_market_data_mode = "stream"
 _ibkr_entry_cooldown_until: Dict[str, float] = {}
 _ibkr_entry_blocked: Set[str] = set()
 _CLOSED_MARKET_LOG_INTERVAL_SEC = 300.0
 _MARKET_DATA_WARN_INTERVAL_SEC = 300.0
+_MARKET_DATA_RESTORE_INTERVAL_SEC = 120.0
 _SHUTDOWN_SLEEP_CHUNK_SEC = 0.5
 
 
@@ -634,10 +636,11 @@ def run() -> int:
                 _ibkr_market_data_mode,
                 ibkr.market_data_type,
             )
-            if ibkr.market_data_type != 1:
+            if ibkr.market_data_type != ibkr.preferred_market_data_type:
                 logger.warning(
-                    "IBKR marketDataType=%s — prefer type 1 (real-time) for live trading",
+                    "IBKR marketDataType=%s — prefer type %s (configured) for live trading",
                     ibkr.market_data_type,
+                    ibkr.preferred_market_data_type,
                 )
             ibkr.sync_1m_trade_bar_subscriptions(all_symbols)
             trade_bar_symbols = {s.upper() for s in all_symbols}
@@ -1222,6 +1225,32 @@ def run() -> int:
                         quotes = _get_quotes(settings, ibkr, mock, all_symbols)
                         quotes_by_symbol = {q.symbol: q for q in quotes}
 
+            # Periodically retry preferred (live) market data after a delayed fallback.
+            if (
+                settings.data_source == DataSource.IBKR
+                and ibkr.is_connected()
+                and ibkr.market_data_type != ibkr.preferred_market_data_type
+            ):
+                global _last_market_data_restore_attempt
+                now_mono_restore = time.monotonic()
+                if (
+                    now_mono_restore - _last_market_data_restore_attempt
+                ) >= _MARKET_DATA_RESTORE_INTERVAL_SEC:
+                    _last_market_data_restore_attempt = now_mono_restore
+                    if ibkr.try_restore_preferred_market_data(all_symbols, wait_sec=1.0):
+                        _ibkr_market_data_mode = ibkr.ensure_market_data_ready(
+                            all_symbols, wait_sec=0.5
+                        )
+                        ibkr.sync_1m_trade_bar_subscriptions(all_symbols)
+                        trade_bar_symbols = {s.upper() for s in all_symbols}
+                        quotes = _get_quotes(settings, ibkr, mock, all_symbols)
+                        quotes_by_symbol = {q.symbol: q for q in quotes}
+                        logger.info(
+                            "IBKR market data back on preferred type %s (mode=%s)",
+                            ibkr.market_data_type,
+                            _ibkr_market_data_mode,
+                        )
+
             if risk_manager and db:
                 if process_manual_close_commands(
                     db,
@@ -1377,7 +1406,12 @@ def run() -> int:
                 and time.monotonic() >= gates_enforce_after_mono
             )
             if enforce_gates:
-                if md_type is not None and md_type != 1 and settings.data_source == DataSource.IBKR:
+                preferred_md = int(getattr(settings, "ibkr_market_data_type", 1) or 1)
+                if (
+                    md_type is not None
+                    and md_type != preferred_md
+                    and settings.data_source == DataSource.IBKR
+                ):
                     feed_unhealthy = True
                     feed_reason = f"market_data_type_{md_type}"
                 if feed_share >= float(risk_settings.kill_stale_quote_share_frac):

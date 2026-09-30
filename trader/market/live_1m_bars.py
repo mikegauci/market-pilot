@@ -36,7 +36,11 @@ def forward_fill_zero_volume(
     session_close: datetime,
     now: Optional[datetime] = None,
 ) -> List[MinuteBar]:
-    """Insert flat zero-volume bars for missing RTH minutes up to last completed.
+    """Insert flat zero-volume bars for missing RTH minutes between real bars.
+
+    Fills only through the last real bar's minute (never trailing wall-clock gaps).
+    Delayed IBKR feeds lag wall clock; trailing fills would otherwise flatten the
+    recent window used for RSI / change_5m / volume_ratio and push BUY to ~0%.
 
     Forward-filled bars have volume=0 and must not count as distinct confirmations
     (caller checks volume > 0 or a flag).
@@ -45,9 +49,17 @@ def forward_fill_zero_volume(
         return []
 
     now_u = _ensure_utc(now or datetime.now(timezone.utc))
-    end = min(_minute_bucket(now_u), _ensure_utc(session_close))
+    ordered = sorted((_ensure_utc(b.ts), b) for b in bars)
+    last_real_ts = ordered[-1][0]
+    # Stop at the minute after the last real bar so that bar is included, but do
+    # not invent flat bars from last_real → wall clock (delayed-data poison).
+    end = min(
+        last_real_ts + timedelta(minutes=1),
+        _minute_bucket(now_u),
+        _ensure_utc(session_close),
+    )
     start = _minute_bucket(_ensure_utc(session_open))
-    by_ts: Dict[datetime, MinuteBar] = {_ensure_utc(b.ts): b for b in bars}
+    by_ts: Dict[datetime, MinuteBar] = {ts: bar for ts, bar in ordered}
 
     filled: List[MinuteBar] = []
     cursor = start
