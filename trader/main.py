@@ -5,7 +5,7 @@ import signal
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
@@ -34,6 +34,8 @@ from broker.reconcile import reconcile_cycle
 from broker.symbol_locks import EXIT_LOCKS
 from config import Settings, load_settings
 from risk.halts import RiskHaltCoordinator
+from risk.config_version import fingerprint_risk_settings
+from risk.execution_log import compute_long_slippage, update_excursions
 from execution_mode import effective_execution_mode
 from instance_lock import acquire_trader_lock
 from database.supabase import GENERAL_NEWS_FAILURE_BACKOFF_SEC, SupabaseRepository
@@ -792,8 +794,15 @@ def run() -> int:
                 _sync_portfolio_state(db, ibkr, risk_manager, execution_mode, [])
 
     risk_halt = RiskHaltCoordinator()
+    # Declared early so startup fingerprint and settings sync share the same binding.
+    config_id: Optional[str] = None
     if db and risk_manager:
         risk_halt.hydrate(db)
+        try:
+            cfg_hash, cfg_body = fingerprint_risk_settings(risk_settings)
+            config_id = db.ensure_config_version(cfg_hash, cfg_body)
+        except Exception as exc:
+            logger.warning("config_version fingerprint failed: %s", exc)
 
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)
@@ -809,6 +818,7 @@ def run() -> int:
     last_general_news_refresh = 0.0
     last_quote_age_log = 0.0
     last_reconcile = startup_mono
+    last_forward_return = startup_mono
     gates_enforce_after_mono = startup_mono + float(
         max(0, risk_settings.quote_age_log_only_sec)
     )
@@ -944,6 +954,11 @@ def run() -> int:
                         min_share_price=risk_settings.min_share_price,
                         jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
                     )
+                    try:
+                        cfg_hash, cfg_body = fingerprint_risk_settings(risk_settings)
+                        config_id = db.ensure_config_version(cfg_hash, cfg_body)
+                    except Exception as exc:
+                        logger.warning("config_version refresh failed: %s", exc)
                     last_settings_sync = now_mono
 
                 benchmark_symbol = effective_benchmark(risk_settings)
@@ -1069,6 +1084,30 @@ def run() -> int:
 
             quotes = _get_quotes(settings, ibkr, mock, all_symbols)
             quotes_by_symbol: Dict[str, Quote] = {q.symbol: q for q in quotes}
+
+            # Phase 6: update MAE/MFE on open trades from latest marks.
+            if risk_manager and db:
+                for trade in list(risk_manager.open_trades):
+                    quote = quotes_by_symbol.get(trade.symbol)
+                    if quote is None or quote.price is None:
+                        continue
+                    new_mae, new_mfe = update_excursions(
+                        entry_price=trade.entry_price,
+                        mark_price=float(quote.price),
+                        mae=trade.mae,
+                        mfe=trade.mfe,
+                    )
+                    if trade.mae != new_mae or trade.mfe != new_mfe:
+                        trade.mae = new_mae
+                        trade.mfe = new_mfe
+                        try:
+                            db.update_trade_excursions(
+                                trade.id, mae=new_mae, mfe=new_mfe
+                            )
+                        except Exception as exc:
+                            logger.debug(
+                                "MAE/MFE update failed for %s: %s", trade.symbol, exc
+                            )
 
             # Resubscribe keepUpToDate bars after IBKR reconnect; re-run reconcile.
             if settings.data_source == DataSource.IBKR:
@@ -1776,19 +1815,29 @@ def run() -> int:
 
                     trade_created = False
                     trade_skip_reason: Optional[str] = None
+                    skip_reasons: List[str] = []
                     eligible = is_trade_eligible(tier)
+
+                    def _note_skip(reason: Optional[str]) -> None:
+                        nonlocal trade_skip_reason
+                        if not reason:
+                            return
+                        if reason not in skip_reasons:
+                            skip_reasons.append(reason)
+                        if trade_skip_reason is None:
+                            trade_skip_reason = reason
 
                     if entry_kill.active:
                         confirmation_tracker.record(symbol, False)
-                        trade_skip_reason = f"entry_kill ({entry_kill.reason or 'active'})"
+                        _note_skip(f"entry_kill ({entry_kill.reason or 'active'})")
                         eligible = False
                     elif entry_block:
                         confirmation_tracker.record(symbol, False)
-                        trade_skip_reason = entry_block
+                        _note_skip(entry_block)
                         eligible = False
                     elif not eligible:
                         confirmation_tracker.record(symbol, False)
-                        trade_skip_reason = trade_skip_reason_from_tier(tier)
+                        _note_skip(trade_skip_reason_from_tier(tier))
                     else:
                         # Evaluate confirmation once per newly completed real-volume bar.
                         # Same bar_ts is not double-counted; forward-fill (vol=0) skipped.
@@ -1805,7 +1854,7 @@ def run() -> int:
                             completed_bar_ts=bar_for_confirm,
                         ):
                             current, required = confirmation_tracker.progress(symbol)
-                            trade_skip_reason = (
+                            _note_skip(
                                 f"awaiting_confirmation ({current}/{required})"
                             )
                             logger.info(
@@ -1825,7 +1874,7 @@ def run() -> int:
                         )
                         entry_filter = check_entry_filters(state, entry_strategy)
                         if not entry_filter.passed:
-                            trade_skip_reason = entry_filter.reason
+                            _note_skip(entry_filter.reason)
                             logger.info(
                                 "Filter: rejected %s — %s",
                                 symbol,
@@ -1837,14 +1886,15 @@ def run() -> int:
                         corr_filter = check_correlation_cap(
                             risk_manager.open_trades, symbol, entry_strategy
                         )
-                        if eligible and not corr_filter.passed:
-                            trade_skip_reason = corr_filter.reason
+                        if not corr_filter.passed:
+                            _note_skip(corr_filter.reason)
                             logger.info(
                                 "Filter: rejected %s — %s",
                                 symbol,
                                 corr_filter.reason,
                             )
-                            confirmation_tracker.reset(symbol)
+                            if eligible:
+                                confirmation_tracker.reset(symbol)
                             eligible = False
 
                     if eligible and risk_manager and db:
@@ -1872,7 +1922,7 @@ def run() -> int:
                                 risk_halt_reason=risk_halt.entry_blocked(),
                             )
                             if not pre.ok:
-                                trade_skip_reason = f"pre_submit_{pre.reason}"
+                                _note_skip(f"pre_submit_{pre.reason}")
                                 logger.info(
                                     "Pre-submit rejected %s — %s",
                                     trade.symbol,
@@ -1880,11 +1930,16 @@ def run() -> int:
                                 )
                                 confirmation_tracker.reset(trade.symbol)
                             else:
+                                trade.decision_price = pre.entry_price
+                                trade.config_id = config_id
                                 trade.entry_price = pre.entry_price
                                 trade.quantity = pre.quantity
                                 trade.position_value = pre.position_value
                                 trade.stop_loss = pre.stop_loss
                                 trade.take_profit = pre.take_profit
+                                if fresh_quote is not None:
+                                    trade.fill_bid = fresh_quote.bid
+                                    trade.fill_ask = fresh_quote.ask
                             if trade_skip_reason and trade_skip_reason.startswith(
                                 "pre_submit_"
                             ):
@@ -1933,7 +1988,7 @@ def run() -> int:
                                                 )
 
                                     if ibkr_skip_reason:
-                                        trade_skip_reason = ibkr_skip_reason
+                                        _note_skip(ibkr_skip_reason)
                                         logger.info(
                                             "Skipping %s IBKR entry — %s",
                                             trade.symbol,
@@ -1966,7 +2021,7 @@ def run() -> int:
                                                         f"after partial-fill child resize failure "
                                                         f"(filled={bracket.filled_quantity})"
                                                     )
-                                                    trade_skip_reason = (
+                                                    _note_skip(
                                                         "ibkr_partial_resize_failed_flattened"
                                                     )
                                                     logger.error(
@@ -1977,7 +2032,7 @@ def run() -> int:
                                                         close.already_flat,
                                                     )
                                                 except Exception as flatten_exc:
-                                                    trade_skip_reason = (
+                                                    _note_skip(
                                                         f"ibkr_partial_resize_failed ({flatten_exc})"
                                                     )
                                                     entry_kill.activate(
@@ -2011,6 +2066,13 @@ def run() -> int:
                                                 trade.client_order_id = (
                                                     bracket.client_order_id or coid
                                                 )
+                                                trade.slippage = compute_long_slippage(
+                                                    decision_price=trade.decision_price,
+                                                    fill_price=bracket.fill_price,
+                                                    quantity=bracket.filled_quantity,
+                                                )
+                                                trade.mae = 0.0
+                                                trade.mfe = 0.0
                                                 db.insert_trade(trade)
                                                 risk_manager.register_open_trade(trade)
                                                 confirmation_tracker.reset(trade.symbol)
@@ -2034,7 +2096,7 @@ def run() -> int:
                                     if is_permanent_ibkr_eligibility_rejection(exc):
                                         blocked = trade.symbol.upper()
                                         _ibkr_entry_blocked.add(blocked)
-                                        trade_skip_reason = (
+                                        _note_skip(
                                             "ibkr_ineligible "
                                             f"(no trading permission / KID: {exc})"
                                         )
@@ -2069,7 +2131,7 @@ def run() -> int:
                                                     db_exc,
                                                 )
                                     else:
-                                        trade_skip_reason = f"ibkr_order_failed ({exc})"
+                                        _note_skip(f"ibkr_order_failed ({exc})")
                                         _ibkr_entry_cooldown_until[symbol] = (
                                             time.monotonic()
                                             + settings.ibkr_entry_cooldown_sec
@@ -2086,13 +2148,20 @@ def run() -> int:
                                                 "(Global Config → Presets → Confirmations)."
                                             )
                             elif execution_mode == ExecutionMode.IBKR:
-                                trade_skip_reason = "ibkr_not_connected"
+                                _note_skip("ibkr_not_connected")
                                 logger.warning(
                                     "Execution mode ibkr but IBKR not connected — skipping %s",
                                     symbol,
                                 )
                             else:
                                 trade.execution_mode = "simulated"
+                                trade.slippage = compute_long_slippage(
+                                    decision_price=trade.decision_price,
+                                    fill_price=trade.entry_price,
+                                    quantity=trade.quantity,
+                                )
+                                trade.mae = 0.0
+                                trade.mfe = 0.0
                                 db.insert_trade(trade)
                                 risk_manager.register_open_trade(trade)
                                 confirmation_tracker.reset(trade.symbol)
@@ -2107,16 +2176,49 @@ def run() -> int:
                                     trade.take_profit,
                                 )
                         elif not decision.approved:
-                            trade_skip_reason = decision.reason
+                            _note_skip(decision.reason)
                             logger.info("Risk: rejected %s — %s", symbol, decision.reason)
 
                     if db:
-                        db.insert_prediction(
+                        quote = quotes_by_symbol.get(symbol)
+                        pred_id = db.insert_prediction(
                             state,
                             prediction,
                             trade_created=trade_created,
                             trade_skip_reason=trade_skip_reason,
+                            config_id=config_id,
+                            skip_reasons=skip_reasons,
+                            decision_bid=quote.bid if quote else None,
+                            decision_ask=quote.ask if quote else None,
                         )
+                        try:
+                            db.insert_decision_log(
+                                symbol=symbol,
+                                eval_at=prediction.timestamp,
+                                outcome=(
+                                    "trade_created" if trade_created else "skipped"
+                                ),
+                                reasons=skip_reasons,
+                                config_id=config_id,
+                                prediction_id=pred_id,
+                                detail={
+                                    "buy": prediction.buy,
+                                    "hold": prediction.hold,
+                                    "sell": prediction.sell,
+                                    "price": state.price,
+                                    "entry_kill": entry_kill.active,
+                                    "entry_kill_reason": entry_kill.reason or None,
+                                    "risk_halt": risk_halt.state.active,
+                                    "risk_halt_reason": risk_halt.state.reason or None,
+                                    "model": prediction.model or None,
+                                },
+                            )
+                        except Exception as log_exc:
+                            logger.warning(
+                                "decision_log insert failed for %s: %s",
+                                symbol,
+                                log_exc,
+                            )
                         logger.info("Prediction stored")
 
                 except Exception as exc:
@@ -2144,6 +2246,52 @@ def run() -> int:
                     db, ibkr, risk_manager, execution_mode, quotes
                 )
                 portfolio_dirty = False
+
+            # Phase 6: forward returns for predictions past horizon.
+            now_mono_fwd = time.monotonic()
+            if (
+                db
+                and (now_mono_fwd - last_forward_return) >= 60.0
+            ):
+                try:
+                    horizon = int(
+                        getattr(risk_settings, "prediction_horizon_minutes", 15) or 15
+                    )
+                    older_than = datetime.now(timezone.utc) - timedelta(minutes=horizon)
+                    pending = db.list_predictions_needing_forward_return(
+                        older_than=older_than, limit=40
+                    )
+                    now_fwd = datetime.now(timezone.utc)
+                    for row in pending:
+                        sym = str(row.get("symbol") or "").upper()
+                        quote = quotes_by_symbol.get(sym)
+                        if quote is None or quote.price is None or quote.price <= 0:
+                            continue
+                        signal_price = float(row.get("price") or 0)
+                        if signal_price <= 0:
+                            continue
+                        fwd_price = float(quote.price)
+                        fwd_ret = (fwd_price - signal_price) / signal_price
+                        raw_ts = row["timestamp"]
+                        if isinstance(raw_ts, datetime):
+                            signal_at = raw_ts
+                        else:
+                            signal_at = datetime.fromisoformat(
+                                str(raw_ts).replace("Z", "+00:00")
+                            )
+                        db.insert_signal_forward_return(
+                            prediction_id=str(row["id"]),
+                            symbol=sym,
+                            signal_at=signal_at,
+                            signal_price=signal_price,
+                            horizon_minutes=horizon,
+                            forward_at=now_fwd,
+                            forward_price=fwd_price,
+                            forward_return=fwd_ret,
+                        )
+                except Exception as exc:
+                    logger.debug("forward-return job failed: %s", exc)
+                last_forward_return = now_mono_fwd
 
             now = time.monotonic()
             if db and (now - last_heartbeat) >= settings.heartbeat_interval_sec:

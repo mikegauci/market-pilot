@@ -218,6 +218,11 @@ export type Prediction = {
   sell_probability: number;
   trade_created: boolean;
   trade_skip_reason?: string | null;
+  skip_reasons?: string[] | null;
+  model?: string | null;
+  config_id?: string | null;
+  decision_bid?: number | null;
+  decision_ask?: number | null;
   market_snapshot?: MarketSnapshot | null;
   created_at: string;
 };
@@ -241,6 +246,14 @@ export type Trade = {
   jev_buy_probability: number | null;
   execution_mode?: "simulated" | "ibkr";
   exit_reason?: string | null;
+  config_id?: string | null;
+  decision_price?: number | null;
+  fill_bid?: number | null;
+  fill_ask?: number | null;
+  mae?: number | null;
+  mfe?: number | null;
+  slippage?: number | null;
+  commission?: number | null;
   created_at: string;
 };
 

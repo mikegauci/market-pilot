@@ -149,4 +149,5 @@ class JevClient:
             sell=sell,
             timestamp=datetime.now(timezone.utc),
             model=data.get("model", self.model),
+            raw=data if isinstance(data, dict) else None,
         )

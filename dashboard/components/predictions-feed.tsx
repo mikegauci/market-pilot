@@ -104,22 +104,42 @@ function formatSkipReason(reason: string | null | undefined): string | null {
 
 function TradeCell({ prediction }: { prediction: Prediction }) {
   if (prediction.trade_created) {
-    return <Badge className="bg-emerald-900 text-emerald-300">opened</Badge>;
+    return (
+      <div className="space-y-0.5">
+        <Badge className="bg-emerald-900 text-emerald-300">opened</Badge>
+        {prediction.model ? (
+          <p className="text-[10px] text-zinc-500">{prediction.model}</p>
+        ) : null}
+      </div>
+    );
   }
 
-  const label = formatSkipReason(prediction.trade_skip_reason);
-  if (!label) {
+  const multi = (prediction.skip_reasons ?? []).filter(Boolean);
+  const primary =
+    multi.length > 0
+      ? multi.map((r) => formatSkipReason(r) ?? r).join(" · ")
+      : formatSkipReason(prediction.trade_skip_reason);
+  if (!primary) {
     return <span className="text-zinc-600">—</span>;
   }
 
-  const isWaiting = label.startsWith("Awaiting confirmation");
+  const isWaiting = primary.startsWith("Awaiting confirmation");
+  const title =
+    multi.length > 0
+      ? multi.join(" | ")
+      : (prediction.trade_skip_reason ?? undefined);
   return (
-    <span
-      className={`text-xs leading-snug ${isWaiting ? "text-amber-400" : "text-zinc-500"}`}
-      title={prediction.trade_skip_reason ?? undefined}
-    >
-      {label}
-    </span>
+    <div className="space-y-0.5">
+      <span
+        className={`text-xs leading-snug ${isWaiting ? "text-amber-400" : "text-zinc-500"}`}
+        title={title}
+      >
+        {primary}
+      </span>
+      {prediction.model ? (
+        <p className="text-[10px] text-zinc-500">{prediction.model}</p>
+      ) : null}
+    </div>
   );
 }
 

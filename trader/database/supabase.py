@@ -156,6 +156,14 @@ def _trade_from_row(row: dict) -> TradeRecord:
         ibkr_sl_order_id=int(row["ibkr_sl_order_id"]) if row.get("ibkr_sl_order_id") is not None else None,
         ibkr_tp_order_id=int(row["ibkr_tp_order_id"]) if row.get("ibkr_tp_order_id") is not None else None,
         client_order_id=str(row["client_order_id"]) if row.get("client_order_id") else None,
+        config_id=str(row["config_id"]) if row.get("config_id") else None,
+        decision_price=float(row["decision_price"]) if row.get("decision_price") is not None else None,
+        fill_bid=float(row["fill_bid"]) if row.get("fill_bid") is not None else None,
+        fill_ask=float(row["fill_ask"]) if row.get("fill_ask") is not None else None,
+        mae=float(row["mae"]) if row.get("mae") is not None else None,
+        mfe=float(row["mfe"]) if row.get("mfe") is not None else None,
+        slippage=float(row["slippage"]) if row.get("slippage") is not None else None,
+        commission=float(row["commission"]) if row.get("commission") is not None else None,
     )
 
 
@@ -952,13 +960,142 @@ class SupabaseRepository:
             "ibkr_sl_order_id": trade.ibkr_sl_order_id,
             "ibkr_tp_order_id": trade.ibkr_tp_order_id,
             "client_order_id": trade.client_order_id,
-            "commission": 0,
-            "slippage": 0,
+            "commission": trade.commission if trade.commission is not None else 0,
+            "slippage": trade.slippage if trade.slippage is not None else 0,
+            "config_id": trade.config_id,
+            "decision_price": trade.decision_price,
+            "fill_bid": trade.fill_bid,
+            "fill_ask": trade.fill_ask,
+            "mae": trade.mae,
+            "mfe": trade.mfe,
             "created_at": now,
             "updated_at": now,
         }
-        self.client.table("trades").insert(payload).execute()
+        # Drop nulls for optional columns so older DBs aren't required.
+        self.client.table("trades").insert(
+            {k: v for k, v in payload.items() if v is not None or k in {
+                "commission", "slippage", "jev_buy_probability",
+                "ibkr_parent_order_id", "ibkr_sl_order_id", "ibkr_tp_order_id",
+                "client_order_id",
+            }}
+        ).execute()
         return trade.id
+
+    @_db_synchronized
+    def update_trade_excursions(
+        self,
+        trade_id: str,
+        *,
+        mae: float,
+        mfe: float,
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("trades").update(
+            {"mae": mae, "mfe": mfe, "updated_at": now}
+        ).eq("id", trade_id).execute()
+
+    @_db_synchronized
+    def ensure_config_version(self, config_hash: str, config: dict) -> str:
+        existing = (
+            self.client.table("config_versions")
+            .select("id")
+            .eq("config_hash", config_hash)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return str(existing.data[0]["id"])
+        import uuid as _uuid
+
+        new_id = str(_uuid.uuid4())
+        self.client.table("config_versions").insert(
+            {"id": new_id, "config_hash": config_hash, "config": config}
+        ).execute()
+        return new_id
+
+    @_db_synchronized
+    def insert_decision_log(
+        self,
+        *,
+        symbol: str,
+        eval_at: datetime,
+        outcome: str,
+        reasons: Optional[List[str]] = None,
+        config_id: Optional[str] = None,
+        prediction_id: Optional[str] = None,
+        detail: Optional[dict] = None,
+    ) -> None:
+        payload = {
+            "symbol": str(symbol).upper(),
+            "eval_at": eval_at.isoformat(),
+            "outcome": outcome,
+            "reasons": list(reasons or []),
+            "config_id": config_id,
+            "prediction_id": prediction_id,
+            "detail": detail or {},
+        }
+        self.client.table("decision_logs").insert(payload).execute()
+
+    @_db_synchronized
+    def list_predictions_needing_forward_return(
+        self,
+        *,
+        older_than: datetime,
+        limit: int = 50,
+    ) -> List[dict]:
+        """Predictions with timestamp <= older_than and no signal_forward_returns row."""
+        result = (
+            self.client.table("predictions")
+            .select("id, symbol, timestamp, price")
+            .lte("timestamp", older_than.isoformat())
+            .order("timestamp", desc=True)
+            .limit(limit * 3)
+            .execute()
+        )
+        rows = list(result.data or [])
+        if not rows:
+            return []
+        ids = [str(r["id"]) for r in rows]
+        existing = (
+            self.client.table("signal_forward_returns")
+            .select("prediction_id")
+            .in_("prediction_id", ids)
+            .execute()
+        )
+        done = {str(r["prediction_id"]) for r in (existing.data or [])}
+        out = [r for r in rows if str(r["id"]) not in done]
+        return out[:limit]
+
+    @_db_synchronized
+    def insert_signal_forward_return(
+        self,
+        *,
+        prediction_id: str,
+        symbol: str,
+        signal_at: datetime,
+        signal_price: float,
+        horizon_minutes: int,
+        forward_at: datetime,
+        forward_price: float,
+        forward_return: float,
+    ) -> bool:
+        try:
+            self.client.table("signal_forward_returns").insert(
+                {
+                    "prediction_id": prediction_id,
+                    "symbol": str(symbol).upper(),
+                    "signal_at": signal_at.isoformat(),
+                    "signal_price": signal_price,
+                    "horizon_minutes": int(horizon_minutes),
+                    "forward_at": forward_at.isoformat(),
+                    "forward_price": forward_price,
+                    "forward_return": forward_return,
+                }
+            ).execute()
+            return True
+        except Exception as exc:
+            logger.debug("insert_signal_forward_return skipped: %s", exc)
+            return False
 
     @_db_synchronized
     def update_trade_ibkr_bracket(self, trade: TradeRecord) -> None:
@@ -1020,6 +1157,9 @@ class SupabaseRepository:
         *,
         filled_quantity: Optional[float] = None,
         exit_reason: Optional[str] = None,
+        mae: Optional[float] = None,
+        mfe: Optional[float] = None,
+        slippage: Optional[float] = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         payload = {
@@ -1035,6 +1175,12 @@ class SupabaseRepository:
             payload["position_value"] = round(exit_price * filled_quantity, 6)
         if exit_reason:
             payload["exit_reason"] = exit_reason
+        if mae is not None:
+            payload["mae"] = mae
+        if mfe is not None:
+            payload["mfe"] = mfe
+        if slippage is not None:
+            payload["slippage"] = slippage
         self.client.table("trades").update(payload).eq("id", trade_id).execute()
 
     @_db_synchronized
@@ -1178,8 +1324,19 @@ class SupabaseRepository:
         prediction: JevPrediction,
         trade_created: bool = False,
         trade_skip_reason: Optional[str] = None,
-    ) -> None:
+        *,
+        config_id: Optional[str] = None,
+        skip_reasons: Optional[List[str]] = None,
+        decision_bid: Optional[float] = None,
+        decision_ask: Optional[float] = None,
+        prediction_id: Optional[str] = None,
+    ) -> Optional[str]:
+        from risk.execution_log import truncate_jev_raw
+        import uuid as _uuid
+
+        pid = prediction_id or str(_uuid.uuid4())
         payload = {
+            "id": pid,
             "symbol": prediction.symbol,
             "timestamp": prediction.timestamp.isoformat(),
             "price": state.price,
@@ -1189,8 +1346,18 @@ class SupabaseRepository:
             "market_snapshot": state.to_dict(),
             "trade_created": trade_created,
             "trade_skip_reason": None if trade_created else trade_skip_reason,
+            "model": prediction.model or None,
+            "config_id": config_id,
+            "jev_raw": truncate_jev_raw(prediction.raw),
+            "skip_reasons": list(skip_reasons or []) or None,
+            "decision_bid": decision_bid,
+            "decision_ask": decision_ask,
         }
-        self.client.table("predictions").insert(payload).execute()
+        cleaned = {k: v for k, v in payload.items() if v is not None or k in {
+            "trade_skip_reason", "trade_created", "market_snapshot",
+        }}
+        self.client.table("predictions").insert(cleaned).execute()
+        return pid
 
     @_db_synchronized
     def upsert_market_news(self, rows: List[dict], *, keep: int = 100) -> int:

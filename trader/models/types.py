@@ -135,6 +135,7 @@ class JevPrediction:
     sell: float
     timestamp: datetime
     model: str = ""
+    raw: Optional[dict] = None
 
 
 @dataclass
@@ -249,6 +250,14 @@ class TradeRecord:
     ibkr_sl_order_id: Optional[int] = None
     ibkr_tp_order_id: Optional[int] = None
     client_order_id: Optional[str] = None
+    config_id: Optional[str] = None
+    decision_price: Optional[float] = None
+    fill_bid: Optional[float] = None
+    fill_ask: Optional[float] = None
+    mae: Optional[float] = None
+    mfe: Optional[float] = None
+    slippage: Optional[float] = None
+    commission: Optional[float] = None
 
 
 @dataclass
