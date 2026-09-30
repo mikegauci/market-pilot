@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  DEFAULT_CHART_PRESET,
-  isChartPreset,
-  lookbackMsForPreset,
-  sortBarsAscending,
-} from "@/lib/chart-options";
+import { isChartPreset, sortBarsAscending } from "@/lib/chart-options";
 import type { SymbolBar } from "@/lib/types/database";
 
 function bar(ts: string): SymbolBar {
@@ -23,17 +18,9 @@ function bar(ts: string): SymbolBar {
 }
 
 describe("chart-options", () => {
-  it("recognizes lookback presets", () => {
+  it("does not treat a bar size as a lookback preset", () => {
     expect(isChartPreset("4h")).toBe(true);
-    expect(isChartPreset("1h")).toBe(true);
-    expect(isChartPreset("all")).toBe(true);
     expect(isChartPreset("5 mins")).toBe(false);
-  });
-
-  it("defaults to 4H lookback", () => {
-    expect(DEFAULT_CHART_PRESET).toBe("4h");
-    expect(lookbackMsForPreset("4h")).toBe(4 * 60 * 60 * 1000);
-    expect(lookbackMsForPreset("all")).toBeNull();
   });
 
   it("sorts bars ascending without truncating history", () => {

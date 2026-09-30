@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import { computeJevCalibration } from "@/lib/jev-calibration";
 import type { Prediction } from "@/lib/types/database";
 
-function prediction(
-  buy: number,
-  return15m: number | null,
-): Prediction {
+function prediction(buy: number, return15m: number | null): Prediction {
   return {
     id: crypto.randomUUID(),
     symbol: "TEST",
@@ -22,15 +19,20 @@ describe("computeJevCalibration", () => {
     expect(computeJevCalibration([prediction(0.8, null)])).toEqual([]);
   });
 
-  it("buckets by buy probability", () => {
-    const rows = [
+  it("buckets by buy probability and averages the forward return", () => {
+    const buckets = computeJevCalibration([
+      prediction(0.49, 0.5),
       prediction(0.55, 0.01),
-      prediction(0.58, 0.02),
+      prediction(0.58, 0.03),
       prediction(0.72, -0.01),
-    ];
-    const buckets = computeJevCalibration(rows);
-    expect(buckets.length).toBeGreaterThanOrEqual(2);
-    const low = buckets.find((b) => b.label.startsWith("50"));
-    expect(low?.count).toBe(2);
+      prediction(1, 0.04),
+    ]);
+
+    expect(buckets.map((bucket) => bucket.label)).toEqual(["50–60%", "70–80%", "90–100%"]);
+    expect(buckets[0]).toMatchObject({ count: 2 });
+    expect(buckets[0]?.avgBuy).toBeCloseTo(0.565);
+    expect(buckets[0]?.avgReturn15m).toBeCloseTo(0.02);
+    expect(buckets[1]?.avgReturn15m).toBeCloseTo(-0.01);
+    expect(buckets[2]).toMatchObject({ count: 1, avgBuy: 1, avgReturn15m: 0.04 });
   });
 });
