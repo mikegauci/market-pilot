@@ -2,12 +2,15 @@ import { normalizeSettings } from "@/lib/normalize-settings";
 import { createClient } from "@/lib/supabase/server";
 import type {
   BotStatus,
+  DecisionLogRow,
   EmUniverseRow,
   MarketNewsRow,
   PortfolioSnapshot,
   Position,
   Prediction,
+  ReconciliationEvent,
   Settings,
+  SettingsAuditLog,
   SymbolBar,
   Trade,
   TradeCommand,
@@ -221,4 +224,38 @@ export async function getSymbolBars(
   const bars = (data ?? []) as SymbolBar[];
   bars.reverse();
   return bars;
+}
+
+export async function getRecentReconciliationEvents(
+  limit = 20,
+): Promise<ReconciliationEvent[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("reconciliation_events")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as ReconciliationEvent[];
+}
+
+export async function getRecentDecisionLogs(limit = 30): Promise<DecisionLogRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("decision_logs")
+    .select("*")
+    .order("eval_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as DecisionLogRow[];
+}
+
+export async function getRecentSettingsAudit(
+  limit = 20,
+): Promise<SettingsAuditLog[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("settings_audit_log")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []) as SettingsAuditLog[];
 }

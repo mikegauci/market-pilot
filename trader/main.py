@@ -87,6 +87,7 @@ from strategy.signals import (
     trade_skip_reason_from_tier,
 )
 from risk.model_drift import ModelDriftTracker
+from risk.ibkr_disconnect_alert import IbkrDisconnectAlertTracker
 from watchlist.demotion import effective_max_hold_minutes
 from watchlist.jev_screener import (
     apply_screener_result_to_risk_settings,
@@ -737,10 +738,13 @@ def run() -> int:
         )
     _equity_divergence_alerted: set = set()
     model_drift = ModelDriftTracker()
+    ibkr_disconnect_alert = IbkrDisconnectAlertTracker(min_gap_sec=60.0)
     _eod_entries_cancelled_for_close: Optional[datetime] = None
     _eod_flat_verified_for_close: Optional[datetime] = None
     _eod_bar_audit_for_close: Optional[datetime] = None
     _ibkr_was_connected = ibkr.is_connected()
+    # Seed tracker so startup disconnected state does not alert.
+    ibkr_disconnect_alert.observe(_ibkr_was_connected, notifier=None)
     _reconcile_block_entries = False
 
     risk_manager: Optional[RiskManager] = None
@@ -1129,6 +1133,14 @@ def run() -> int:
             # Resubscribe keepUpToDate bars after IBKR reconnect; re-run reconcile.
             if settings.data_source == DataSource.IBKR:
                 connected_now = ibkr.is_connected()
+                gap = float(
+                    getattr(risk_settings, "kill_alert_min_gap_sec", 60) or 60
+                )
+                ibkr_disconnect_alert.min_gap_sec = max(15.0, gap)
+                ibkr_disconnect_alert.observe(
+                    connected_now,
+                    notifier=notifier,
+                )
                 just_reconnected = False
                 if connected_now and not _ibkr_was_connected:
                     logger.info("IBKR reconnected — resubscribing 1m TRADES bars")

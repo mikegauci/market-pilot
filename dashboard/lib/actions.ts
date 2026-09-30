@@ -1,23 +1,75 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { buildSettingsAuditPayload } from "@/lib/allowlist";
 import { resolveCurrentEquity } from "@/lib/resolve-current-equity";
 import { createClient } from "@/lib/supabase/server";
 import { parseSettingsForm } from "@/lib/validate-settings";
 
+async function insertAuditLog(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  payload: ReturnType<typeof buildSettingsAuditPayload>,
+) {
+  const { error } = await supabase.from("settings_audit_log").insert(payload);
+  if (error) {
+    console.warn("settings_audit_log insert failed:", error.message);
+  }
+}
+
 export async function toggleBot(enabled: boolean) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: before } = await supabase
+    .from("bot_status")
+    .select("*")
+    .eq("id", 1)
+    .single();
+
   const { error } = await supabase
     .from("bot_status")
     .update({ enabled, updated_at: new Date().toISOString() })
     .eq("id", 1);
 
   if (error) throw new Error(error.message);
+
+  const { data: after } = await supabase
+    .from("bot_status")
+    .select("*")
+    .eq("id", 1)
+    .single();
+
+  await insertAuditLog(
+    supabase,
+    buildSettingsAuditPayload({
+      action: "bot_toggle",
+      actorUserId: user.id,
+      actorEmail: user.email,
+      before: (before as Record<string, unknown>) ?? {},
+      after: (after as Record<string, unknown>) ?? { enabled },
+    }),
+  );
+
   revalidatePath("/");
+  revalidatePath("/ops");
 }
 
 export async function updateSettings(formData: FormData) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: before } = await supabase
+    .from("settings")
+    .select("*")
+    .eq("id", 1)
+    .single();
+
   const parsed = parseSettingsForm(formData);
   const equityForBaseline = await resolveCurrentEquity();
 
@@ -36,8 +88,27 @@ export async function updateSettings(formData: FormData) {
 
   const { error } = await supabase.from("settings").update(payload).eq("id", 1);
   if (error) throw new Error(error.message);
+
+  const { data: after } = await supabase
+    .from("settings")
+    .select("*")
+    .eq("id", 1)
+    .single();
+
+  await insertAuditLog(
+    supabase,
+    buildSettingsAuditPayload({
+      action: "settings_update",
+      actorUserId: user.id,
+      actorEmail: user.email,
+      before: (before as Record<string, unknown>) ?? {},
+      after: (after as Record<string, unknown>) ?? payload,
+    }),
+  );
+
   revalidatePath("/settings");
   revalidatePath("/");
+  revalidatePath("/ops");
 }
 
 export async function requestClosePosition(tradeId: string) {
@@ -77,6 +148,7 @@ export async function requestClosePosition(tradeId: string) {
 
   revalidatePath("/");
   revalidatePath("/trades");
+  revalidatePath("/ops");
 }
 
 export async function signOut() {

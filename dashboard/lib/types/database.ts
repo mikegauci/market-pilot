@@ -280,6 +280,37 @@ export type TradeCommand = {
   error: string | null;
 };
 
+export type ReconciliationEvent = {
+  id: string;
+  created_at: string;
+  symbol: string;
+  event_type: string;
+  detail: Record<string, unknown> | string | null;
+  resolved_at: string | null;
+};
+
+export type DecisionLogRow = {
+  id: string;
+  created_at: string;
+  symbol: string;
+  eval_at: string | null;
+  config_id?: string | null;
+  prediction_id?: string | null;
+  outcome: string;
+  reasons: string[] | null;
+  detail?: Record<string, unknown> | null;
+};
+
+export type SettingsAuditLog = {
+  id: string;
+  created_at: string;
+  actor_user_id: string;
+  actor_email: string | null;
+  action: "settings_update" | "bot_toggle" | string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+};
+
 export type Position = {
   id: string;
   symbol: string;

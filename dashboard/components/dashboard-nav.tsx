@@ -10,6 +10,7 @@ import {
   LogOut,
   Newspaper,
   Settings,
+  ShieldAlert,
   TrendingUp,
 } from "lucide-react";
 import { LiveStatus } from "@/components/live-status";
@@ -28,6 +29,7 @@ export const dashboardNavLinks = [
   { href: "/news", label: "News", icon: Newspaper },
   { href: "/trades", label: "Trades", icon: TrendingUp },
   { href: "/strategy", label: "Strategy", icon: Layers },
+  { href: "/ops", label: "Ops", icon: ShieldAlert },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
