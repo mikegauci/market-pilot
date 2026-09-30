@@ -13,6 +13,12 @@ export type SettingsRow = Omit<
   | "demotion_jev_sell_max_loss_pct"
   | "demotion_force_exit"
   | "watchlist_min_buy"
+  | "prediction_horizon_minutes"
+  | "last_entry_cutoff_minutes_before_close"
+  | "eod_closeout_enabled"
+  | "eod_closeout_minutes_before_close"
+  | "eod_flat_verify_minutes_before_close"
+  | "equity_divergence_alert_frac"
 > &
   Partial<
     Pick<
@@ -27,6 +33,12 @@ export type SettingsRow = Omit<
       | "demotion_jev_sell_max_loss_pct"
       | "demotion_force_exit"
       | "watchlist_min_buy"
+      | "prediction_horizon_minutes"
+      | "last_entry_cutoff_minutes_before_close"
+      | "eod_closeout_enabled"
+      | "eod_closeout_minutes_before_close"
+      | "eod_flat_verify_minutes_before_close"
+      | "equity_divergence_alert_frac"
     >
   >;
 
@@ -48,5 +60,13 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     demotion_jev_sell_max_loss_pct: raw.demotion_jev_sell_max_loss_pct ?? 0.02,
     demotion_force_exit: raw.demotion_force_exit ?? false,
     watchlist_min_buy: raw.watchlist_min_buy ?? 0.6,
+    prediction_horizon_minutes: raw.prediction_horizon_minutes ?? 15,
+    last_entry_cutoff_minutes_before_close:
+      raw.last_entry_cutoff_minutes_before_close ?? 40,
+    eod_closeout_enabled: raw.eod_closeout_enabled ?? true,
+    eod_closeout_minutes_before_close: raw.eod_closeout_minutes_before_close ?? 10,
+    eod_flat_verify_minutes_before_close:
+      raw.eod_flat_verify_minutes_before_close ?? 5,
+    equity_divergence_alert_frac: raw.equity_divergence_alert_frac ?? 0.05,
   };
 }

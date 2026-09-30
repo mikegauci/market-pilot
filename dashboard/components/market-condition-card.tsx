@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/card";
+import { useLiveBotStatus } from "@/components/bot-status-provider";
 import {
   fetchLatestPredictionsBySymbol,
   fetchMarketNews,
   fetchSettings,
 } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
-import { getMarketStatus } from "@/lib/market-hours";
+import { getMarketStatusFromBot } from "@/lib/market-hours";
 import {
   marketConditionDotClass,
   marketConditionFactorClass,
@@ -35,6 +36,7 @@ function useLiveMarketCondition(
   const loadPredictions = useCallback(() => fetchLatestPredictionsBySymbol(), []);
   const loadNews = useCallback(() => fetchMarketNews(80), []);
   const loadSettings = useCallback(() => fetchSettings(), []);
+  const botStatus = useLiveBotStatus();
 
   const livePredictions = useLiveQuery(predictions, loadPredictions, ["predictions"]);
   const liveNews = useLiveQuery(news, loadNews, ["market_news"]);
@@ -45,11 +47,11 @@ function useLiveMarketCondition(
   const [isMarketOpen, setIsMarketOpen] = useState(true);
 
   useEffect(() => {
-    const tick = () => setIsMarketOpen(getMarketStatus().isOpen);
+    const tick = () => setIsMarketOpen(getMarketStatusFromBot(botStatus).isOpen);
     tick();
-    const id = setInterval(tick, 30_000);
+    const id = setInterval(tick, 5_000);
     return () => clearInterval(id);
-  }, []);
+  }, [botStatus]);
 
   return useMemo(
     () =>

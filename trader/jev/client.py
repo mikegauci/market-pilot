@@ -18,7 +18,7 @@ TRADE_ACTION_QUESTION = {
     "instructions": (
         "Evaluate the short-term day-trading direction for this US equity "
         "from the supplied market state. Return calibrated buy, hold, or sell "
-        "probabilities for the next few minutes of intraday movement. "
+        "probabilities for the next 15 minutes of intraday movement. "
         "Prefer BUY only when momentum, volume, and trend alignment (price vs EMA-9/20 "
         "on 1-minute bars, RSI-14 on 1-minute bars not overbought) support a long "
         "entry. Penalize BUY when the stock is extended, spread is wide, or the broad "

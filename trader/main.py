@@ -10,6 +10,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+from alerts import build_notifier_from_env
+from broker.eod import (
+    entries_blocked_by_session,
+    flatten_open_positions_eod,
+    in_eod_closeout_window,
+    in_eod_flat_verify_window,
+    verify_flat_and_alert,
+)
 from broker.execution import (
     close_ibkr_signal_exits,
     collect_demotion_exit_symbols,
@@ -34,7 +42,7 @@ from news.cache import TtlCache
 from news.client import FetchStatus, FinnhubNewsClient, NewsService
 from news.enrich import enrich_market_state_with_news
 from news.sentiment import NewsContext
-from market.hours import is_us_regular_session_open
+from market.hours import get_session_clock, is_us_regular_session_open
 from market.indicators import build_market_state
 from market.mock import MockMarketProvider
 from models.types import (
@@ -278,15 +286,42 @@ def _get_quotes(
 
 def _resolve_effective_capital(
     ibkr: IBKRClient,
-    fallback: float,
+    account_capital: float,
+    trading_mode: TradingMode,
+    *,
+    equity_divergence_alert_frac: float = 0.05,
+    notifier=None,
+    divergence_alerted_dates: Optional[set] = None,
 ) -> tuple[float, str]:
+    """Return sizing_capital for RiskManager.
+
+    Paper: always account_capital (never IBKR paper NetLiq).
+    Live: min(NetLiquidation, account_capital); alert on large divergence.
+    """
+    if trading_mode == TradingMode.PAPER:
+        return float(account_capital), "USD"
+
     if ibkr.is_connected():
         try:
             account = ibkr.get_account_summary()
-            return account.net_liquidation, account.currency
+            net_liq = float(account.net_liquidation)
+            sizing = min(net_liq, float(account_capital))
+            if account_capital > 0 and notifier is not None:
+                gap = abs(net_liq - float(account_capital)) / float(account_capital)
+                if gap > float(equity_divergence_alert_frac):
+                    today = datetime.now(timezone.utc).date()
+                    alerted = divergence_alerted_dates if divergence_alerted_dates is not None else set()
+                    if today not in alerted:
+                        notifier.send(
+                            f"Market Pilot equity divergence: NetLiq=${net_liq:.2f} "
+                            f"account_capital=${account_capital:.2f} "
+                            f"({gap:.1%} > {equity_divergence_alert_frac:.1%})"
+                        )
+                        alerted.add(today)
+            return sizing, account.currency
         except Exception as exc:
             logger.warning("Could not read IBKR capital: %s", exc)
-    return fallback, "USD"
+    return float(account_capital), "USD"
 
 
 def _sync_portfolio_state(
@@ -333,7 +368,12 @@ def _init_risk_manager(
 ) -> RiskManager:
     if risk_settings is None:
         risk_settings = db.get_risk_settings()
-    capital, currency = _resolve_effective_capital(ibkr, risk_settings.account_capital)
+    capital, currency = _resolve_effective_capital(
+        ibkr,
+        risk_settings.account_capital,
+        trading_mode,
+        equity_divergence_alert_frac=risk_settings.equity_divergence_alert_frac,
+    )
     manager = RiskManager(
         settings=risk_settings,
         trading_mode=trading_mode,
@@ -616,6 +656,15 @@ def run() -> int:
     execution_mode = effective_execution_mode(
         settings.data_source, configured_execution_mode
     )
+    notifier = build_notifier_from_env()
+    if not notifier.configured():
+        logger.warning(
+            "Telegram notifier unconfigured (set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)"
+        )
+    _equity_divergence_alerted: set = set()
+    _eod_entries_cancelled_for_close: Optional[datetime] = None
+    _eod_flat_verified_for_close: Optional[datetime] = None
+
     risk_manager: Optional[RiskManager] = None
     if db:
         risk_manager = _init_risk_manager(db, ibkr, trading_mode, risk_settings)
@@ -875,6 +924,10 @@ def run() -> int:
                     capital, currency = _resolve_effective_capital(
                         ibkr,
                         risk_settings.account_capital,
+                        trading_mode,
+                        equity_divergence_alert_frac=risk_settings.equity_divergence_alert_frac,
+                        notifier=notifier,
+                        divergence_alerted_dates=_equity_divergence_alerted,
                     )
                     risk_manager.update_capital(capital, currency)
 
@@ -1014,15 +1067,109 @@ def run() -> int:
             )
             benchmark_minute_bars = minute_bars.get(benchmark_symbol.upper())
 
-            market_open = (
-                settings.data_source != DataSource.IBKR or is_us_regular_session_open()
+            session = get_session_clock()
+            if db:
+                try:
+                    db.update_session_clock(
+                        is_open=session.is_open if not session.fail_closed else False,
+                        open_at=session.session_open_at,
+                        close_at=session.session_close_at,
+                        minutes_to_close=session.minutes_to_close,
+                        error=session.error,
+                        notifier_configured=notifier.configured(),
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to publish session clock: %s", exc)
+
+            # EOD closeout: cancel working entries + flatten every cycle until flat.
+            if (
+                risk_manager
+                and risk_settings
+                and in_eod_closeout_window(
+                    session.minutes_to_close,
+                    risk_settings.eod_closeout_minutes_before_close,
+                    enabled=risk_settings.eod_closeout_enabled,
+                )
+            ):
+                close_key = session.session_close_at
+                if (
+                    execution_mode == ExecutionMode.IBKR
+                    and ibkr.is_connected()
+                    and close_key is not None
+                    and _eod_entries_cancelled_for_close != close_key
+                ):
+                    try:
+                        cancelled = ibkr.cancel_working_entry_orders()
+                        if cancelled:
+                            logger.info(
+                                "EOD cancelled %s working entry order(s)", cancelled
+                            )
+                        _eod_entries_cancelled_for_close = close_key
+                    except Exception as exc:
+                        logger.error("EOD cancel working entries failed: %s", exc)
+
+                if flatten_open_positions_eod(
+                    ibkr=ibkr if execution_mode == ExecutionMode.IBKR else None,
+                    risk_manager=risk_manager,
+                    db=db,
+                    quotes_by_symbol=quotes_by_symbol,
+                    execution_mode_ibkr=execution_mode == ExecutionMode.IBKR,
+                    fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                ):
+                    portfolio_dirty = True
+
+            if (
+                risk_manager
+                and risk_settings
+                and db
+                and in_eod_flat_verify_window(
+                    session.minutes_to_close,
+                    risk_settings.eod_flat_verify_minutes_before_close,
+                )
+            ):
+                close_key = session.session_close_at
+                if close_key is not None and _eod_flat_verified_for_close != close_key:
+                    verify_flat_and_alert(
+                        risk_manager=risk_manager,
+                        notifier=notifier,
+                        persist=lambda verified_at, ok, detail: db.update_eod_flat_verify(
+                            verified_at=verified_at, ok=ok, detail=detail
+                        ),
+                    )
+                    _eod_flat_verified_for_close = close_key
+
+            entry_block = entries_blocked_by_session(
+                minutes_to_close=session.minutes_to_close,
+                last_entry_cutoff_minutes=getattr(
+                    risk_settings, "last_entry_cutoff_minutes_before_close", 40
+                )
+                if risk_settings
+                else 40,
+                session_fail_closed=session.fail_closed
+                if settings.data_source == DataSource.IBKR
+                else False,
+                session_is_open=session.is_open
+                if settings.data_source == DataSource.IBKR
+                else True,
             )
+            if settings.data_source != DataSource.IBKR:
+                entry_block = None
+
+            # Session closed / clock error: skip Jev entirely. Last-entry cutoff:
+            # still eval open positions for exits, but block new entries later.
+            session_allows_jev = True
+            if settings.data_source == DataSource.IBKR:
+                if session.fail_closed or not session.is_open:
+                    session_allows_jev = False
+
+            market_open = session_allows_jev
             if not market_open:
                 global _last_closed_market_log
                 now_mono = time.monotonic()
                 if (now_mono - _last_closed_market_log) >= _CLOSED_MARKET_LOG_INTERVAL_SEC:
                     logger.info(
-                        "US market closed — skipping Jev (exits/heartbeat continue)"
+                        "US session blocked entries (%s) — exits/heartbeat continue",
+                        entry_block or "market_closed",
                     )
                     _last_closed_market_log = now_mono
 
@@ -1134,7 +1281,11 @@ def run() -> int:
                     trade_created = False
                     trade_skip_reason: Optional[str] = None
                     eligible = is_trade_eligible(tier)
-                    if not eligible:
+                    if entry_block:
+                        confirmation_tracker.record(symbol, False)
+                        trade_skip_reason = entry_block
+                        eligible = False
+                    elif not eligible:
                         confirmation_tracker.record(symbol, False)
                         trade_skip_reason = trade_skip_reason_from_tier(tier)
                     elif not confirmation_tracker.record(symbol, True):

@@ -35,6 +35,11 @@ import {
   type StrategyHint,
 } from "@/lib/strategy-recommendations";
 import type { EmUniverseRow, Settings } from "@/lib/types/database";
+import {
+  computePositionSizing,
+  isRiskPerTradeNonBinding,
+  paperAvailableCash,
+} from "@/lib/position-sizing";
 import { cn, formatCurrency } from "@/lib/utils";
 
 const SETTING_DESCRIPTIONS_FULL = {
@@ -43,20 +48,32 @@ const SETTING_DESCRIPTIONS_FULL = {
   signal_record_threshold:
     "Buy signals above this level are marked as worth watching, so you can spot near-misses below your trade threshold.",
   risk_per_trade:
-    "Most you are willing to lose on one trade if the stop loss is hit.",
-  max_position_size: "Largest amount the bot will put into a single trade.",
+    "Most you are willing to lose on one trade if the stop loss is hit (USD). Profile presets derive this from risk_sync_equity × profile fraction.",
+  max_position_size: "Largest amount the bot will put into a single trade (USD).",
   max_daily_loss:
     "If today's losses reach this amount, the bot stops opening new trades until tomorrow.",
   max_open_positions:
     "How many trades the bot can hold at the same time. Set at or above dynamic top-N to avoid slot blocking when names rotate off.",
+  account_capital:
+    "Paper sizing bankroll (USD). Live sizing uses min(IBKR NetLiquidation, this value).",
   stop_loss_percentage:
     "Auto-sell if the price drops this % below your entry — also controls how large each trade is for a given risk budget.",
   take_profit_percentage:
     "Auto-sell when the price rises this % above your entry to lock in gains.",
+  prediction_horizon_minutes:
+    "Expected holding horizon aligned with the Jev question (default 15 minutes).",
+  last_entry_cutoff_minutes_before_close:
+    "Block new entries this many minutes before the session close (early-close aware).",
+  eod_closeout_minutes_before_close:
+    "Flatten open positions this many minutes before the session close (5–15).",
+  eod_flat_verify_minutes_before_close:
+    "Verify the book is flat this many minutes before close and alert if not.",
+  equity_divergence_alert_frac:
+    "In live mode, alert when NetLiquidation and account capital differ by more than this %.",
   max_hold_minutes:
-    "Force-close open trades after this many minutes (0 = off). When off, exits use stop loss, take profit, and Jev SELL only.",
+    "Force-close open trades after this many minutes (0 = off / unbounded). When off, exits use stop loss, take profit, Jev SELL, and EOD closeout.",
   min_hold_minutes:
-    "Block Jev SELL soft-exits until a trade has been open this many minutes (0 = off). Stop loss and take profit still work immediately.",
+    "Block Jev SELL soft-exits until a trade has been open this many minutes (0 = off). Stop loss, take profit, and EOD still work immediately.",
   jev_sell_exit_threshold:
     "Only soft-exit on a Jev SELL when sell probability reaches this % (and sell is dominant). Higher values let bracket take-profit work more often.",
   reentry_cooldown_minutes:
@@ -78,13 +95,19 @@ const SETTING_DESCRIPTIONS_FULL = {
 const SETTING_DESCRIPTIONS = {
   minimum_jev_confidence: "Minimum AI confidence before the bot opens a trade.",
   signal_record_threshold: "Log buy signals above this % as watchlist-worthy near-misses.",
-  risk_per_trade: "Max loss per trade if stop loss hits.",
-  max_position_size: "Cap on capital deployed in one position.",
-  max_daily_loss: "Stop new trades after today's losses reach this amount.",
+  risk_per_trade: "Max loss per trade if stop loss hits ($).",
+  max_position_size: "Cap on capital deployed in one position ($).",
+  max_daily_loss: "Stop new trades after today's losses reach this amount ($).",
   max_open_positions: "Concurrent open trades allowed (recommend ≥ max dynamic symbols).",
+  account_capital: "Paper bankroll / live sizing ceiling ($).",
   stop_loss_percentage: "Exit when price falls this % below entry.",
   take_profit_percentage: "Exit when price rises this % above entry.",
-  max_hold_minutes: "Force-close after N minutes (0 = off).",
+  prediction_horizon_minutes: "Jev prediction horizon (minutes).",
+  last_entry_cutoff_minutes_before_close: "No new entries N minutes before close.",
+  eod_closeout_minutes_before_close: "Flatten N minutes before close (5–15).",
+  eod_flat_verify_minutes_before_close: "Flat-check N minutes before close.",
+  equity_divergence_alert_frac: "Alert when NetLiq vs capital diverge by this %.",
+  max_hold_minutes: "Force-close after N minutes (0 = unbounded).",
   min_hold_minutes: "No Jev SELL exit until N minutes (0 = off).",
   jev_sell_exit_threshold: "Min Jev SELL % required to soft-exit.",
   reentry_cooldown_minutes: "No re-entry in same symbol for N minutes (0 = off).",
@@ -284,6 +307,22 @@ export function SettingsForm({
   const [reentryCooldownMinutes, setReentryCooldownMinutes] = useState(
     settings.reentry_cooldown_minutes ?? 45,
   );
+  const [predictionHorizon, setPredictionHorizon] = useState(
+    settings.prediction_horizon_minutes ?? 15,
+  );
+  const [lastEntryCutoff, setLastEntryCutoff] = useState(
+    settings.last_entry_cutoff_minutes_before_close ?? 40,
+  );
+  const [eodCloseoutMinutes, setEodCloseoutMinutes] = useState(
+    settings.eod_closeout_minutes_before_close ?? 10,
+  );
+  const [eodFlatVerifyMinutes, setEodFlatVerifyMinutes] = useState(
+    settings.eod_flat_verify_minutes_before_close ?? 5,
+  );
+  const [accountCapital, setAccountCapital] = useState(settings.account_capital);
+  const [equityDivergencePct, setEquityDivergencePct] = useState(
+    Math.round((settings.equity_divergence_alert_frac ?? 0.05) * 100),
+  );
   const [minVolumeRatio, setMinVolumeRatio] = useState(settings.min_volume_ratio ?? 0);
   const [minSharePrice, setMinSharePrice] = useState(settings.min_share_price ?? 20);
   const maxHoldHints = getMaxHoldHints(maxHoldMinutes);
@@ -296,6 +335,37 @@ export function SettingsForm({
   const stopLossHints = getStopLossHints(stopLossFraction);
   const takeProfitHints = getTakeProfitHints(takeProfitFraction, stopLossFraction);
 
+  const sizingPreview = computePositionSizing({
+    price: 50,
+    riskPerTrade,
+    stopLossPercentage: stopLossFraction,
+    maxPositionSize,
+    availableCash: paperAvailableCash(accountCapital, 0),
+  });
+  const riskNonBinding = isRiskPerTradeNonBinding(
+    riskPerTrade,
+    maxPositionSize,
+    stopLossFraction,
+  );
+  const horizonWarnings: string[] = [];
+  if (maxHoldMinutes === 0) {
+    horizonWarnings.push("Max hold is off (unbounded) — positions rely on SL/TP and EOD closeout.");
+  }
+  if (maxHoldMinutes > 0 && maxHoldMinutes > predictionHorizon) {
+    horizonWarnings.push(
+      `Max hold (${maxHoldMinutes}m) is longer than prediction horizon (${predictionHorizon}m).`,
+    );
+  }
+  if (lastEntryCutoff < eodCloseoutMinutes + minHoldMinutes) {
+    horizonWarnings.push(
+      `Last-entry cutoff (${lastEntryCutoff}m) is shorter than closeout + min hold (${eodCloseoutMinutes + minHoldMinutes}m).`,
+    );
+  }
+  if (lastEntryCutoff < eodCloseoutMinutes + predictionHorizon) {
+    horizonWarnings.push(
+      `Last-entry cutoff (${lastEntryCutoff}m) is shorter than closeout + horizon (${eodCloseoutMinutes + predictionHorizon}m).`,
+    );
+  }
   const riskValues = {
     risk_per_trade: riskPerTrade,
     max_position_size: maxPositionSize,
@@ -440,6 +510,143 @@ export function SettingsForm({
               type="number"
               step="1"
               defaultValue={settings.max_open_positions}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="account_capital"
+            label="Account capital ($)"
+            description={SETTING_DESCRIPTIONS.account_capital}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.account_capital}
+          >
+            <Input
+              id="account_capital"
+              name="account_capital"
+              type="number"
+              step="0.01"
+              min={0.01}
+              value={accountCapital}
+              onChange={(event) => setAccountCapital(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="equity_divergence_alert_frac"
+            label="Equity divergence alert (%)"
+            description={SETTING_DESCRIPTIONS.equity_divergence_alert_frac}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.equity_divergence_alert_frac}
+          >
+            <Input
+              id="equity_divergence_alert_frac"
+              name="equity_divergence_alert_frac"
+              type="number"
+              step="1"
+              min={1}
+              max={50}
+              value={equityDivergencePct}
+              onChange={(event) => setEquityDivergencePct(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
+        </SettingsFieldGroup>
+        {riskNonBinding ? (
+          <p className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+            Risk per trade is non-binding at this stop — max position size caps the order.
+            Requested risk ${sizingPreview.requestedRiskUsd.toFixed(2)} → planned $
+            {sizingPreview.plannedRiskUsd.toFixed(2)} (binding: {sizingPreview.sizingBinding}).
+          </p>
+        ) : null}
+        <p className="mt-2 text-xs text-zinc-500">
+          Effective risk preview at $50/share: qty {sizingPreview.quantity}, notional $
+          {sizingPreview.positionValue.toFixed(2)}, planned risk $
+          {sizingPreview.plannedRiskUsd.toFixed(2)} ({sizingPreview.sizingBinding}).
+          Profile dollars are derived from risk_sync_equity × profile fraction when you apply a
+          card — the engine uses the stored dollar fields, not equity, at trade time.
+        </p>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Horizon & session"
+        description="Prediction horizon, last-entry cutoff, and end-of-day closeout (overnight holding is not supported)."
+      >
+        <input type="hidden" name="eod_closeout_enabled" value="on" />
+        {horizonWarnings.length > 0 ? (
+          <div className="mb-3 space-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+            {horizonWarnings.map((w) => (
+              <p key={w}>{w}</p>
+            ))}
+          </div>
+        ) : null}
+        <SettingsFieldGroup>
+          <SettingsField
+            id="prediction_horizon_minutes"
+            label="Prediction horizon (minutes)"
+            description={SETTING_DESCRIPTIONS.prediction_horizon_minutes}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.prediction_horizon_minutes}
+          >
+            <Input
+              id="prediction_horizon_minutes"
+              name="prediction_horizon_minutes"
+              type="number"
+              step="1"
+              min={1}
+              max={480}
+              value={predictionHorizon}
+              onChange={(event) => setPredictionHorizon(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="last_entry_cutoff_minutes_before_close"
+            label="Last-entry cutoff (min before close)"
+            description={SETTING_DESCRIPTIONS.last_entry_cutoff_minutes_before_close}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.last_entry_cutoff_minutes_before_close}
+          >
+            <Input
+              id="last_entry_cutoff_minutes_before_close"
+              name="last_entry_cutoff_minutes_before_close"
+              type="number"
+              step="1"
+              min={1}
+              max={120}
+              value={lastEntryCutoff}
+              onChange={(event) => setLastEntryCutoff(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="eod_closeout_minutes_before_close"
+            label="EOD closeout (min before close)"
+            description={SETTING_DESCRIPTIONS.eod_closeout_minutes_before_close}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.eod_closeout_minutes_before_close}
+          >
+            <Input
+              id="eod_closeout_minutes_before_close"
+              name="eod_closeout_minutes_before_close"
+              type="number"
+              step="1"
+              min={5}
+              max={15}
+              value={eodCloseoutMinutes}
+              onChange={(event) => setEodCloseoutMinutes(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="eod_flat_verify_minutes_before_close"
+            label="EOD flat-verify (min before close)"
+            description={SETTING_DESCRIPTIONS.eod_flat_verify_minutes_before_close}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.eod_flat_verify_minutes_before_close}
+          >
+            <Input
+              id="eod_flat_verify_minutes_before_close"
+              name="eod_flat_verify_minutes_before_close"
+              type="number"
+              step="1"
+              min={1}
+              max={10}
+              value={eodFlatVerifyMinutes}
+              onChange={(event) => setEodFlatVerifyMinutes(Number(event.target.value))}
               required
             />
           </SettingsField>

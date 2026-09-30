@@ -186,6 +186,67 @@ class SupabaseRepository:
             "last_error": status.last_error,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+        if status.session_is_open is not None:
+            payload["session_is_open"] = status.session_is_open
+        if status.session_open_at is not None:
+            payload["session_open_at"] = status.session_open_at.isoformat()
+        elif status.session_clock_error is not None:
+            payload["session_open_at"] = None
+        if status.session_close_at is not None:
+            payload["session_close_at"] = status.session_close_at.isoformat()
+        elif status.session_clock_error is not None:
+            payload["session_close_at"] = None
+        if status.minutes_to_close is not None or status.session_clock_error is not None:
+            payload["minutes_to_close"] = status.minutes_to_close
+        if status.session_clock_error is not None or status.session_is_open is not None:
+            payload["session_clock_error"] = status.session_clock_error
+        if status.eod_flat_verified_at is not None:
+            payload["eod_flat_verified_at"] = status.eod_flat_verified_at.isoformat()
+        if status.eod_flat_verify_ok is not None:
+            payload["eod_flat_verify_ok"] = status.eod_flat_verify_ok
+        if status.eod_flat_verify_detail is not None:
+            payload["eod_flat_verify_detail"] = status.eod_flat_verify_detail
+        if status.notifier_configured is not None:
+            payload["notifier_configured"] = status.notifier_configured
+        self.client.table("bot_status").update(payload).eq("id", 1).execute()
+
+    @_db_synchronized
+    def update_eod_flat_verify(
+        self,
+        *,
+        verified_at: datetime,
+        ok: bool,
+        detail: str,
+    ) -> None:
+        payload = {
+            "eod_flat_verified_at": verified_at.isoformat(),
+            "eod_flat_verify_ok": ok,
+            "eod_flat_verify_detail": detail,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.client.table("bot_status").update(payload).eq("id", 1).execute()
+
+    @_db_synchronized
+    def update_session_clock(
+        self,
+        *,
+        is_open: Optional[bool],
+        open_at: Optional[datetime],
+        close_at: Optional[datetime],
+        minutes_to_close: Optional[float],
+        error: Optional[str],
+        notifier_configured: Optional[bool] = None,
+    ) -> None:
+        payload = {
+            "session_is_open": is_open,
+            "session_open_at": open_at.isoformat() if open_at else None,
+            "session_close_at": close_at.isoformat() if close_at else None,
+            "minutes_to_close": minutes_to_close,
+            "session_clock_error": error,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if notifier_configured is not None:
+            payload["notifier_configured"] = notifier_configured
         self.client.table("bot_status").update(payload).eq("id", 1).execute()
 
     @_db_synchronized
@@ -348,6 +409,9 @@ class SupabaseRepository:
                 "max_position_size, max_daily_loss, max_open_positions, "
                 "stop_loss_percentage, take_profit_percentage, max_hold_minutes, "
                 "min_hold_minutes, jev_sell_exit_threshold, reentry_cooldown_minutes, "
+                "prediction_horizon_minutes, last_entry_cutoff_minutes_before_close, "
+                "eod_closeout_enabled, eod_closeout_minutes_before_close, "
+                "eod_flat_verify_minutes_before_close, equity_divergence_alert_frac, "
                 "min_volume_ratio, min_share_price, "
                 "account_capital, risk_sync_equity, watchlist, watchlist_core, "
                 "watchlist_dynamic_enabled, watchlist_dynamic_size, "
@@ -372,6 +436,9 @@ class SupabaseRepository:
         )
         self._cached_risk_sync_equity = risk_sync_equity
         screener_ran_at = data.get("watchlist_screener_ran_at")
+        from strategy.horizon import sanitize_horizon_eod_fields
+
+        horizon = sanitize_horizon_eod_fields(data)
         return RiskSettings(
             minimum_jev_confidence=float(data.get("minimum_jev_confidence", 0.85)),
             signal_record_threshold=float(data.get("signal_record_threshold", 0.80)),
@@ -385,6 +452,18 @@ class SupabaseRepository:
             min_hold_minutes=float(data.get("min_hold_minutes", 15)),
             jev_sell_exit_threshold=float(data.get("jev_sell_exit_threshold", 0.95)),
             reentry_cooldown_minutes=float(data.get("reentry_cooldown_minutes", 45)),
+            prediction_horizon_minutes=int(horizon["prediction_horizon_minutes"]),
+            last_entry_cutoff_minutes_before_close=int(
+                horizon["last_entry_cutoff_minutes_before_close"]
+            ),
+            eod_closeout_enabled=bool(horizon["eod_closeout_enabled"]),
+            eod_closeout_minutes_before_close=int(
+                horizon["eod_closeout_minutes_before_close"]
+            ),
+            eod_flat_verify_minutes_before_close=int(
+                horizon["eod_flat_verify_minutes_before_close"]
+            ),
+            equity_divergence_alert_frac=float(horizon["equity_divergence_alert_frac"]),
             min_volume_ratio=float(data.get("min_volume_ratio", 0.5)),
             min_share_price=float(data.get("min_share_price", 20)),
             account_capital=float(data.get("account_capital", 1000)),

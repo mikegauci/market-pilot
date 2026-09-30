@@ -7,7 +7,8 @@ import { PredictionIndicatorSummary } from "@/components/prediction-indicators";
 import { fetchLatestPredictionsBySymbol } from "@/lib/data-client";
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
-import { getMarketStatus } from "@/lib/market-hours";
+import { useLiveBotStatus } from "@/components/bot-status-provider";
+import { getMarketStatusFromBot } from "@/lib/market-hours";
 import {
   assessMarketCondition,
   marketConditionDotClass,
@@ -27,14 +28,15 @@ type Props = {
 export function LiveStrategyGrid({ predictions, settings }: Props) {
   const load = useCallback(() => fetchLatestPredictionsBySymbol(), []);
   const live = useLiveQuery(predictions, load, ["predictions"]);
+  const botStatus = useLiveBotStatus();
   const [isMarketOpen, setIsMarketOpen] = useState(true);
 
   useEffect(() => {
-    const tick = () => setIsMarketOpen(getMarketStatus().isOpen);
+    const tick = () => setIsMarketOpen(getMarketStatusFromBot(botStatus).isOpen);
     tick();
-    const id = setInterval(tick, 30_000);
+    const id = setInterval(tick, 5_000);
     return () => clearInterval(id);
-  }, []);
+  }, [botStatus]);
 
   const watchlist = useMemo(() => resolveEffectiveWatchlist(settings), [settings]);
   const filterOptions = filterSummaryFromSettings(settings);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getMarketStatus, type MarketStatus } from "@/lib/market-hours";
+import { getMarketStatusFromBot, type MarketStatus } from "@/lib/market-hours";
 import { getTradeModeCopy } from "@/lib/trade-mode";
 import { getDisplayStatus, getStableDisplayNow } from "@/lib/trader-status";
 import type { BotStatus } from "@/lib/types/database";
@@ -28,7 +28,7 @@ export function StatusBadges({
   useEffect(() => {
     if (!mounted) return;
     setDisplay(getDisplayStatus(status));
-    setMarket(getMarketStatus());
+    setMarket(getMarketStatusFromBot(status));
   }, [
     mounted,
     status.enabled,
@@ -38,6 +38,11 @@ export function StatusBadges({
     status.last_error,
     status.trading_mode,
     status.execution_mode,
+    status.session_is_open,
+    status.session_open_at,
+    status.session_close_at,
+    status.minutes_to_close,
+    status.session_clock_error,
   ]);
 
   useEffect(() => {
@@ -45,7 +50,7 @@ export function StatusBadges({
 
     const tick = () => {
       setDisplay(getDisplayStatus(statusRef.current));
-      setMarket(getMarketStatus());
+      setMarket(getMarketStatusFromBot(statusRef.current));
     };
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);

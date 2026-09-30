@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Dict, Optional
 
+from broker.symbol_locks import EXIT_LOCKS
 from models.types import ClosedTrade, ExecutionMode, Quote, TradeRecord
 
 if TYPE_CHECKING:
@@ -64,15 +65,23 @@ def _execute_manual_close(
         if not ibkr.is_connected():
             raise RuntimeError("ibkr_not_connected")
 
-        exit_price, filled_qty = ibkr.close_long_position(
-            trade.symbol,
-            trade.quantity,
-            parent_order_id=trade.ibkr_parent_order_id,
-            sl_order_id=trade.ibkr_sl_order_id,
-            tp_order_id=trade.ibkr_tp_order_id,
-            fill_timeout_sec=fill_timeout_sec,
-        )
-        gross_pnl = (exit_price - trade.entry_price) * filled_qty
+        with EXIT_LOCKS.hold(trade.symbol):
+            result = ibkr.close_long_position_safe(
+                trade.symbol,
+                trade.quantity,
+                parent_order_id=trade.ibkr_parent_order_id,
+                sl_order_id=trade.ibkr_sl_order_id,
+                tp_order_id=trade.ibkr_tp_order_id,
+                fill_timeout_sec=fill_timeout_sec,
+            )
+        if result.already_flat:
+            exit_price = trade.entry_price
+            filled_qty = 0.0
+            gross_pnl = 0.0
+        else:
+            exit_price = result.fill_price
+            filled_qty = result.filled_quantity
+            gross_pnl = (exit_price - trade.entry_price) * filled_qty
         net_pnl = gross_pnl
         now = datetime.now(timezone.utc)
         risk_manager.record_closed_pnl(net_pnl)

@@ -22,6 +22,13 @@ const baseFields = {
   min_hold_minutes: "15",
   jev_sell_exit_threshold: "95",
   reentry_cooldown_minutes: "45",
+  prediction_horizon_minutes: "15",
+  last_entry_cutoff_minutes_before_close: "40",
+  eod_closeout_enabled: "on",
+  eod_closeout_minutes_before_close: "10",
+  eod_flat_verify_minutes_before_close: "5",
+  equity_divergence_alert_frac: "5",
+  account_capital: "10000",
   min_volume_ratio: "0.5",
   min_share_price: "20",
   watchlist_core: "AAPL, MSFT",
@@ -176,5 +183,22 @@ describe("parseSettingsForm exit tuning", () => {
         }),
       ),
     ).toThrow("Min hold (minutes) must be at or below max hold when max hold is on");
+  });
+});
+
+describe("parseSettingsForm eod closeout", () => {
+  it("rejects eod_closeout_enabled off", () => {
+    expect(() =>
+      parseSettingsForm(form({ ...baseFields, eod_closeout_enabled: "" })),
+    ).toThrow("End-of-day closeout must stay ON");
+  });
+
+  it("parses equity divergence as fraction", () => {
+    const parsed = parseSettingsForm(
+      form({ ...baseFields, equity_divergence_alert_frac: "5" }),
+    );
+    expect(parsed.equity_divergence_alert_frac).toBe(0.05);
+    expect(parsed.account_capital).toBe(10000);
+    expect(parsed.prediction_horizon_minutes).toBe(15);
   });
 });

@@ -28,6 +28,12 @@ function labelFor(name: string): string {
     min_hold_minutes: "Min hold (minutes)",
     jev_sell_exit_threshold: "Jev SELL exit (%)",
     reentry_cooldown_minutes: "Re-entry cooldown (minutes)",
+    prediction_horizon_minutes: "Prediction horizon (minutes)",
+    last_entry_cutoff_minutes_before_close: "Last-entry cutoff (minutes before close)",
+    eod_closeout_minutes_before_close: "EOD closeout (minutes before close)",
+    eod_flat_verify_minutes_before_close: "EOD flat-verify (minutes before close)",
+    equity_divergence_alert_frac: "Equity divergence alert (%)",
+    account_capital: "Account capital ($)",
     watchlist_dynamic_size: "Dynamic top-N",
     watchlist_min_buy: "Watchlist min BUY (%)",
     min_volume_ratio: "Min volume ratio",
@@ -49,6 +55,13 @@ export type ParsedSettings = {
   min_hold_minutes: number;
   jev_sell_exit_threshold: number;
   reentry_cooldown_minutes: number;
+  prediction_horizon_minutes: number;
+  last_entry_cutoff_minutes_before_close: number;
+  eod_closeout_enabled: boolean;
+  eod_closeout_minutes_before_close: number;
+  eod_flat_verify_minutes_before_close: number;
+  equity_divergence_alert_frac: number;
+  account_capital: number;
   min_volume_ratio: number;
   min_share_price: number;
   risk_profile: RiskProfile;
@@ -109,6 +122,30 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     formData,
     "reentry_cooldown_minutes",
   );
+  const prediction_horizon_minutes = parseRequiredNumber(
+    formData,
+    "prediction_horizon_minutes",
+  );
+  const last_entry_cutoff_minutes_before_close = parseRequiredNumber(
+    formData,
+    "last_entry_cutoff_minutes_before_close",
+  );
+  const eod_closeout_enabled =
+    String(formData.get("eod_closeout_enabled") ?? "on") === "on";
+  const eod_closeout_minutes_before_close = parseRequiredNumber(
+    formData,
+    "eod_closeout_minutes_before_close",
+  );
+  const eod_flat_verify_minutes_before_close = parseRequiredNumber(
+    formData,
+    "eod_flat_verify_minutes_before_close",
+  );
+  const equity_divergence_alert_pct = parseRequiredNumber(
+    formData,
+    "equity_divergence_alert_frac",
+  );
+  const equity_divergence_alert_frac = equity_divergence_alert_pct / 100;
+  const account_capital = parseRequiredNumber(formData, "account_capital");
   const min_volume_ratio = parseRequiredNumber(formData, "min_volume_ratio");
   const min_share_price = parseRequiredNumber(formData, "min_share_price");
 
@@ -124,6 +161,9 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   if (max_daily_loss <= 0) {
     throw new Error("Max daily loss must be greater than 0");
   }
+  if (account_capital <= 0) {
+    throw new Error("Account capital must be greater than 0");
+  }
   if (!Number.isInteger(max_open_positions) || max_open_positions < 1) {
     throw new Error("Max open positions must be a whole number of at least 1");
   }
@@ -138,6 +178,48 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   if (max_hold_minutes > 0 && min_hold_minutes > max_hold_minutes) {
     throw new Error("Min hold (minutes) must be at or below max hold when max hold is on");
+  }
+  if (
+    !Number.isInteger(prediction_horizon_minutes) ||
+    prediction_horizon_minutes < 1 ||
+    prediction_horizon_minutes > 480
+  ) {
+    throw new Error("Prediction horizon (minutes) must be a whole number from 1 to 480");
+  }
+  if (
+    !Number.isInteger(last_entry_cutoff_minutes_before_close) ||
+    last_entry_cutoff_minutes_before_close < 1 ||
+    last_entry_cutoff_minutes_before_close > 120
+  ) {
+    throw new Error("Last-entry cutoff must be a whole number from 1 to 120");
+  }
+  if (!eod_closeout_enabled) {
+    throw new Error(
+      "End-of-day closeout must stay ON while overnight holding is not supported",
+    );
+  }
+  if (
+    !Number.isInteger(eod_closeout_minutes_before_close) ||
+    eod_closeout_minutes_before_close < 5 ||
+    eod_closeout_minutes_before_close > 15
+  ) {
+    throw new Error("EOD closeout must be a whole number from 5 to 15");
+  }
+  if (
+    !Number.isInteger(eod_flat_verify_minutes_before_close) ||
+    eod_flat_verify_minutes_before_close < 1 ||
+    eod_flat_verify_minutes_before_close > 10
+  ) {
+    throw new Error("EOD flat-verify must be a whole number from 1 to 10");
+  }
+  if (eod_flat_verify_minutes_before_close >= eod_closeout_minutes_before_close) {
+    throw new Error("EOD flat-verify must be less than EOD closeout minutes");
+  }
+  if (last_entry_cutoff_minutes_before_close < eod_closeout_minutes_before_close) {
+    throw new Error("Last-entry cutoff must be at or above EOD closeout minutes");
+  }
+  if (equity_divergence_alert_frac < 0.01 || equity_divergence_alert_frac > 0.5) {
+    throw new Error("Equity divergence alert (%) must be between 1 and 50");
   }
   if (jev_sell_exit_threshold < 0.5) {
     throw new Error("Jev SELL exit (%) must be at least 50");
@@ -240,6 +322,13 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     min_hold_minutes,
     jev_sell_exit_threshold,
     reentry_cooldown_minutes,
+    prediction_horizon_minutes,
+    last_entry_cutoff_minutes_before_close,
+    eod_closeout_enabled,
+    eod_closeout_minutes_before_close,
+    eod_flat_verify_minutes_before_close,
+    equity_divergence_alert_frac,
+    account_capital,
     min_volume_ratio,
     min_share_price,
     risk_profile: parseRiskProfile(formData),

@@ -83,6 +83,9 @@ def close_ibkr_signal_exits(
     fill_timeout_sec: float = 30.0,
 ) -> bool:
     """Close IBKR positions on time limit, demotion, or high-confidence Jev SELL."""
+    from broker.eod import _close_ibkr_trade_safe
+    from broker.symbol_locks import EXIT_LOCKS
+
     closed_any = False
     jev_sell_symbols = jev_sell_symbols or set()
     demotion_exit_symbols = demotion_exit_symbols or set()
@@ -109,36 +112,22 @@ def close_ibkr_signal_exits(
         else:
             reason = "jev_sell"
         try:
-            exit_price, filled_qty = ibkr.close_long_position(
-                trade.symbol,
-                trade.quantity,
-                parent_order_id=trade.ibkr_parent_order_id,
-                sl_order_id=trade.ibkr_sl_order_id,
-                tp_order_id=trade.ibkr_tp_order_id,
-                fill_timeout_sec=fill_timeout_sec,
-            )
+            with EXIT_LOCKS.hold(trade.symbol):
+                if not any(t.id == trade.id for t in risk_manager.open_trades):
+                    continue
+                closed = _close_ibkr_trade_safe(
+                    ibkr=ibkr,
+                    risk_manager=risk_manager,
+                    db=db,
+                    trade=trade,
+                    reason=reason,
+                    fill_timeout_sec=fill_timeout_sec,
+                )
         except Exception as exc:
             logger.error("IBKR signal exit failed for %s: %s", trade.symbol, exc)
             continue
 
-        gross_pnl = (exit_price - trade.entry_price) * filled_qty
-        net_pnl = gross_pnl
-        now = datetime.now(timezone.utc)
-
-        db.close_trade(
-            trade.id, exit_price, now, gross_pnl, net_pnl, exit_reason=reason
-        )
-        risk_manager.remove_open_trade(trade.id)
-        risk_manager.record_closed_pnl(net_pnl)
-        risk_manager.note_symbol_exit(trade.symbol, now)
-        closed_any = True
-        logger.info(
-            "IBKR exit %s @ $%.2f (%s) PnL $%.2f",
-            trade.symbol,
-            exit_price,
-            reason,
-            net_pnl,
-        )
+        closed_any = closed_any or closed
 
     if closed_any:
         risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())

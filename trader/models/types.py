@@ -59,6 +59,15 @@ class BotStatusUpdate:
     jev_connected: bool = False
     execution_mode: ExecutionMode = ExecutionMode.IBKR
     last_error: Optional[str] = None
+    session_is_open: Optional[bool] = None
+    session_open_at: Optional[datetime] = None
+    session_close_at: Optional[datetime] = None
+    minutes_to_close: Optional[float] = None
+    session_clock_error: Optional[str] = None
+    eod_flat_verified_at: Optional[datetime] = None
+    eod_flat_verify_ok: Optional[bool] = None
+    eod_flat_verify_detail: Optional[str] = None
+    notifier_configured: Optional[bool] = None
 
 
 @dataclass
@@ -161,6 +170,14 @@ class RiskSettings:
     jev_sell_exit_threshold: float = 0.95
     # Block new entries in a symbol for this many minutes after an exit. 0 = off.
     reentry_cooldown_minutes: float = 45.0
+    # Aligns with Jev TRADE question "next 15 minutes".
+    prediction_horizon_minutes: int = 15
+    last_entry_cutoff_minutes_before_close: int = 40
+    eod_closeout_enabled: bool = True
+    eod_closeout_minutes_before_close: int = 10
+    eod_flat_verify_minutes_before_close: int = 5
+    # Live NetLiq vs account_capital divergence alert threshold (decimal fraction).
+    equity_divergence_alert_frac: float = 0.05
 
 
 @dataclass
@@ -194,6 +211,13 @@ class BracketOrderResult:
     tp_order_id: int
     fill_price: float
     filled_quantity: float
+
+
+@dataclass
+class CloseLongResult:
+    fill_price: float
+    filled_quantity: float
+    already_flat: bool = False
 
 
 @dataclass

@@ -8,6 +8,15 @@ export type BotStatus = {
   last_heartbeat: string | null;
   last_error: string | null;
   updated_at: string;
+  session_is_open?: boolean | null;
+  session_open_at?: string | null;
+  session_close_at?: string | null;
+  minutes_to_close?: number | null;
+  session_clock_error?: string | null;
+  eod_flat_verified_at?: string | null;
+  eod_flat_verify_ok?: boolean | null;
+  eod_flat_verify_detail?: string | null;
+  notifier_configured?: boolean | null;
 };
 
 export type Settings = {
@@ -28,6 +37,16 @@ export type Settings = {
   jev_sell_exit_threshold: number;
   /** Block new entries in a symbol for this many minutes after an exit (0 = off). */
   reentry_cooldown_minutes: number;
+  /** Aligns with Jev TRADE question horizon (minutes). */
+  prediction_horizon_minutes: number;
+  /** Block new entries this many minutes before session close. */
+  last_entry_cutoff_minutes_before_close: number;
+  /** Flatten open positions before the close (must stay true; overnight unsupported). */
+  eod_closeout_enabled: boolean;
+  eod_closeout_minutes_before_close: number;
+  eod_flat_verify_minutes_before_close: number;
+  /** Live NetLiq vs account_capital divergence alert threshold (decimal fraction). */
+  equity_divergence_alert_frac: number;
   /** 0 = off; block entries when 1m volume ratio is below this vs 10-bar average */
   min_volume_ratio: number;
   /** 0 = off; block entries / EM scan picks below this USD share price */

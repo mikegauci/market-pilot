@@ -835,7 +835,38 @@ class IBKRClient:
                 self._cancel_trade(trade)
 
     @_ibkr_synchronized
-    def close_long_position(
+    def cancel_working_entry_orders(self) -> int:
+        """Cancel unfilled BUY parent orders (working entries). Returns cancel count."""
+        cancelled = 0
+        for trade in list(self.ib.openTrades()):
+            order = trade.order
+            status = trade.orderStatus.status
+            if status not in {"Submitted", "PreSubmitted", "PendingSubmit", "ApiPending"}:
+                continue
+            if str(order.action).upper() != "BUY":
+                continue
+            # Skip child legs that somehow show as BUY.
+            if getattr(order, "parentId", 0):
+                continue
+            self._cancel_trade(trade)
+            cancelled += 1
+            logger.info(
+                "Cancelled working entry order %s for %s",
+                order.orderId,
+                getattr(trade.contract, "symbol", "?"),
+            )
+        return cancelled
+
+    def _broker_long_qty(self, symbol: str) -> float:
+        key = str(symbol).upper().replace(".", " ")
+        total = 0.0
+        for position in self.get_positions():
+            if position.symbol.upper().replace(".", " ") == key and position.quantity > 0:
+                total += float(position.quantity)
+        return total
+
+    @_ibkr_synchronized
+    def close_long_position_safe(
         self,
         symbol: str,
         quantity: float,
@@ -844,10 +875,9 @@ class IBKRClient:
         sl_order_id: Optional[int] = None,
         tp_order_id: Optional[int] = None,
         fill_timeout_sec: float = 30.0,
-    ) -> Tuple[float, float]:
-        """Cancel bracket legs (if any) and market-sell to close a long position."""
-        if quantity < 1:
-            raise ValueError(f"Invalid quantity for {symbol}: {quantity}")
+    ) -> "CloseLongResult":
+        """Cancel brackets, re-read broker qty, sell min(local, broker). Never oversell."""
+        from models.types import CloseLongResult
 
         if sl_order_id and tp_order_id:
             self.cancel_open_brackets(
@@ -857,11 +887,21 @@ class IBKRClient:
             )
             self.ib.sleep(0.3)
 
+        broker_qty = self._broker_long_qty(symbol)
+        sell_qty = int(min(max(0.0, float(quantity)), broker_qty))
+        if sell_qty < 1:
+            logger.info(
+                "IBKR close %s: broker flat (local=%.0f broker=%.0f) — mark closed",
+                symbol,
+                quantity,
+                broker_qty,
+            )
+            return CloseLongResult(fill_price=0.0, filled_quantity=0.0, already_flat=True)
+
         account = self._resolve_account()
         contract = self._ensure_contract(symbol)
-        qty = int(quantity)
 
-        sell = MarketOrder("SELL", qty)
+        sell = MarketOrder("SELL", sell_qty)
         sell.account = account
         sell.orderId = self.ib.client.getReqId()
         sell.tif = "DAY"
@@ -880,12 +920,42 @@ class IBKRClient:
 
         fill_price, filled_qty = fill
         logger.info(
-            "IBKR market SELL %s x %s @ $%.2f",
+            "IBKR market SELL %s x %s @ $%.2f (requested local=%.0f broker=%.0f)",
             symbol,
             filled_qty,
             fill_price,
+            quantity,
+            broker_qty,
         )
-        return fill_price, filled_qty
+        return CloseLongResult(
+            fill_price=fill_price,
+            filled_quantity=filled_qty,
+            already_flat=False,
+        )
+
+    @_ibkr_synchronized
+    def close_long_position(
+        self,
+        symbol: str,
+        quantity: float,
+        *,
+        parent_order_id: Optional[int] = None,
+        sl_order_id: Optional[int] = None,
+        tp_order_id: Optional[int] = None,
+        fill_timeout_sec: float = 30.0,
+    ) -> Tuple[float, float]:
+        """Cancel bracket legs (if any) and market-sell to close a long position."""
+        result = self.close_long_position_safe(
+            symbol,
+            quantity,
+            parent_order_id=parent_order_id,
+            sl_order_id=sl_order_id,
+            tp_order_id=tp_order_id,
+            fill_timeout_sec=fill_timeout_sec,
+        )
+        if result.already_flat:
+            return 0.0, 0.0
+        return result.fill_price, result.filled_quantity
 
     @_ibkr_synchronized
     def fetch_historical_bars(
