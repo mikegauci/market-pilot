@@ -61,11 +61,13 @@ function comparePredictions(
 }
 
 const SKIP_REASON_LABELS: Record<string, string> = {
-  below_trade_threshold: "Below confidence threshold",
+  below_trade_threshold: "Below BUY probability threshold",
   buy_hold_margin: "BUY–HOLD margin too narrow",
   hold_dominant: "HOLD dominant",
   sell_dominant: "SELL dominant",
   signal_not_eligible: "Signal not eligible",
+  jev_confidence_missing: "Jev confidence missing",
+  jev_spread_veto: "Jev sample spread veto",
   bot_disabled: "Auto-trading off",
   already_open: "Position already open",
   max_open_positions: "Max positions reached",
@@ -103,12 +105,22 @@ function formatSkipReason(reason: string | null | undefined): string | null {
 }
 
 function TradeCell({ prediction }: { prediction: Prediction }) {
+  const metaBits = [
+    prediction.model,
+    prediction.jev_confidence != null
+      ? `conf ${formatPercent(prediction.jev_confidence)}`
+      : null,
+    prediction.jev_samples_used != null && prediction.jev_samples_used > 1
+      ? `n=${prediction.jev_samples_used}`
+      : null,
+  ].filter(Boolean);
+
   if (prediction.trade_created) {
     return (
       <div className="space-y-0.5">
         <Badge className="bg-emerald-900 text-emerald-300">opened</Badge>
-        {prediction.model ? (
-          <p className="text-[10px] text-zinc-500">{prediction.model}</p>
+        {metaBits.length > 0 ? (
+          <p className="text-[10px] text-zinc-500">{metaBits.join(" · ")}</p>
         ) : null}
       </div>
     );
@@ -136,8 +148,8 @@ function TradeCell({ prediction }: { prediction: Prediction }) {
       >
         {primary}
       </span>
-      {prediction.model ? (
-        <p className="text-[10px] text-zinc-500">{prediction.model}</p>
+      {metaBits.length > 0 ? (
+        <p className="text-[10px] text-zinc-500">{metaBits.join(" · ")}</p>
       ) : null}
     </div>
   );

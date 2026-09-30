@@ -136,6 +136,12 @@ class JevPrediction:
     timestamp: datetime
     model: str = ""
     raw: Optional[dict] = None
+    # Phase 7: optional API confidence (not invented from B/H/S).
+    confidence: Optional[float] = None
+    question_key: Optional[str] = None  # "trade" | "universe"
+    request_at: Optional[datetime] = None
+    samples_used: int = 1
+    prob_stddev: Optional[float] = None
 
 
 @dataclass
@@ -215,8 +221,14 @@ class RiskSettings:
     kill_alert_min_gap_sec: int = 60
     jev_transport_fail_rate_kill_frac: float = 0.5
     jev_transport_fail_window_sec: int = 60
-    jev_timeout_sec: float = 3.0
+    jev_timeout_sec: float = 2.0
     jev_max_retries: int = 1
+    # Phase 7: which metric gates entries (default = current buy-probability behaviour).
+    jev_gate_field: str = "buy_probability"
+    jev_model_pin: Optional[str] = None
+    jev_samples: int = 1
+    jev_spread_veto_enabled: bool = False
+    jev_spread_max_stddev: float = 0.05
     reconcile_interval_sec: int = 60
     reconcile_protect_orphans: bool = True
     # Phase 5 daily-loss / drawdown

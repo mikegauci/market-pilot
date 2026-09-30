@@ -80,6 +80,13 @@ export type Settings = {
   jev_transport_fail_window_sec: number;
   jev_timeout_sec: number;
   jev_max_retries: number;
+  /** Phase 7: which metric gates entries. */
+  jev_gate_field: "buy_probability" | "confidence";
+  /** When set, request this model instead of the floating default. */
+  jev_model_pin: string | null;
+  jev_samples: number;
+  jev_spread_veto_enabled: boolean;
+  jev_spread_max_stddev: number;
   /** Phase 4: IBKR reconcile interval (seconds). */
   reconcile_interval_sec: number;
   /** Place protective brackets on unprotected orphans (else flatten). */
@@ -223,6 +230,11 @@ export type Prediction = {
   config_id?: string | null;
   decision_bid?: number | null;
   decision_ask?: number | null;
+  jev_question_key?: string | null;
+  jev_request_at?: string | null;
+  jev_confidence?: number | null;
+  jev_prob_stddev?: number | null;
+  jev_samples_used?: number | null;
   market_snapshot?: MarketSnapshot | null;
   created_at: string;
 };

@@ -45,7 +45,10 @@ describe("normalizeSettings", () => {
     expect(normalized?.confirmation_count).toBe(2);
     expect(normalized?.confirmation_mode).toBe("distinct_bars");
     expect(normalized?.stale_input_gates_enabled).toBe(true);
-    expect(normalized?.jev_timeout_sec).toBe(3);
+    expect(normalized?.jev_timeout_sec).toBe(2);
+    expect(normalized?.jev_gate_field).toBe("buy_probability");
+    expect(normalized?.jev_samples).toBe(1);
+    expect(normalized?.jev_spread_veto_enabled).toBe(false);
     expect(normalized?.reconcile_interval_sec).toBe(60);
     expect(normalized?.reconcile_protect_orphans).toBe(true);
     expect(normalized?.daily_loss_include_unrealized).toBe(true);

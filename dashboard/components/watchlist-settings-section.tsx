@@ -169,7 +169,7 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
           id="watchlist_min_buy"
           label="Watchlist min BUY (%)"
           description="Minimum Jev BUY to earn a dynamic watchlist slot."
-          descriptionTitle="Names below this BUY score are skipped even if they rank in the top N. Trade entries still require Min Jev confidence (usually higher)."
+          descriptionTitle="Names below this BUY score are skipped even if they rank in the top N. Trade entries still require Min BUY probability (usually higher)."
         >
           <Input
             id="watchlist_min_buy"

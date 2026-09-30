@@ -457,6 +457,8 @@ class SupabaseRepository:
                 "confirmation_mode, confirmation_count, kill_recover_healthy_sec, "
                 "kill_alert_min_gap_sec, jev_transport_fail_rate_kill_frac, "
                 "jev_transport_fail_window_sec, jev_timeout_sec, jev_max_retries, "
+                "jev_gate_field, jev_model_pin, jev_samples, "
+                "jev_spread_veto_enabled, jev_spread_max_stddev, "
                 "reconcile_interval_sec, reconcile_protect_orphans, "
                 "daily_loss_include_unrealized, daily_loss_include_fees, "
                 "daily_loss_action, drawdown_breaker_enabled, drawdown_max_frac, "
@@ -484,8 +486,14 @@ class SupabaseRepository:
         self._cached_risk_sync_equity = risk_sync_equity
         screener_ran_at = data.get("watchlist_screener_ran_at")
         from strategy.horizon import sanitize_horizon_eod_fields
+        from risk.sanitize import (
+            apply_order_affecting_ceilings,
+            sanitize_phase7_fields,
+        )
 
+        apply_order_affecting_ceilings(data)
         horizon = sanitize_horizon_eod_fields(data)
+        phase7 = sanitize_phase7_fields(data)
         return RiskSettings(
             minimum_jev_confidence=float(data.get("minimum_jev_confidence", 0.85)),
             signal_record_threshold=float(data.get("signal_record_threshold", 0.80)),
@@ -538,8 +546,13 @@ class SupabaseRepository:
             jev_transport_fail_window_sec=int(
                 data.get("jev_transport_fail_window_sec", 60)
             ),
-            jev_timeout_sec=float(data.get("jev_timeout_sec", 3)),
-            jev_max_retries=int(data.get("jev_max_retries", 1)),
+            jev_timeout_sec=float(phase7["jev_timeout_sec"]),
+            jev_max_retries=int(phase7["jev_max_retries"]),
+            jev_gate_field=str(phase7["jev_gate_field"]),
+            jev_model_pin=phase7["jev_model_pin"],
+            jev_samples=int(phase7["jev_samples"]),
+            jev_spread_veto_enabled=bool(phase7["jev_spread_veto_enabled"]),
+            jev_spread_max_stddev=float(phase7["jev_spread_max_stddev"]),
             reconcile_interval_sec=int(data.get("reconcile_interval_sec", 60)),
             reconcile_protect_orphans=bool(data.get("reconcile_protect_orphans", True)),
             daily_loss_include_unrealized=bool(
@@ -1335,6 +1348,7 @@ class SupabaseRepository:
         import uuid as _uuid
 
         pid = prediction_id or str(_uuid.uuid4())
+        request_at = getattr(prediction, "request_at", None)
         payload = {
             "id": pid,
             "symbol": prediction.symbol,
@@ -1352,6 +1366,11 @@ class SupabaseRepository:
             "skip_reasons": list(skip_reasons or []) or None,
             "decision_bid": decision_bid,
             "decision_ask": decision_ask,
+            "jev_question_key": getattr(prediction, "question_key", None),
+            "jev_request_at": request_at.isoformat() if request_at else None,
+            "jev_confidence": getattr(prediction, "confidence", None),
+            "jev_prob_stddev": getattr(prediction, "prob_stddev", None),
+            "jev_samples_used": getattr(prediction, "samples_used", None),
         }
         cleaned = {k: v for k, v in payload.items() if v is not None or k in {
             "trade_skip_reason", "trade_created", "market_snapshot",

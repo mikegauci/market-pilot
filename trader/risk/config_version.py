@@ -47,6 +47,14 @@ _ORDER_AFFECTING_KEYS = (
     "drawdown_breaker_enabled",
     "drawdown_max_frac",
     "reconcile_protect_orphans",
+    # Phase 7
+    "jev_timeout_sec",
+    "jev_max_retries",
+    "jev_gate_field",
+    "jev_model_pin",
+    "jev_samples",
+    "jev_spread_veto_enabled",
+    "jev_spread_max_stddev",
 )
 
 

@@ -44,9 +44,9 @@ import { cn, formatCurrency } from "@/lib/utils";
 
 const SETTING_DESCRIPTIONS_FULL = {
   minimum_jev_confidence:
-    "The AI must be at least this confident before the bot will actually buy — higher means fewer, pickier trades.",
+    "BUY probability must reach at least this level (and beat HOLD by the strategy margin) before the bot opens a trade — higher means fewer, pickier trades. This is not a calibrated chance of a profitable trade.",
   signal_record_threshold:
-    "Buy signals above this level are marked as worth watching, so you can spot near-misses below your trade threshold.",
+    "Buy signals above this BUY probability are marked as worth watching, so you can spot near-misses below your trade threshold.",
   risk_per_trade:
     "Most you are willing to lose on one trade if the stop loss is hit (USD). Profile presets derive this from risk_sync_equity × profile fraction.",
   max_position_size: "Largest amount the bot will put into a single trade (USD).",
@@ -88,12 +88,12 @@ const SETTING_DESCRIPTIONS_FULL = {
   watchlist_dynamic_size:
     "Maximum EM ADR/stock names kept after each scan that clear the min BUY floor (not a fill quota).",
   watchlist_min_buy:
-    "Minimum Jev BUY (%) required to earn a dynamic watchlist slot. Trade entries still use Min Jev confidence.",
+    "Minimum Jev BUY (%) required to earn a dynamic watchlist slot. Trade entries still use Min BUY probability.",
   watchlist_refresh_minutes: "How often Jev re-scores the full EM universe.",
 } as const;
 
 const SETTING_DESCRIPTIONS = {
-  minimum_jev_confidence: "Minimum AI confidence before the bot opens a trade.",
+  minimum_jev_confidence: "Minimum BUY probability before the bot opens a trade.",
   signal_record_threshold: "Log buy signals above this % as watchlist-worthy near-misses.",
   risk_per_trade: "Max loss per trade if stop loss hits ($).",
   max_position_size: "Cap on capital deployed in one position ($).",
@@ -429,7 +429,7 @@ export function SettingsForm({
         <SettingsFieldGroup className="mt-4">
           <SettingsField
             id="minimum_jev_confidence"
-            label="Min Jev confidence (%)"
+            label="Min BUY probability (%)"
             description={SETTING_DESCRIPTIONS.minimum_jev_confidence}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.minimum_jev_confidence}
           >
@@ -454,6 +454,81 @@ export function SettingsForm({
               type="number"
               step="1"
               defaultValue={Math.round(settings.signal_record_threshold * 100)}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="jev_gate_field"
+            label="Entry gate field"
+            description="Which Jev metric must clear the min threshold (default: BUY probability)."
+          >
+            <select
+              id="jev_gate_field"
+              name="jev_gate_field"
+              className="flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm"
+              defaultValue={settings.jev_gate_field ?? "buy_probability"}
+            >
+              <option value="buy_probability">BUY probability</option>
+              <option value="confidence">API confidence</option>
+            </select>
+          </SettingsField>
+          <SettingsField
+            id="jev_model_pin"
+            label="Jev model pin"
+            description="Optional fixed model id. Empty keeps the env/default model; mismatch alerts via Telegram."
+          >
+            <Input
+              id="jev_model_pin"
+              name="jev_model_pin"
+              type="text"
+              placeholder="e.g. jev-2025-01"
+              defaultValue={settings.jev_model_pin ?? ""}
+            />
+          </SettingsField>
+          <SettingsField
+            id="jev_samples"
+            label="Jev samples"
+            description="Calls per symbol (1 = current). When >1, averages probabilities and stores stddev."
+          >
+            <Input
+              id="jev_samples"
+              name="jev_samples"
+              type="number"
+              min={1}
+              max={5}
+              step="1"
+              defaultValue={settings.jev_samples ?? 1}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="jev_spread_veto_enabled"
+            label="Spread veto"
+            description="When on, skip entries if multi-sample stddev exceeds the max below."
+          >
+            <label className="flex h-10 items-center gap-2 text-sm text-zinc-300">
+              <input
+                type="checkbox"
+                name="jev_spread_veto_enabled"
+                defaultChecked={settings.jev_spread_veto_enabled ?? false}
+                className="h-4 w-4 rounded border-zinc-600"
+              />
+              Enable spread veto
+            </label>
+          </SettingsField>
+          <SettingsField
+            id="jev_spread_max_stddev"
+            label="Max prob stddev"
+            description="Spread veto threshold when samples > 1 (0–1)."
+          >
+            <Input
+              id="jev_spread_max_stddev"
+              name="jev_spread_max_stddev"
+              type="number"
+              min={0}
+              max={1}
+              step="0.01"
+              defaultValue={settings.jev_spread_max_stddev ?? 0.05}
               required
             />
           </SettingsField>
@@ -940,9 +1015,9 @@ export function SettingsForm({
               name="jev_timeout_sec"
               type="number"
               step="0.5"
-              min={1}
-              max={30}
-              defaultValue={settings.jev_timeout_sec ?? 3}
+              min={0.5}
+              max={5}
+              defaultValue={settings.jev_timeout_sec ?? 2}
               required
             />
           </SettingsField>
@@ -952,7 +1027,7 @@ export function SettingsForm({
               name="jev_max_retries"
               type="number"
               min={0}
-              max={3}
+              max={2}
               defaultValue={settings.jev_max_retries ?? 1}
               required
             />

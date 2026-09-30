@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     jev_enabled: bool = True
     typesafe_ai_api_key: str = ""
     jev_model: str = "jev-latest"
-    jev_timeout_sec: float = 3.0
+    jev_timeout_sec: float = 2.0
     jev_max_workers: int = 5
     ibkr_fill_timeout_sec: float = 60.0
     ibkr_entry_cooldown_sec: float = 120.0

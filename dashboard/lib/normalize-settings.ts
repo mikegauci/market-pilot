@@ -18,7 +18,7 @@ const PHASE3_DEFAULTS = {
   kill_alert_min_gap_sec: 60,
   jev_transport_fail_rate_kill_frac: 0.5,
   jev_transport_fail_window_sec: 60,
-  jev_timeout_sec: 3,
+  jev_timeout_sec: 2,
   jev_max_retries: 1,
 };
 
@@ -35,9 +35,18 @@ const PHASE5_DEFAULTS = {
   drawdown_max_frac: 0.1,
 };
 
+const PHASE7_DEFAULTS = {
+  jev_gate_field: "buy_probability" as const,
+  jev_model_pin: null as string | null,
+  jev_samples: 1,
+  jev_spread_veto_enabled: false,
+  jev_spread_max_stddev: 0.05,
+};
+
 type Phase3Keys = keyof typeof PHASE3_DEFAULTS;
 type Phase4Keys = keyof typeof PHASE4_DEFAULTS;
 type Phase5Keys = keyof typeof PHASE5_DEFAULTS;
+type Phase7Keys = keyof typeof PHASE7_DEFAULTS;
 
 /** Row shape from Supabase before newer columns existed or were selected. */
 export type SettingsRow = Omit<
@@ -61,6 +70,7 @@ export type SettingsRow = Omit<
   | Phase3Keys
   | Phase4Keys
   | Phase5Keys
+  | Phase7Keys
 > &
   Partial<
     Pick<
@@ -84,6 +94,7 @@ export type SettingsRow = Omit<
       | Phase3Keys
       | Phase4Keys
       | Phase5Keys
+      | Phase7Keys
     >
   >;
 
@@ -152,6 +163,14 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
       PHASE3_DEFAULTS.jev_transport_fail_window_sec,
     jev_timeout_sec: raw.jev_timeout_sec ?? PHASE3_DEFAULTS.jev_timeout_sec,
     jev_max_retries: raw.jev_max_retries ?? PHASE3_DEFAULTS.jev_max_retries,
+    jev_gate_field:
+      raw.jev_gate_field === "confidence" ? "confidence" : PHASE7_DEFAULTS.jev_gate_field,
+    jev_model_pin: raw.jev_model_pin ?? PHASE7_DEFAULTS.jev_model_pin,
+    jev_samples: raw.jev_samples ?? PHASE7_DEFAULTS.jev_samples,
+    jev_spread_veto_enabled:
+      raw.jev_spread_veto_enabled ?? PHASE7_DEFAULTS.jev_spread_veto_enabled,
+    jev_spread_max_stddev:
+      raw.jev_spread_max_stddev ?? PHASE7_DEFAULTS.jev_spread_max_stddev,
     reconcile_interval_sec:
       raw.reconcile_interval_sec ?? PHASE4_DEFAULTS.reconcile_interval_sec,
     reconcile_protect_orphans:

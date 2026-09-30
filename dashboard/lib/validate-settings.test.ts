@@ -45,8 +45,12 @@ const baseFields = {
   kill_alert_min_gap_sec: "60",
   jev_transport_fail_rate_kill_pct: "50",
   jev_transport_fail_window_sec: "60",
-  jev_timeout_sec: "3",
+  jev_timeout_sec: "2",
   jev_max_retries: "1",
+  jev_gate_field: "buy_probability",
+  jev_model_pin: "",
+  jev_samples: "1",
+  jev_spread_max_stddev: "0.05",
   reconcile_interval_sec: "60",
   reconcile_protect_orphans: "on",
   daily_loss_include_unrealized: "on",
@@ -166,7 +170,7 @@ describe("parseSettingsForm watchlist min buy", () => {
           watchlist_min_buy: "85",
         }),
       ),
-    ).toThrow("Watchlist min BUY (%) must be at or below Min Jev confidence (%)");
+    ).toThrow("Watchlist min BUY (%) must be at or below Min BUY probability (%)");
   });
 });
 

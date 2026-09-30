@@ -78,7 +78,7 @@ export function normalizeSkipReasonKey(reason: string | null | undefined): strin
 
 export function skipReasonLabel(key: string): string {
   const labels: Record<string, string> = {
-    below_trade_threshold: "Below confidence threshold",
+    below_trade_threshold: "Below BUY probability threshold",
     buy_hold_margin: "BUY–HOLD margin too narrow",
     hold_dominant: "HOLD dominant",
     sell_dominant: "SELL dominant",

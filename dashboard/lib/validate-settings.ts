@@ -16,7 +16,7 @@ function parseRequiredNumber(formData: FormData, name: string): number {
 
 function labelFor(name: string): string {
   const labels: Record<string, string> = {
-    minimum_jev_confidence: "Min Jev confidence (%)",
+    minimum_jev_confidence: "Min BUY probability (%)",
     signal_record_threshold: "Signal record threshold (%)",
     risk_per_trade: "Risk per trade",
     max_position_size: "Max position size",
@@ -39,6 +39,8 @@ function labelFor(name: string): string {
     min_volume_ratio: "Min volume ratio",
     min_share_price: "Min share price ($)",
     reconcile_interval_sec: "Reconcile interval (sec)",
+    jev_samples: "Jev samples",
+    jev_spread_max_stddev: "Jev spread max stddev",
   };
   return labels[name] ?? name;
 }
@@ -81,6 +83,11 @@ export type ParsedSettings = {
   jev_transport_fail_window_sec: number;
   jev_timeout_sec: number;
   jev_max_retries: number;
+  jev_gate_field: "buy_probability" | "confidence";
+  jev_model_pin: string | null;
+  jev_samples: number;
+  jev_spread_veto_enabled: boolean;
+  jev_spread_max_stddev: number;
   reconcile_interval_sec: number;
   reconcile_protect_orphans: boolean;
   daily_loss_include_unrealized: boolean;
@@ -177,7 +184,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   const min_share_price = parseRequiredNumber(formData, "min_share_price");
 
   if (signal_record_threshold > minimum_jev_confidence) {
-    throw new Error("Signal record threshold (%) must be at or below Min Jev confidence (%)");
+    throw new Error("Signal record threshold (%) must be at or below Min BUY probability (%)");
   }
   if (risk_per_trade <= 0) {
     throw new Error("Risk per trade must be greater than 0");
@@ -294,7 +301,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   const watchlist_min_buy = parseConfidencePercent(formData, "watchlist_min_buy");
   if (watchlist_min_buy > minimum_jev_confidence) {
-    throw new Error("Watchlist min BUY (%) must be at or below Min Jev confidence (%)");
+    throw new Error("Watchlist min BUY (%) must be at or below Min BUY probability (%)");
   }
   const watchlist_refresh_minutes = Number(formData.get("watchlist_refresh_minutes") ?? 30);
   if (
@@ -371,6 +378,15 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   );
   const jev_timeout_sec = parseRequiredNumber(formData, "jev_timeout_sec");
   const jev_max_retries = parseRequiredNumber(formData, "jev_max_retries");
+  const jev_gate_field_raw = String(formData.get("jev_gate_field") ?? "buy_probability");
+  const jev_gate_field =
+    jev_gate_field_raw === "confidence" ? "confidence" : "buy_probability";
+  const jev_model_pin_raw = String(formData.get("jev_model_pin") ?? "").trim();
+  const jev_model_pin = jev_model_pin_raw.length > 0 ? jev_model_pin_raw : null;
+  const jev_samples = parseRequiredNumber(formData, "jev_samples");
+  const jev_spread_veto_enabled =
+    String(formData.get("jev_spread_veto_enabled") ?? "") === "on";
+  const jev_spread_max_stddev = parseRequiredNumber(formData, "jev_spread_max_stddev");
   const reconcile_interval_sec = parseRequiredNumber(formData, "reconcile_interval_sec");
   const reconcile_protect_orphans =
     String(formData.get("reconcile_protect_orphans") ?? "on") === "on";
@@ -420,15 +436,21 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   ) {
     throw new Error("Confirmation count must be an integer from 1 to 5");
   }
-  if (jev_timeout_sec < 1 || jev_timeout_sec > 30) {
-    throw new Error("Jev timeout must be between 1 and 30 seconds");
+  if (jev_timeout_sec < 0.5 || jev_timeout_sec > 5) {
+    throw new Error("Jev timeout must be between 0.5 and 5 seconds");
   }
   if (
     !Number.isInteger(jev_max_retries) ||
     jev_max_retries < 0 ||
-    jev_max_retries > 3
+    jev_max_retries > 2
   ) {
-    throw new Error("Jev max retries must be an integer from 0 to 3");
+    throw new Error("Jev max retries must be an integer from 0 to 2");
+  }
+  if (!Number.isInteger(jev_samples) || jev_samples < 1 || jev_samples > 5) {
+    throw new Error("Jev samples must be an integer from 1 to 5");
+  }
+  if (jev_spread_max_stddev < 0 || jev_spread_max_stddev > 1) {
+    throw new Error("Jev spread max stddev must be between 0 and 1");
   }
   if (
     !Number.isInteger(reconcile_interval_sec) ||
@@ -479,6 +501,11 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     jev_transport_fail_window_sec,
     jev_timeout_sec,
     jev_max_retries,
+    jev_gate_field,
+    jev_model_pin,
+    jev_samples,
+    jev_spread_veto_enabled,
+    jev_spread_max_stddev,
     reconcile_interval_sec,
     reconcile_protect_orphans,
     daily_loss_include_unrealized,

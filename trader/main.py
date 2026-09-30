@@ -82,9 +82,11 @@ from strategy.pre_submit import pre_submit_recheck
 from strategy.signals import (
     is_sell_exit_eligible,
     is_trade_eligible,
+    should_spread_veto,
     signal_tier,
     trade_skip_reason_from_tier,
 )
+from risk.model_drift import ModelDriftTracker
 from watchlist.demotion import effective_max_hold_minutes
 from watchlist.jev_screener import (
     apply_screener_result_to_risk_settings,
@@ -419,8 +421,13 @@ def _fetch_jev_predictions(
     max_workers: int,
     *,
     transport_tracker: Optional[JevTransportKillTracker] = None,
+    samples: int = 1,
 ) -> Dict[str, JevPrediction]:
-    """Call Jev in parallel so one slow symbol does not block the watchlist."""
+    """Call Jev in parallel so one slow symbol does not block the watchlist.
+
+    Worst-case cycle delay ≈ timeout × attempts per worker (not × symbol count).
+    When samples > 1, each symbol runs K sequential calls inside its worker.
+    """
     if not ready_states:
         return {}
 
@@ -428,7 +435,8 @@ def _fetch_jev_predictions(
     predictions: Dict[str, JevPrediction] = {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(jev.predict, state): symbol for symbol, state in ready_states
+            pool.submit(jev.predict, state, samples=samples): symbol
+            for symbol, state in ready_states
         }
         for future in as_completed(futures):
             symbol = futures[future]
@@ -443,6 +451,12 @@ def _fetch_jev_predictions(
                     transport_tracker.record(transport_failure=(kind == "transport"))
     return predictions
 
+
+def _resolve_jev_request_model(settings, risk_settings: RiskSettings) -> str:
+    pin = getattr(risk_settings, "jev_model_pin", None)
+    if pin:
+        return str(pin).strip()
+    return str(settings.jev_model)
 
 def _log_jev_prediction(prediction, tier: str) -> None:
     logger.info(
@@ -559,9 +573,10 @@ def run() -> int:
     if settings.jev_enabled:
         if settings.typesafe_ai_api_key:
             # max_retries is attempt count; settings store retry extras (1 retry => 2 attempts).
+            requested_model = _resolve_jev_request_model(settings, risk_settings)
             jev = JevClient(
                 api_key=settings.typesafe_ai_api_key,
-                model=settings.jev_model,
+                model=requested_model,
                 timeout_sec=float(risk_settings.jev_timeout_sec),
                 max_retries=max(1, int(risk_settings.jev_max_retries) + 1),
             )
@@ -721,6 +736,7 @@ def run() -> int:
             "Telegram notifier unconfigured (set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)"
         )
     _equity_divergence_alerted: set = set()
+    model_drift = ModelDriftTracker()
     _eod_entries_cancelled_for_close: Optional[datetime] = None
     _eod_flat_verified_for_close: Optional[datetime] = None
     _eod_bar_audit_for_close: Optional[datetime] = None
@@ -1072,6 +1088,7 @@ def run() -> int:
                     if jev is not None:
                         jev.timeout_sec = float(risk_settings.jev_timeout_sec)
                         jev.max_retries = max(1, int(risk_settings.jev_max_retries) + 1)
+                        jev.model = _resolve_jev_request_model(settings, risk_settings)
                     capital, currency = _resolve_effective_capital(
                         ibkr,
                         risk_settings.account_capital,
@@ -1763,6 +1780,7 @@ def run() -> int:
                     ready_states,
                     settings.jev_max_workers,
                     transport_tracker=jev_transport_kill,
+                    samples=int(getattr(risk_settings, "jev_samples", 1) or 1),
                 )
                 if jev is not None
                 else {}
@@ -1770,6 +1788,13 @@ def run() -> int:
             if predictions_by_symbol:
                 jev_connected_this_cycle = True
                 jev_connected = True
+                if jev is not None:
+                    for pred in predictions_by_symbol.values():
+                        model_drift.check(
+                            requested=jev.model,
+                            returned=pred.model,
+                            notifier=notifier,
+                        )
             elif ready_states and jev is not None:
                 jev_connected = False
 
@@ -1784,6 +1809,9 @@ def run() -> int:
                         risk_settings.signal_record_threshold,
                         risk_settings.minimum_jev_confidence,
                         strategy_config.min_buy_hold_margin,
+                        gate_field=getattr(
+                            risk_settings, "jev_gate_field", "buy_probability"
+                        ),
                     )
                     _log_jev_prediction(prediction, tier)
 
@@ -1827,6 +1855,21 @@ def run() -> int:
                         if trade_skip_reason is None:
                             trade_skip_reason = reason
 
+                    if (
+                        eligible
+                        and should_spread_veto(
+                            prediction,
+                            enabled=bool(
+                                getattr(risk_settings, "jev_spread_veto_enabled", False)
+                            ),
+                            max_stddev=float(
+                                getattr(risk_settings, "jev_spread_max_stddev", 0.05)
+                            ),
+                        )
+                    ):
+                        _note_skip("jev_spread_veto")
+                        eligible = False
+
                     if entry_kill.active:
                         confirmation_tracker.record(symbol, False)
                         _note_skip(f"entry_kill ({entry_kill.reason or 'active'})")
@@ -1837,7 +1880,8 @@ def run() -> int:
                         eligible = False
                     elif not eligible:
                         confirmation_tracker.record(symbol, False)
-                        _note_skip(trade_skip_reason_from_tier(tier))
+                        if trade_skip_reason is None:
+                            _note_skip(trade_skip_reason_from_tier(tier))
                     else:
                         # Evaluate confirmation once per newly completed real-volume bar.
                         # Same bar_ts is not double-counted; forward-fill (vol=0) skipped.
@@ -2205,6 +2249,14 @@ def run() -> int:
                                     "buy": prediction.buy,
                                     "hold": prediction.hold,
                                     "sell": prediction.sell,
+                                    "confidence": prediction.confidence,
+                                    "gate_field": getattr(
+                                        risk_settings,
+                                        "jev_gate_field",
+                                        "buy_probability",
+                                    ),
+                                    "prob_stddev": prediction.prob_stddev,
+                                    "samples_used": prediction.samples_used,
                                     "price": state.price,
                                     "entry_kill": entry_kill.active,
                                     "entry_kill_reason": entry_kill.reason or None,
