@@ -956,7 +956,7 @@ class IBKRClient:
                 continue
             if trade.orderStatus.status in TERMINAL_ORDER_STATUSES:
                 continue
-            symbol = from_ibkr_contract(trade.contract) or ""
+            symbol = self._resolve_app_symbol(trade.contract)
             if not symbol:
                 continue
             held = positions.get(symbol.upper(), 0)
