@@ -49,6 +49,16 @@ __pycache__/
 supabase/.temp/
 supabase/.branches/
 
-# cursor agent skills (local AI tooling, not app code)
-.agents/
+# cursor agent skills (installed bundles under .agents/skills stay local unless listed below)
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/add-trading-setting/
+!.agents/skills/add-trading-setting/**
+!.agents/skills/preflight-checks/
+!.agents/skills/preflight-checks/**
+!.agents/skills/diagnose-trader/
+!.agents/skills/diagnose-trader/**
+!.agents/skills/add-strategy-filter/
+!.agents/skills/add-strategy-filter/**
 skills-lock.json
