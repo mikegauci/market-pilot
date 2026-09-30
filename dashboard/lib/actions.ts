@@ -5,17 +5,6 @@ import { resolveCurrentEquity } from "@/lib/resolve-current-equity";
 import { createClient } from "@/lib/supabase/server";
 import { parseSettingsForm } from "@/lib/validate-settings";
 
-export async function toggleBot(enabled: boolean) {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("bot_status")
-    .update({ enabled, updated_at: new Date().toISOString() })
-    .eq("id", 1);
-
-  if (error) throw new Error(error.message);
-  revalidatePath("/");
-}
-
 export async function updateSettings(formData: FormData) {
   const supabase = await createClient();
   const parsed = parseSettingsForm(formData);

@@ -35,13 +35,9 @@ Open [http://localhost:3000](http://localhost:3000) and sign in.
 | `/strategy` | Strategy guide — indicators, filters, and decision flow |
 | `/settings` | Risk and strategy settings |
 
-## Trading controls (sidebar)
+## System status (sidebar)
 
-Auto-trading and system status live in the **sidebar on every page** (not only Overview).
-
-| Control | Supabase field | Effect |
-|---------|----------------|--------|
-| Auto-trading | `bot_status.enabled` | Allow or block new entries |
+System status lives in the **sidebar on every page**. It shows market hours, whether the trading engine is running, and whether the broker is connected. An amber warning appears when the engine is stopped or the broker is offline.
 
 Orders go to the IBKR paper account when the engine and broker are connected. The Python trader reads `bot_status.enabled` every eval cycle (~30s). Status badges treat heartbeats older than 30s as **Trader offline** and hide stale IBKR/Jev connection flags.
 

@@ -33,8 +33,7 @@ export default async function SettingsPage() {
           Configure how Jev trades, how much risk to take, and which symbols to watch.
         </p>
         <p className="text-xs leading-relaxed text-zinc-600">
-          Auto-trading is controlled on{" "}
-          <span className="text-zinc-400">Overview</span>. Trading mode:{" "}
+          Stop the trading engine to halt new trades. Trading mode:{" "}
           <span className="text-zinc-400">{settings.trading_mode}</span> (live requires server{" "}
           <code className="text-zinc-500">.env</code>).
           {baselineEquity > 0 && (

@@ -14,10 +14,8 @@ import {
 } from "lucide-react";
 import { LiveStatus } from "@/components/live-status";
 import { Logo } from "@/components/logo";
-import { MarketConditionSidebar } from "@/components/market-condition-card";
 import { NavEquity } from "@/components/nav-equity";
 import { useOpenPositionsCount } from "@/components/open-positions-count-provider";
-import { TradingControls } from "@/components/trading-controls";
 import { signOut } from "@/lib/actions";
 import { cn } from "@/lib/utils";
 
@@ -107,10 +105,8 @@ export function DashboardNavContent({
           {settingsLink.label}
         </Link>
 
-        <div className="mt-3 space-y-3">
+        <div className="mt-3">
           <LiveStatus variant="sidebar" />
-          <MarketConditionSidebar />
-          <TradingControls variant="sidebar" />
         </div>
       </nav>
 
