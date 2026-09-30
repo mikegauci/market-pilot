@@ -1,0 +1,16 @@
+---
+description: Ask before restarting the trader, dashboard, or browser
+alwaysApply: true
+---
+
+# Do not restart running apps
+
+Never restart, stop, kill, or relaunch the trader or the dashboard. Do not open or drive the app in the browser to restart or reload it.
+
+When a change needs a running process to pick it up, stop and ask the user to do it. Say which process and why.
+
+```text
+The trader is still on the old code. Restart it when you can (`python main.py` in `trader/`) so this takes effect.
+```
+
+Code edits, tests, and database reads are fine. Starting a process that is not already running is fine only when the user asked for it.

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from broker.reconcile import build_reconciled_trade, orphan_ibkr_symbols
+from broker.reconcile import (
+    build_reconciled_trade,
+    nonzero_positions,
+    orphan_ibkr_symbols,
+)
 from models.types import BracketLegs, Position, RiskSettings, TradeRecord, TradingMode
 
 
@@ -21,6 +25,30 @@ def _risk_settings() -> RiskSettings:
         risk_sync_equity=None,
         watchlist=["META", "AAPL"],
     )
+
+
+class TestNonzeroPositions(unittest.TestCase):
+    def test_keeps_untracked_shorts_and_drops_flat_rows(self) -> None:
+        positions = [
+            Position(
+                symbol="BAP",
+                quantity=-60.0,
+                avg_cost=381.68,
+                market_price=None,
+                market_value=None,
+                unrealized_pnl=None,
+            ),
+            Position(
+                symbol="PDD",
+                quantity=0.0,
+                avg_cost=77.65,
+                market_price=78.14,
+                market_value=0.0,
+                unrealized_pnl=0.0,
+            ),
+        ]
+        kept = nonzero_positions(positions)
+        self.assertEqual([position.symbol for position in kept], ["BAP"])
 
 
 class TestOrphanIbkrSymbols(unittest.TestCase):

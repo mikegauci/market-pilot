@@ -83,7 +83,7 @@ export async function fetchOpenTrades(): Promise<Trade[]> {
     .order("entry_time", { ascending: false });
   if (error) {
     logFetchError("trades", error.message);
-    return [];
+    throw new Error(error.message);
   }
   return (data ?? []) as Trade[];
 }

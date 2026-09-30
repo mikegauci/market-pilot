@@ -70,12 +70,20 @@ export function PositionsGrid({
                     <p className="text-base font-semibold text-zinc-100">
                       <span className="inline-flex items-center gap-2">
                         {p.symbol}
-                        {settings && isOffEffectiveWatchlist(p.symbol, settings) && (
+                        {trade && settings && isOffEffectiveWatchlist(p.symbol, settings) && (
                           <span
                             className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-400"
                             title="Open position no longer on the effective top-N watchlist; tighter exit rules apply"
                           >
                             Demoted
+                          </span>
+                        )}
+                        {!trade && (
+                          <span
+                            className="rounded bg-zinc-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400"
+                            title="Broker still holds this symbol. The bot has no open trade for it, so exit rules do not apply."
+                          >
+                            Untracked
                           </span>
                         )}
                       </span>

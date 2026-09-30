@@ -22,7 +22,7 @@ from broker.ibkr import (
     is_kid_document_rejection,
     is_permanent_ibkr_eligibility_rejection,
 )
-from broker.reconcile import reconcile_orphan_ibkr_positions
+from broker.reconcile import nonzero_positions, reconcile_orphan_ibkr_positions
 from config import Settings, load_settings
 from execution_mode import effective_execution_mode
 from instance_lock import acquire_trader_lock
@@ -305,7 +305,7 @@ def _sync_portfolio_state(
     if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
         try:
             account = ibkr.get_account_summary()
-            ibkr_positions = ibkr.get_positions()
+            ibkr_positions = nonzero_positions(ibkr.get_positions())
         except Exception as exc:
             logger.warning("Portfolio sync failed (IBKR): %s", exc)
             return
@@ -1402,7 +1402,7 @@ def run() -> int:
                 if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
                     try:
                         account = ibkr.get_account_summary()
-                        ibkr_positions = ibkr.get_positions()
+                        ibkr_positions = nonzero_positions(ibkr.get_positions())
                     except Exception as exc:
                         logger.warning("IBKR heartbeat failed: %s", exc)
                 elif risk_manager:

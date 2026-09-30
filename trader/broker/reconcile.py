@@ -35,6 +35,11 @@ def _apply_bracket_legs(
     trade.take_profit = legs.take_profit
 
 
+def nonzero_positions(ibkr_positions: Iterable[Position]) -> List[Position]:
+    """Drop flat rows. Untracked holdings stay so account exposure remains visible."""
+    return [position for position in ibkr_positions if abs(position.quantity) >= 1e-9]
+
+
 def orphan_ibkr_symbols(
     ibkr_positions: Iterable[Position],
     open_trades: Iterable[TradeRecord],
