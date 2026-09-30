@@ -1824,6 +1824,9 @@ def run() -> int:
                         gate_field=getattr(
                             risk_settings, "jev_gate_field", "buy_probability"
                         ),
+                        buy_hold_margin_enabled=bool(
+                            getattr(risk_settings, "buy_hold_margin_enabled", True)
+                        ),
                     )
                     _log_jev_prediction(prediction, tier)
 
@@ -1894,6 +1897,13 @@ def run() -> int:
                         confirmation_tracker.record(symbol, False)
                         if trade_skip_reason is None:
                             _note_skip(trade_skip_reason_from_tier(tier))
+                    elif not bool(getattr(risk_settings, "confirmation_enabled", True)):
+                        # Confirmation disabled — treat as immediately confirmed.
+                        confirmation_tracker.record(
+                            symbol,
+                            True,
+                            completed_bar_ts=last_completed_bar_ts.get(symbol.upper()),
+                        )
                     else:
                         # Evaluate confirmation once per newly completed real-volume bar.
                         # Same bar_ts is not double-counted; forward-fill (vol=0) skipped.
@@ -1927,14 +1937,44 @@ def run() -> int:
                             min_volume_ratio=risk_settings.min_volume_ratio,
                             min_share_price=risk_settings.min_share_price,
                             jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
+                            buy_hold_margin_enabled=getattr(
+                                risk_settings, "buy_hold_margin_enabled", True
+                            ),
+                            rsi_veto_enabled=getattr(
+                                risk_settings, "rsi_veto_enabled", True
+                            ),
+                            price_floor_enabled=getattr(
+                                risk_settings, "price_floor_enabled", True
+                            ),
+                            spread_filter_enabled=getattr(
+                                risk_settings, "spread_filter_enabled", True
+                            ),
+                            volume_filter_enabled=getattr(
+                                risk_settings, "volume_filter_enabled", True
+                            ),
+                            ema20_filter_enabled=getattr(
+                                risk_settings, "ema20_filter_enabled", True
+                            ),
+                            benchmark_headwind_enabled=getattr(
+                                risk_settings, "benchmark_headwind_enabled", True
+                            ),
+                            news_filters_enabled=getattr(
+                                risk_settings, "news_filters_enabled", True
+                            ),
+                            correlation_cap_enabled=getattr(
+                                risk_settings, "correlation_cap_enabled", True
+                            ),
                         )
                         entry_filter = check_entry_filters(state, entry_strategy)
                         if not entry_filter.passed:
-                            _note_skip(entry_filter.reason)
+                            for reason in entry_filter.reasons or (entry_filter.reason,):
+                                _note_skip(reason)
                             logger.info(
                                 "Filter: rejected %s — %s",
                                 symbol,
-                                entry_filter.reason,
+                                "; ".join(entry_filter.reasons)
+                                if entry_filter.reasons
+                                else entry_filter.reason,
                             )
                             confirmation_tracker.reset(symbol)
                             eligible = False
@@ -1943,7 +1983,8 @@ def run() -> int:
                             risk_manager.open_trades, symbol, entry_strategy
                         )
                         if not corr_filter.passed:
-                            _note_skip(corr_filter.reason)
+                            for reason in corr_filter.reasons or (corr_filter.reason,):
+                                _note_skip(reason)
                             logger.info(
                                 "Filter: rejected %s — %s",
                                 symbol,

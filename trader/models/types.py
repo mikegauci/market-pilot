@@ -189,6 +189,20 @@ class RiskSettings:
     demotion_jev_sell_on_loss: bool = True
     demotion_jev_sell_max_loss_pct: float = 0.02
     demotion_force_exit: bool = False
+    # Phase 10 filter / watchlist toggles (defaults preserve historical behaviour).
+    buy_hold_margin_enabled: bool = True
+    rsi_veto_enabled: bool = True
+    price_floor_enabled: bool = True
+    spread_filter_enabled: bool = True
+    volume_filter_enabled: bool = True
+    ema20_filter_enabled: bool = True
+    benchmark_headwind_enabled: bool = True
+    news_filters_enabled: bool = True
+    correlation_cap_enabled: bool = True
+    confirmation_enabled: bool = True
+    soft_exit_block_winners_enabled: bool = True
+    # Eval pool size (>= watchlist_dynamic_size). Default equals dynamic size.
+    watchlist_eval_pool_size: int = 5
     # Block Jev SELL soft-exits until the trade has been open this many minutes.
     min_hold_minutes: float = 15.0
     # Minimum Jev SELL probability to soft-exit (must also be sell-dominant).

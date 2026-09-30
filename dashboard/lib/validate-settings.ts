@@ -111,6 +111,18 @@ export type ParsedSettings = {
   demotion_jev_sell_on_loss: boolean;
   demotion_jev_sell_max_loss_pct: number;
   demotion_force_exit: boolean;
+  buy_hold_margin_enabled: boolean;
+  rsi_veto_enabled: boolean;
+  price_floor_enabled: boolean;
+  spread_filter_enabled: boolean;
+  volume_filter_enabled: boolean;
+  ema20_filter_enabled: boolean;
+  benchmark_headwind_enabled: boolean;
+  news_filters_enabled: boolean;
+  correlation_cap_enabled: boolean;
+  confirmation_enabled: boolean;
+  soft_exit_block_winners_enabled: boolean;
+  watchlist_eval_pool_size: number;
 };
 
 function parseRiskProfile(formData: FormData): RiskProfile {
@@ -300,9 +312,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     throw new Error("Dynamic watchlist size must be a whole number from 0 to 20");
   }
   const watchlist_min_buy = parseConfidencePercent(formData, "watchlist_min_buy");
-  if (watchlist_min_buy > minimum_jev_confidence) {
-    throw new Error("Watchlist min BUY (%) must be at or below Min BUY probability (%)");
-  }
+  // Membership floor is independent of entry threshold (Phase 10); no hard reject.
   const watchlist_refresh_minutes = Number(formData.get("watchlist_refresh_minutes") ?? 30);
   if (
     !Number.isInteger(watchlist_refresh_minutes) ||
@@ -310,6 +320,19 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     watchlist_refresh_minutes > 240
   ) {
     throw new Error("Jev scan interval must be a whole number from 5 to 240 minutes");
+  }
+  let watchlist_eval_pool_size = Number(
+    formData.get("watchlist_eval_pool_size") ?? watchlist_dynamic_size,
+  );
+  if (
+    !Number.isInteger(watchlist_eval_pool_size) ||
+    watchlist_eval_pool_size < 0 ||
+    watchlist_eval_pool_size > 50
+  ) {
+    throw new Error("Eval pool size must be a whole number from 0 to 50");
+  }
+  if (watchlist_eval_pool_size < watchlist_dynamic_size) {
+    watchlist_eval_pool_size = watchlist_dynamic_size;
   }
   const benchmark_symbol = String(formData.get("benchmark_symbol") ?? "EEM")
     .trim()
@@ -342,6 +365,22 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
       ? false
       : String(formData.get("demotion_jev_sell_on_loss") ?? "") === "on";
   const demotion_jev_sell_max_loss_pct = stop_loss_percentage;
+
+  const parseToggle = (name: string) =>
+    String(formData.get(name) ?? "") === "on";
+  const buy_hold_margin_enabled = parseToggle("buy_hold_margin_enabled");
+  const rsi_veto_enabled = parseToggle("rsi_veto_enabled");
+  const price_floor_enabled = parseToggle("price_floor_enabled");
+  const spread_filter_enabled = parseToggle("spread_filter_enabled");
+  const volume_filter_enabled = parseToggle("volume_filter_enabled");
+  const ema20_filter_enabled = parseToggle("ema20_filter_enabled");
+  const benchmark_headwind_enabled = parseToggle("benchmark_headwind_enabled");
+  const news_filters_enabled = parseToggle("news_filters_enabled");
+  const correlation_cap_enabled = parseToggle("correlation_cap_enabled");
+  const confirmation_enabled = parseToggle("confirmation_enabled");
+  const soft_exit_block_winners_enabled = parseToggle(
+    "soft_exit_block_winners_enabled",
+  );
 
   const stale_input_gates_enabled =
     String(formData.get("stale_input_gates_enabled") ?? "on") === "on";
@@ -522,6 +561,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     watchlist_dynamic_enabled,
     watchlist_dynamic_size,
     watchlist_min_buy,
+    watchlist_eval_pool_size,
     watchlist_refresh_minutes,
     benchmark_symbol,
     demotion_exits_enabled,
@@ -529,5 +569,16 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     demotion_jev_sell_on_loss,
     demotion_jev_sell_max_loss_pct,
     demotion_force_exit,
+    buy_hold_margin_enabled,
+    rsi_veto_enabled,
+    price_floor_enabled,
+    spread_filter_enabled,
+    volume_filter_enabled,
+    ema20_filter_enabled,
+    benchmark_headwind_enabled,
+    news_filters_enabled,
+    correlation_cap_enabled,
+    confirmation_enabled,
+    soft_exit_block_winners_enabled,
   };
 }

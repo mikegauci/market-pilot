@@ -4,7 +4,10 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from models.types import Quote, RiskSettings, TradeRecord
-from watchlist.jev_screener import effective_benchmark, resolve_base_watchlist
+from watchlist.jev_screener import (
+    effective_benchmark,
+    resolve_ranked_membership,
+)
 
 # Immediate time exit on next eval cycle when demoted max-hold ratio is 0.
 IMMEDIATE_DEMOTED_HOLD_MINUTES = 0.001
@@ -22,8 +25,8 @@ def is_off_effective_watchlist(symbol: str, risk_settings: RiskSettings) -> bool
     if sym == benchmark:
         return False
 
-    base = {str(s).upper() for s in resolve_base_watchlist(risk_settings)}
-    # Empty dynamic list = no names cleared the floor (weak tape). Do not demote
+    base = {str(s).upper() for s in resolve_ranked_membership(risk_settings)}
+    # Empty ranked membership = no names cleared the floor (weak tape). Do not demote
     # the whole book as if each name were specifically dropped.
     if not base:
         return False
@@ -110,8 +113,11 @@ def jev_sell_exit_allowed(
         return False
 
     # Let the IBKR limit TP work: do not soft-exit winners that have not reached TP,
-    # unless the symbol was demoted off the watchlist.
-    if price_between_entry_and_take_profit(trade, quote.price):
+    # unless the symbol was demoted off the watchlist (or the block is disabled).
+    block_winners = bool(
+        getattr(risk_settings, "soft_exit_block_winners_enabled", True)
+    )
+    if block_winners and price_between_entry_and_take_profit(trade, quote.price):
         if not is_demoted_symbol(trade.symbol, risk_settings):
             return False
 

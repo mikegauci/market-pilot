@@ -1,11 +1,11 @@
-import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
+import { resolveRankedMembership } from "@/lib/effective-watchlist";
 import type { Settings } from "@/lib/types/database";
 
 function effectiveBenchmark(settings: Settings): string {
   return (settings.benchmark_symbol || "EEM").toUpperCase();
 }
 
-/** True when symbol is not on the base effective watchlist (ignoring open-position merge). */
+/** True when symbol is not on ranked membership (ignoring open-position merge). */
 export function isOffEffectiveWatchlist(symbol: string, settings: Settings): boolean {
   if (!settings.watchlist_dynamic_enabled) {
     return false;
@@ -20,8 +20,8 @@ export function isOffEffectiveWatchlist(symbol: string, settings: Settings): boo
     return false;
   }
 
-  const base = new Set(resolveEffectiveWatchlist(settings).map((s) => s.toUpperCase()));
-  // Empty dynamic list = no names cleared the floor; don't demote the whole book.
+  const base = new Set(resolveRankedMembership(settings).map((s) => s.toUpperCase()));
+  // Empty ranked membership = no names cleared the floor; don't demote the whole book.
   if (base.size === 0) {
     return false;
   }

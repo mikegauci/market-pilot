@@ -21,7 +21,11 @@ function untradeableBenchmarks(settings: Settings): Set<string> {
 function filterStaleCoreFromSaved(settings: Settings, saved: string[]): string[] {
   const core = new Set(resolveWatchlistCore(settings));
   const blocked = untradeableBenchmarks(settings);
-  const dynamicSize = Math.max(0, settings.watchlist_dynamic_size ?? 5);
+  const poolSize = Math.max(
+    0,
+    settings.watchlist_eval_pool_size ?? settings.watchlist_dynamic_size ?? 5,
+    settings.watchlist_dynamic_size ?? 5,
+  );
   const minBuy = settings.watchlist_min_buy ?? 0.6;
   const rankedTop = new Set<string>();
   for (const row of settings.watchlist_jev_rankings ?? []) {
@@ -29,7 +33,7 @@ function filterStaleCoreFromSaved(settings: Settings, saved: string[]): string[]
     if (blocked.has(symbol)) continue;
     if (row.buy < minBuy) continue;
     rankedTop.add(symbol);
-    if (rankedTop.size >= dynamicSize) break;
+    if (rankedTop.size >= poolSize) break;
   }
   const filtered: string[] = [];
   for (const raw of saved) {
@@ -107,4 +111,30 @@ export function resolveEffectiveWatchlist(settings: Settings): string[] {
     return [];
   }
   return filterStaleCoreFromSaved(settings, saved);
+}
+
+/** Ranked membership (top N) used for demotion — may be smaller than the eval pool. */
+export function resolveRankedMembership(settings: Settings): string[] {
+  if (!settings.watchlist_dynamic_enabled) {
+    return stripBenchmark(settings, resolveWatchlistCore(settings));
+  }
+  if (!settings.watchlist_screener_ran_at) {
+    return stripBenchmark(settings, resolveWatchlistCore(settings));
+  }
+  const dynamicSize = Math.max(0, settings.watchlist_dynamic_size ?? 5);
+  const minBuy = settings.watchlist_min_buy ?? 0.6;
+  const blocked = untradeableBenchmarks(settings);
+  const rankings = settings.watchlist_jev_rankings ?? [];
+  if (rankings.length > 0) {
+    const out: string[] = [];
+    for (const row of rankings) {
+      const symbol = row.symbol.toUpperCase();
+      if (blocked.has(symbol)) continue;
+      if (row.buy < minBuy) continue;
+      out.push(symbol);
+      if (out.length >= dynamicSize) break;
+    }
+    return out;
+  }
+  return resolveEffectiveWatchlist(settings).slice(0, dynamicSize);
 }

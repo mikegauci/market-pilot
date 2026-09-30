@@ -794,6 +794,21 @@ export function SettingsForm({
         <input type="hidden" name="pre_submit_recheck_enabled" value="on" />
         <SettingsFieldGroup>
           <SettingsField
+            id="confirmation_enabled"
+            label="Confirmation"
+            description="Require consecutive eligible bars before entry. Off = enter on first eligible eval."
+          >
+            <label className="flex h-10 items-center gap-2 text-sm text-zinc-300">
+              <input
+                type="checkbox"
+                name="confirmation_enabled"
+                defaultChecked={settings.confirmation_enabled ?? true}
+                className="h-4 w-4 rounded border-zinc-600"
+              />
+              Enable confirmation
+            </label>
+          </SettingsField>
+          <SettingsField
             id="confirmation_count"
             label="Confirmation count (bars)"
             description="Consecutive eligible completed bars required before entry."
@@ -1182,6 +1197,57 @@ export function SettingsForm({
             ))}
           </div>
         )}
+      </SettingsSection>
+
+      <SettingsSection
+        title="Entry filters"
+        description="Individually switchable vetoes. Defaults match historical behaviour (all on). Offline audit/replay: trader/analysis/."
+      >
+        <SettingsFieldGroup>
+          {(
+            [
+              ["buy_hold_margin_enabled", "BUY−HOLD margin", settings.buy_hold_margin_enabled],
+              ["rsi_veto_enabled", "RSI overbought veto", settings.rsi_veto_enabled],
+              ["price_floor_enabled", "Min share price floor", settings.price_floor_enabled],
+              ["spread_filter_enabled", "Spread % filter", settings.spread_filter_enabled],
+              ["volume_filter_enabled", "Volume ratio filter", settings.volume_filter_enabled],
+              ["ema20_filter_enabled", "Price above EMA20", settings.ema20_filter_enabled],
+              [
+                "benchmark_headwind_enabled",
+                "Benchmark headwind",
+                settings.benchmark_headwind_enabled,
+              ],
+              ["news_filters_enabled", "News filters", settings.news_filters_enabled],
+              [
+                "correlation_cap_enabled",
+                "Correlation cap",
+                settings.correlation_cap_enabled,
+              ],
+              [
+                "soft_exit_block_winners_enabled",
+                "Block soft-exit of winners below TP",
+                settings.soft_exit_block_winners_enabled,
+              ],
+            ] as const
+          ).map(([name, label, checked]) => (
+            <SettingsField
+              key={name}
+              id={name}
+              label={label}
+              description="Default on — preserves historical filter behaviour when enabled."
+            >
+              <label className="flex h-10 items-center gap-2 text-sm text-zinc-300">
+                <input
+                  type="checkbox"
+                  name={name}
+                  defaultChecked={checked ?? true}
+                  className="h-4 w-4 rounded border-zinc-600"
+                />
+                Enabled
+              </label>
+            </SettingsField>
+          ))}
+        </SettingsFieldGroup>
       </SettingsSection>
 
       <SettingsSection

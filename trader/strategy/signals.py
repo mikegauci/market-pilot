@@ -29,6 +29,7 @@ def signal_tier(
     min_buy_hold_margin: float = 0.0,
     *,
     gate_field: str = "buy_probability",
+    buy_hold_margin_enabled: bool = True,
 ) -> str:
     """Classify the dominant Jev signal by gate-metric tier."""
     dominant = max(
@@ -46,7 +47,11 @@ def signal_tier(
 
     assert gate_value is not None
     if gate_value >= trade_threshold:
-        if min_buy_hold_margin > 0 and (prediction.buy - prediction.hold) < min_buy_hold_margin:
+        if (
+            buy_hold_margin_enabled
+            and min_buy_hold_margin > 0
+            and (prediction.buy - prediction.hold) < min_buy_hold_margin
+        ):
             return f"BUY {gate_value:.0%} — IGNORE (margin)"
         return f"BUY {gate_value:.0%} — ELIGIBLE"
     if gate_value >= record_threshold:

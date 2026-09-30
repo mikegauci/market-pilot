@@ -121,6 +121,20 @@ export type Settings = {
   demotion_jev_sell_on_loss: boolean;
   demotion_jev_sell_max_loss_pct: number;
   demotion_force_exit: boolean;
+  /** Phase 10: individually switchable entry / exit filters (defaults ON). */
+  buy_hold_margin_enabled: boolean;
+  rsi_veto_enabled: boolean;
+  price_floor_enabled: boolean;
+  spread_filter_enabled: boolean;
+  volume_filter_enabled: boolean;
+  ema20_filter_enabled: boolean;
+  benchmark_headwind_enabled: boolean;
+  news_filters_enabled: boolean;
+  correlation_cap_enabled: boolean;
+  confirmation_enabled: boolean;
+  soft_exit_block_winners_enabled: boolean;
+  /** Symbols for fast-loop entry eval; must be >= watchlist_dynamic_size. */
+  watchlist_eval_pool_size: number;
   em_universe_synced_at: string | null;
   em_universe_source: string | null;
   updated_at: string;

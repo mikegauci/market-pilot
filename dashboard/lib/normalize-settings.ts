@@ -43,10 +43,26 @@ const PHASE7_DEFAULTS = {
   jev_spread_max_stddev: 0.05,
 };
 
+const PHASE10_DEFAULTS = {
+  buy_hold_margin_enabled: true,
+  rsi_veto_enabled: true,
+  price_floor_enabled: true,
+  spread_filter_enabled: true,
+  volume_filter_enabled: true,
+  ema20_filter_enabled: true,
+  benchmark_headwind_enabled: true,
+  news_filters_enabled: true,
+  correlation_cap_enabled: true,
+  confirmation_enabled: true,
+  soft_exit_block_winners_enabled: true,
+  watchlist_eval_pool_size: 5,
+};
+
 type Phase3Keys = keyof typeof PHASE3_DEFAULTS;
 type Phase4Keys = keyof typeof PHASE4_DEFAULTS;
 type Phase5Keys = keyof typeof PHASE5_DEFAULTS;
 type Phase7Keys = keyof typeof PHASE7_DEFAULTS;
+type Phase10Keys = keyof typeof PHASE10_DEFAULTS;
 
 /** Row shape from Supabase before newer columns existed or were selected. */
 export type SettingsRow = Omit<
@@ -71,6 +87,7 @@ export type SettingsRow = Omit<
   | Phase4Keys
   | Phase5Keys
   | Phase7Keys
+  | Phase10Keys
 > &
   Partial<
     Pick<
@@ -95,6 +112,7 @@ export type SettingsRow = Omit<
       | Phase4Keys
       | Phase5Keys
       | Phase7Keys
+      | Phase10Keys
     >
   >;
 
@@ -187,5 +205,31 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     drawdown_breaker_enabled:
       raw.drawdown_breaker_enabled ?? PHASE5_DEFAULTS.drawdown_breaker_enabled,
     drawdown_max_frac: raw.drawdown_max_frac ?? PHASE5_DEFAULTS.drawdown_max_frac,
+    buy_hold_margin_enabled:
+      raw.buy_hold_margin_enabled ?? PHASE10_DEFAULTS.buy_hold_margin_enabled,
+    rsi_veto_enabled: raw.rsi_veto_enabled ?? PHASE10_DEFAULTS.rsi_veto_enabled,
+    price_floor_enabled:
+      raw.price_floor_enabled ?? PHASE10_DEFAULTS.price_floor_enabled,
+    spread_filter_enabled:
+      raw.spread_filter_enabled ?? PHASE10_DEFAULTS.spread_filter_enabled,
+    volume_filter_enabled:
+      raw.volume_filter_enabled ?? PHASE10_DEFAULTS.volume_filter_enabled,
+    ema20_filter_enabled:
+      raw.ema20_filter_enabled ?? PHASE10_DEFAULTS.ema20_filter_enabled,
+    benchmark_headwind_enabled:
+      raw.benchmark_headwind_enabled ?? PHASE10_DEFAULTS.benchmark_headwind_enabled,
+    news_filters_enabled:
+      raw.news_filters_enabled ?? PHASE10_DEFAULTS.news_filters_enabled,
+    correlation_cap_enabled:
+      raw.correlation_cap_enabled ?? PHASE10_DEFAULTS.correlation_cap_enabled,
+    confirmation_enabled:
+      raw.confirmation_enabled ?? PHASE10_DEFAULTS.confirmation_enabled,
+    soft_exit_block_winners_enabled:
+      raw.soft_exit_block_winners_enabled ??
+      PHASE10_DEFAULTS.soft_exit_block_winners_enabled,
+    watchlist_eval_pool_size:
+      raw.watchlist_eval_pool_size ??
+      raw.watchlist_dynamic_size ??
+      PHASE10_DEFAULTS.watchlist_eval_pool_size,
   };
 }

@@ -89,7 +89,7 @@ def _filter_stale_core_from_saved(
 ) -> List[str]:
     """Drop always-on core symbols from a pre-dynamic-only union still stored in DB."""
     core = set(resolve_watchlist_core(risk_settings))
-    dynamic_size = max(0, int(risk_settings.watchlist_dynamic_size))
+    pool_size = effective_eval_pool_size(risk_settings)
     min_buy = float(getattr(risk_settings, "watchlist_min_buy", 0.6) or 0.0)
     ranked_top: set[str] = set()
     for item in risk_settings.watchlist_jev_rankings or []:
@@ -98,7 +98,7 @@ def _filter_stale_core_from_saved(
         if item.buy < min_buy:
             continue
         ranked_top.add(item.symbol.upper())
-        if len(ranked_top) >= dynamic_size:
+        if len(ranked_top) >= pool_size:
             break
     filtered: List[str] = []
     for raw in saved:
@@ -112,6 +112,36 @@ def _filter_stale_core_from_saved(
             continue
         filtered.append(symbol)
     return filtered
+
+
+def effective_eval_pool_size(risk_settings: RiskSettings) -> int:
+    """Eval pool must be at least ranked membership size."""
+    dynamic_size = max(0, int(risk_settings.watchlist_dynamic_size))
+    pool = int(getattr(risk_settings, "watchlist_eval_pool_size", dynamic_size) or dynamic_size)
+    return max(dynamic_size, pool)
+
+
+def resolve_ranked_membership(risk_settings: RiskSettings) -> List[str]:
+    """Top-N ranked names used for demotion / 'on list' membership.
+
+    Prefer live rankings when present; otherwise fall back to the head of the
+    saved eval-pool watchlist capped at ``watchlist_dynamic_size``.
+    """
+    if not risk_settings.watchlist_dynamic_enabled:
+        return strip_benchmark_symbol(resolve_watchlist_core(risk_settings), risk_settings)
+    if risk_settings.watchlist_screener_ran_at is None:
+        return strip_benchmark_symbol(resolve_watchlist_core(risk_settings), risk_settings)
+
+    dynamic_size = max(0, int(risk_settings.watchlist_dynamic_size))
+    min_buy = float(getattr(risk_settings, "watchlist_min_buy", 0.6) or 0.0)
+    benchmark = effective_benchmark(risk_settings)
+    rankings = risk_settings.watchlist_jev_rankings or []
+    if rankings:
+        return top_dynamic_symbols(rankings, benchmark, dynamic_size, min_buy=min_buy)
+
+    # No rankings payload — use leading slice of saved eval pool.
+    saved = resolve_base_watchlist(risk_settings)
+    return saved[:dynamic_size]
 
 
 def resolve_base_watchlist(risk_settings: RiskSettings) -> List[str]:
@@ -345,16 +375,20 @@ def run_jev_universe_scan(
 
     dynamic_size = max(0, int(risk_settings.watchlist_dynamic_size))
     min_buy = float(getattr(risk_settings, "watchlist_min_buy", 0.6) or 0.0)
+    pool_size = effective_eval_pool_size(risk_settings)
+    # Persist the eval pool (may be larger than ranked membership used for demotion).
     dynamic_symbols = top_dynamic_symbols(
-        rankings, benchmark, dynamic_size, min_buy=min_buy
+        rankings, benchmark, pool_size, min_buy=min_buy
     )
     effective = merge_dynamic_watchlist(risk_settings, dynamic_symbols, open_symbols)
 
+    ranked = top_dynamic_symbols(rankings, benchmark, dynamic_size, min_buy=min_buy)
     logger.info(
-        "Jev universe scan complete — %s/%s scored, top dynamic: %s (min_buy=%.0f%%)",
+        "Jev universe scan complete — %s/%s scored, eval pool: %s, ranked: %s (min_buy=%.0f%%)",
         len(predictions),
         len(scan_symbols),
         ", ".join(dynamic_symbols) or "(none)",
+        ", ".join(ranked) or "(none)",
         min_buy * 100,
     )
     return effective, rankings

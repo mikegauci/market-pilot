@@ -65,7 +65,19 @@ const baseFields = {
   benchmark_symbol: "EEM",
   watchlist_dynamic_size: "5",
   watchlist_min_buy: "60",
+  watchlist_eval_pool_size: "5",
   watchlist_refresh_minutes: "30",
+  buy_hold_margin_enabled: "on",
+  rsi_veto_enabled: "on",
+  price_floor_enabled: "on",
+  spread_filter_enabled: "on",
+  volume_filter_enabled: "on",
+  ema20_filter_enabled: "on",
+  benchmark_headwind_enabled: "on",
+  news_filters_enabled: "on",
+  correlation_cap_enabled: "on",
+  confirmation_enabled: "on",
+  soft_exit_block_winners_enabled: "on",
 };
 
 describe("parseSettingsForm risk_profile", () => {
@@ -161,16 +173,26 @@ describe("parseSettingsForm watchlist min buy", () => {
     expect(parsed.watchlist_min_buy).toBe(0.6);
   });
 
-  it("rejects watchlist min buy above trade confidence", () => {
-    expect(() =>
-      parseSettingsForm(
-        form({
-          ...baseFields,
-          minimum_jev_confidence: "80",
-          watchlist_min_buy: "85",
-        }),
-      ),
-    ).toThrow("Watchlist min BUY (%) must be at or below Min BUY probability (%)");
+  it("allows watchlist min buy above trade confidence (independent floors)", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        minimum_jev_confidence: "80",
+        watchlist_min_buy: "85",
+      }),
+    );
+    expect(parsed.watchlist_min_buy).toBe(0.85);
+  });
+
+  it("clamps eval pool size up to dynamic size", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        watchlist_dynamic_size: "8",
+        watchlist_eval_pool_size: "3",
+      }),
+    );
+    expect(parsed.watchlist_eval_pool_size).toBe(8);
   });
 });
 

@@ -464,10 +464,14 @@ class SupabaseRepository:
                 "daily_loss_action, drawdown_breaker_enabled, drawdown_max_frac, "
                 "account_capital, risk_sync_equity, watchlist, watchlist_core, "
                 "watchlist_dynamic_enabled, watchlist_dynamic_size, "
-                "watchlist_min_buy, "
+                "watchlist_min_buy, watchlist_eval_pool_size, "
                 "watchlist_refresh_minutes, benchmark_symbol, watchlist_jev_rankings, "
                 "watchlist_screener_ran_at, demotion_exits_enabled, demotion_max_hold_ratio, "
-                "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit"
+                "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit, "
+                "buy_hold_margin_enabled, rsi_veto_enabled, price_floor_enabled, "
+                "spread_filter_enabled, volume_filter_enabled, ema20_filter_enabled, "
+                "benchmark_headwind_enabled, news_filters_enabled, correlation_cap_enabled, "
+                "confirmation_enabled, soft_exit_block_winners_enabled"
             )
             .eq("id", 1)
             .single()
@@ -569,6 +573,15 @@ class SupabaseRepository:
             watchlist_dynamic_enabled=bool(data.get("watchlist_dynamic_enabled", True)),
             watchlist_dynamic_size=int(data.get("watchlist_dynamic_size", 5)),
             watchlist_min_buy=float(data.get("watchlist_min_buy", 0.6)),
+            watchlist_eval_pool_size=max(
+                int(data.get("watchlist_dynamic_size", 5)),
+                int(
+                    data.get(
+                        "watchlist_eval_pool_size",
+                        data.get("watchlist_dynamic_size", 5),
+                    )
+                ),
+            ),
             watchlist_refresh_minutes=int(data.get("watchlist_refresh_minutes", 30)),
             benchmark_symbol=str(data.get("benchmark_symbol") or "EEM").upper(),
             watchlist_jev_rankings=self._parse_jev_rankings(
@@ -584,6 +597,21 @@ class SupabaseRepository:
                 data.get("demotion_jev_sell_max_loss_pct", 0.02)
             ),
             demotion_force_exit=bool(data.get("demotion_force_exit", False)),
+            buy_hold_margin_enabled=bool(data.get("buy_hold_margin_enabled", True)),
+            rsi_veto_enabled=bool(data.get("rsi_veto_enabled", True)),
+            price_floor_enabled=bool(data.get("price_floor_enabled", True)),
+            spread_filter_enabled=bool(data.get("spread_filter_enabled", True)),
+            volume_filter_enabled=bool(data.get("volume_filter_enabled", True)),
+            ema20_filter_enabled=bool(data.get("ema20_filter_enabled", True)),
+            benchmark_headwind_enabled=bool(
+                data.get("benchmark_headwind_enabled", True)
+            ),
+            news_filters_enabled=bool(data.get("news_filters_enabled", True)),
+            correlation_cap_enabled=bool(data.get("correlation_cap_enabled", True)),
+            confirmation_enabled=bool(data.get("confirmation_enabled", True)),
+            soft_exit_block_winners_enabled=bool(
+                data.get("soft_exit_block_winners_enabled", True)
+            ),
         )
 
     @_db_synchronized

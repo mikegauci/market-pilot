@@ -436,8 +436,11 @@ class EMWatchlistScheduler:
 
             dynamic_size = max(0, int(job.risk_settings.watchlist_dynamic_size))
             min_buy = float(getattr(job.risk_settings, "watchlist_min_buy", 0.6) or 0.0)
+            from watchlist.jev_screener import effective_eval_pool_size
+
+            pool_size = effective_eval_pool_size(job.risk_settings)
             dynamic_symbols = top_dynamic_symbols(
-                rankings, benchmark, dynamic_size, min_buy=min_buy
+                rankings, benchmark, pool_size, min_buy=min_buy
             )
             persisted = merge_dynamic_watchlist(job.risk_settings, dynamic_symbols, [])
             ran_at = datetime.now(timezone.utc)
@@ -449,9 +452,13 @@ class EMWatchlistScheduler:
             )
             self._publish_screener_result(job, result)
 
+            ranked = top_dynamic_symbols(
+                rankings, benchmark, dynamic_size, min_buy=min_buy
+            )
             logger.info(
-                "Jev universe scan persisted — effective watchlist: %s",
-                ", ".join(persisted),
+                "Jev universe scan persisted — eval pool: %s (ranked membership: %s)",
+                ", ".join(persisted) or "(none)",
+                ", ".join(ranked) or "(none)",
             )
         except Exception as exc:
             logger.exception("Jev universe screener failed: %s", exc)
