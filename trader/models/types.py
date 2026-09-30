@@ -79,6 +79,9 @@ class BotStatusUpdate:
     market_data_type: Optional[int] = None
     quote_age_p50_sec: Optional[float] = None
     quote_age_p95_sec: Optional[float] = None
+    last_reconcile_at: Optional[datetime] = None
+    reconcile_ok: Optional[bool] = None
+    reconcile_detail: Optional[str] = None
 
 
 @dataclass
@@ -209,6 +212,8 @@ class RiskSettings:
     jev_transport_fail_window_sec: int = 60
     jev_timeout_sec: float = 3.0
     jev_max_retries: int = 1
+    reconcile_interval_sec: int = 60
+    reconcile_protect_orphans: bool = True
 
 
 @dataclass
@@ -233,6 +238,7 @@ class TradeRecord:
     ibkr_parent_order_id: Optional[int] = None
     ibkr_sl_order_id: Optional[int] = None
     ibkr_tp_order_id: Optional[int] = None
+    client_order_id: Optional[str] = None
 
 
 @dataclass
@@ -242,6 +248,9 @@ class BracketOrderResult:
     tp_order_id: int
     fill_price: float
     filled_quantity: float
+    client_order_id: Optional[str] = None
+    resized_children: bool = False
+    resize_failed: bool = False
 
 
 @dataclass

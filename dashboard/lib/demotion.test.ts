@@ -43,6 +43,8 @@ function baseSettings(overrides: Partial<Settings> = {}): Settings {
     jev_transport_fail_window_sec: 60,
     jev_timeout_sec: 3,
     jev_max_retries: 1,
+    reconcile_interval_sec: 60,
+    reconcile_protect_orphans: true,
     min_volume_ratio: 0,
     min_share_price: 20,
     account_capital: 1000,

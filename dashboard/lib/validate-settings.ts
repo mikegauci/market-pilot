@@ -38,6 +38,7 @@ function labelFor(name: string): string {
     watchlist_min_buy: "Watchlist min BUY (%)",
     min_volume_ratio: "Min volume ratio",
     min_share_price: "Min share price ($)",
+    reconcile_interval_sec: "Reconcile interval (sec)",
   };
   return labels[name] ?? name;
 }
@@ -80,6 +81,8 @@ export type ParsedSettings = {
   jev_transport_fail_window_sec: number;
   jev_timeout_sec: number;
   jev_max_retries: number;
+  reconcile_interval_sec: number;
+  reconcile_protect_orphans: boolean;
   account_capital: number;
   min_volume_ratio: number;
   min_share_price: number;
@@ -363,6 +366,9 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   );
   const jev_timeout_sec = parseRequiredNumber(formData, "jev_timeout_sec");
   const jev_max_retries = parseRequiredNumber(formData, "jev_max_retries");
+  const reconcile_interval_sec = parseRequiredNumber(formData, "reconcile_interval_sec");
+  const reconcile_protect_orphans =
+    String(formData.get("reconcile_protect_orphans") ?? "on") === "on";
 
   if (
     !Number.isInteger(max_quote_age_sec) ||
@@ -404,6 +410,13 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   ) {
     throw new Error("Jev max retries must be an integer from 0 to 3");
   }
+  if (
+    !Number.isInteger(reconcile_interval_sec) ||
+    reconcile_interval_sec < 15 ||
+    reconcile_interval_sec > 600
+  ) {
+    throw new Error("Reconcile interval must be an integer from 15 to 600 seconds");
+  }
 
   return {
     minimum_jev_confidence,
@@ -443,6 +456,8 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     jev_transport_fail_window_sec,
     jev_timeout_sec,
     jev_max_retries,
+    reconcile_interval_sec,
+    reconcile_protect_orphans,
     account_capital,
     min_volume_ratio,
     min_share_price,

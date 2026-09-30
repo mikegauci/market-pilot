@@ -23,6 +23,9 @@ export type BotStatus = {
   market_data_type?: number | null;
   quote_age_p50_sec?: number | null;
   quote_age_p95_sec?: number | null;
+  last_reconcile_at?: string | null;
+  reconcile_ok?: boolean | null;
+  reconcile_detail?: string | null;
 };
 
 export type Settings = {
@@ -73,6 +76,10 @@ export type Settings = {
   jev_transport_fail_window_sec: number;
   jev_timeout_sec: number;
   jev_max_retries: number;
+  /** Phase 4: IBKR reconcile interval (seconds). */
+  reconcile_interval_sec: number;
+  /** Place protective brackets on unprotected orphans (else flatten). */
+  reconcile_protect_orphans: boolean;
   /** 0 = off; block entries when 1m volume ratio is below this vs 10-bar average */
   min_volume_ratio: number;
   /** 0 = off; block entries / EM scan picks below this USD share price */

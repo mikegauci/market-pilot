@@ -17,6 +17,9 @@ const defaultBotStatus = {
   market_data_type: null,
   quote_age_p50_sec: null,
   quote_age_p95_sec: null,
+  last_reconcile_at: null,
+  reconcile_ok: null,
+  reconcile_detail: null,
 };
 
 export default async function DashboardLayout({ children }: LayoutProps<"/">) {

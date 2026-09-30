@@ -155,6 +155,7 @@ def _trade_from_row(row: dict) -> TradeRecord:
         ibkr_parent_order_id=int(row["ibkr_parent_order_id"]) if row.get("ibkr_parent_order_id") is not None else None,
         ibkr_sl_order_id=int(row["ibkr_sl_order_id"]) if row.get("ibkr_sl_order_id") is not None else None,
         ibkr_tp_order_id=int(row["ibkr_tp_order_id"]) if row.get("ibkr_tp_order_id") is not None else None,
+        client_order_id=str(row["client_order_id"]) if row.get("client_order_id") else None,
     )
 
 
@@ -222,6 +223,12 @@ class SupabaseRepository:
             payload["quote_age_p50_sec"] = status.quote_age_p50_sec
         if status.quote_age_p95_sec is not None:
             payload["quote_age_p95_sec"] = status.quote_age_p95_sec
+        if status.last_reconcile_at is not None:
+            payload["last_reconcile_at"] = status.last_reconcile_at.isoformat()
+        if status.reconcile_ok is not None:
+            payload["reconcile_ok"] = status.reconcile_ok
+        if status.reconcile_detail is not None:
+            payload["reconcile_detail"] = status.reconcile_detail
         self.client.table("bot_status").update(payload).eq("id", 1).execute()
 
     @_db_synchronized
@@ -434,6 +441,7 @@ class SupabaseRepository:
                 "confirmation_mode, confirmation_count, kill_recover_healthy_sec, "
                 "kill_alert_min_gap_sec, jev_transport_fail_rate_kill_frac, "
                 "jev_transport_fail_window_sec, jev_timeout_sec, jev_max_retries, "
+                "reconcile_interval_sec, reconcile_protect_orphans, "
                 "account_capital, risk_sync_equity, watchlist, watchlist_core, "
                 "watchlist_dynamic_enabled, watchlist_dynamic_size, "
                 "watchlist_min_buy, "
@@ -514,6 +522,8 @@ class SupabaseRepository:
             ),
             jev_timeout_sec=float(data.get("jev_timeout_sec", 3)),
             jev_max_retries=int(data.get("jev_max_retries", 1)),
+            reconcile_interval_sec=int(data.get("reconcile_interval_sec", 60)),
+            reconcile_protect_orphans=bool(data.get("reconcile_protect_orphans", True)),
             account_capital=float(data.get("account_capital", 1000)),
             risk_sync_equity=risk_sync_equity,
             watchlist=[str(s).upper() for s in watchlist],
@@ -844,6 +854,7 @@ class SupabaseRepository:
             "ibkr_parent_order_id": trade.ibkr_parent_order_id,
             "ibkr_sl_order_id": trade.ibkr_sl_order_id,
             "ibkr_tp_order_id": trade.ibkr_tp_order_id,
+            "client_order_id": trade.client_order_id,
             "commission": 0,
             "slippage": 0,
             "created_at": now,
@@ -861,9 +872,45 @@ class SupabaseRepository:
             "ibkr_parent_order_id": trade.ibkr_parent_order_id,
             "ibkr_sl_order_id": trade.ibkr_sl_order_id,
             "ibkr_tp_order_id": trade.ibkr_tp_order_id,
+            "quantity": trade.quantity,
+            "position_value": trade.position_value,
             "updated_at": now,
         }
+        if trade.client_order_id is not None:
+            payload["client_order_id"] = trade.client_order_id
         self.client.table("trades").update(payload).eq("id", trade.id).execute()
+
+    @_db_synchronized
+    def insert_reconciliation_event(
+        self,
+        *,
+        symbol: str,
+        event_type: str,
+        detail: Optional[dict] = None,
+    ) -> None:
+        payload = {
+            "symbol": str(symbol).upper() if symbol != "*" else "*",
+            "event_type": event_type,
+            "detail": detail or {},
+        }
+        self.client.table("reconciliation_events").insert(payload).execute()
+
+    @_db_synchronized
+    def update_reconcile_status(
+        self,
+        *,
+        ok: bool,
+        detail: str,
+        at: Optional[datetime] = None,
+    ) -> None:
+        now = at or datetime.now(timezone.utc)
+        payload = {
+            "last_reconcile_at": now.isoformat(),
+            "reconcile_ok": bool(ok),
+            "reconcile_detail": detail[:500] if detail else "",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.client.table("bot_status").update(payload).eq("id", 1).execute()
 
     @_db_synchronized
     def close_trade(

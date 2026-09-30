@@ -22,7 +22,13 @@ const PHASE3_DEFAULTS = {
   jev_max_retries: 1,
 };
 
+const PHASE4_DEFAULTS = {
+  reconcile_interval_sec: 60,
+  reconcile_protect_orphans: true,
+};
+
 type Phase3Keys = keyof typeof PHASE3_DEFAULTS;
+type Phase4Keys = keyof typeof PHASE4_DEFAULTS;
 
 /** Row shape from Supabase before newer columns existed or were selected. */
 export type SettingsRow = Omit<
@@ -44,6 +50,7 @@ export type SettingsRow = Omit<
   | "eod_flat_verify_minutes_before_close"
   | "equity_divergence_alert_frac"
   | Phase3Keys
+  | Phase4Keys
 > &
   Partial<
     Pick<
@@ -65,6 +72,7 @@ export type SettingsRow = Omit<
       | "eod_flat_verify_minutes_before_close"
       | "equity_divergence_alert_frac"
       | Phase3Keys
+      | Phase4Keys
     >
   >;
 
@@ -133,5 +141,9 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
       PHASE3_DEFAULTS.jev_transport_fail_window_sec,
     jev_timeout_sec: raw.jev_timeout_sec ?? PHASE3_DEFAULTS.jev_timeout_sec,
     jev_max_retries: raw.jev_max_retries ?? PHASE3_DEFAULTS.jev_max_retries,
+    reconcile_interval_sec:
+      raw.reconcile_interval_sec ?? PHASE4_DEFAULTS.reconcile_interval_sec,
+    reconcile_protect_orphans:
+      raw.reconcile_protect_orphans ?? PHASE4_DEFAULTS.reconcile_protect_orphans,
   };
 }

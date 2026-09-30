@@ -817,6 +817,22 @@ export function SettingsForm({
               required
             />
           </SettingsField>
+          <SettingsField
+            id="reconcile_interval_sec"
+            label="Reconcile interval (sec)"
+            description="How often the engine reconciles IBKR positions vs open trades (15–600)."
+          >
+            <Input
+              id="reconcile_interval_sec"
+              name="reconcile_interval_sec"
+              type="number"
+              min={15}
+              max={600}
+              defaultValue={settings.reconcile_interval_sec ?? 60}
+              required
+            />
+          </SettingsField>
+          <input type="hidden" name="reconcile_protect_orphans" value="on" />
           <SettingsField id="kill_alert_min_gap_sec" label="Kill alert min gap (sec)" description="">
             <Input
               id="kill_alert_min_gap_sec"

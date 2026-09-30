@@ -47,6 +47,8 @@ const baseFields = {
   jev_transport_fail_window_sec: "60",
   jev_timeout_sec: "3",
   jev_max_retries: "1",
+  reconcile_interval_sec: "60",
+  reconcile_protect_orphans: "on",
   account_capital: "10000",
   min_volume_ratio: "0.5",
   min_share_price: "20",
@@ -219,5 +221,17 @@ describe("parseSettingsForm eod closeout", () => {
     expect(parsed.equity_divergence_alert_frac).toBe(0.05);
     expect(parsed.account_capital).toBe(10000);
     expect(parsed.prediction_horizon_minutes).toBe(15);
+  });
+
+  it("parses reconcile interval defaults", () => {
+    const parsed = parseSettingsForm(form(baseFields));
+    expect(parsed.reconcile_interval_sec).toBe(60);
+    expect(parsed.reconcile_protect_orphans).toBe(true);
+  });
+
+  it("rejects reconcile interval out of range", () => {
+    expect(() =>
+      parseSettingsForm(form({ ...baseFields, reconcile_interval_sec: "10" })),
+    ).toThrow("Reconcile interval must be an integer from 15 to 600 seconds");
   });
 });

@@ -46,5 +46,7 @@ describe("normalizeSettings", () => {
     expect(normalized?.confirmation_mode).toBe("distinct_bars");
     expect(normalized?.stale_input_gates_enabled).toBe(true);
     expect(normalized?.jev_timeout_sec).toBe(3);
+    expect(normalized?.reconcile_interval_sec).toBe(60);
+    expect(normalized?.reconcile_protect_orphans).toBe(true);
   });
 });

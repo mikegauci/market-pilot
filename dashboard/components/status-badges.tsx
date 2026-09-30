@@ -139,6 +139,14 @@ function StatusPanel({
         : "Unavailable";
   const entryKill = Boolean(status.entry_kill_active);
   const mdType = status.market_data_type;
+  const reconcileOk = status.reconcile_ok;
+  const reconcileLabel =
+    reconcileOk === true
+      ? "OK"
+      : reconcileOk === false
+        ? "Issue"
+        : "—";
+  const reconcileActive = reconcileOk === true;
 
   if (variant === "sidebar") {
     return (
@@ -147,6 +155,11 @@ function StatusPanel({
           <p className="mb-2 rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-200">
             Entry kill: {status.entry_kill_reason || "active"}
             {mdType != null ? ` · MD type ${mdType}` : ""}
+          </p>
+        ) : null}
+        {reconcileOk === false ? (
+          <p className="mb-2 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-200">
+            Reconcile: {status.reconcile_detail || "needs attention"}
           </p>
         ) : null}
         <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
@@ -191,6 +204,11 @@ function StatusPanel({
             active={display.ibkrConnected}
           />
           <SidebarStatusRow label="Signals" value={signalsLabel} active={signalsActive} />
+          <SidebarStatusRow
+            label="Reconcile"
+            value={reconcileLabel}
+            active={reconcileActive}
+          />
         </div>
 
         <p className="mt-2 text-[10px] text-zinc-500" suppressHydrationWarning>
@@ -275,6 +293,18 @@ function StatusPanel({
           value={signalsLabel}
           active={signalsActive}
           tone="purple"
+        />
+        <StatusItem
+          label="Reconcile"
+          value={
+            reconcileOk === true
+              ? "OK"
+              : reconcileOk === false
+                ? status.reconcile_detail || "Issue"
+                : "—"
+          }
+          active={reconcileActive}
+          tone="teal"
         />
       </div>
 

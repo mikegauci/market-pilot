@@ -723,6 +723,37 @@ class IBKRClient:
         return False
 
     @_ibkr_synchronized
+    def find_open_order_by_client_id(self, client_order_id: str) -> Optional[Trade]:
+        """Return an open trade whose orderRef matches client_order_id."""
+        if not client_order_id or not self.is_connected():
+            return None
+        self.ib.reqOpenOrders()
+        self.ib.sleep(0.2)
+        for trade in self.ib.openTrades():
+            if str(getattr(trade.order, "orderRef", "") or "") == client_order_id:
+                return trade
+        for trade in self.ib.trades():
+            if str(getattr(trade.order, "orderRef", "") or "") != client_order_id:
+                continue
+            if trade.orderStatus.status not in TERMINAL_ORDER_STATUSES:
+                return trade
+            if trade.orderStatus.status == "Filled":
+                return trade
+        return None
+
+    def _resize_working_order(self, trade: Trade, new_qty: int) -> bool:
+        """Modify an open child order quantity. Returns True on success."""
+        try:
+            order = trade.order
+            order.totalQuantity = int(new_qty)
+            self.ib.placeOrder(trade.contract, order)
+            self.ib.sleep(0.2)
+            return True
+        except Exception as exc:
+            logger.warning("Failed to resize order %s to %s: %s", trade.order.orderId, new_qty, exc)
+            return False
+
+    @_ibkr_synchronized
     def place_bracket_buy(
         self,
         symbol: str,
@@ -730,14 +761,38 @@ class IBKRClient:
         stop_loss: float,
         take_profit: float,
         fill_timeout_sec: float = 30.0,
+        *,
+        client_order_id: Optional[str] = None,
     ) -> BracketOrderResult:
-        """Place market buy with bracket stop-loss and take-profit child orders."""
+        """Place market buy with OCA bracket SL/TP; idempotent via client_order_id."""
         if quantity < 1:
             raise ValueError(f"Invalid quantity for {symbol}: {quantity}")
 
         account = self._resolve_account()
         contract = self._ensure_contract(symbol)
         qty = int(quantity)
+        coid = (client_order_id or "").strip() or None
+
+        if coid:
+            existing = self.find_open_order_by_client_id(coid)
+            if existing is not None:
+                # Idempotent retry: wait for existing parent fill; do not place anew.
+                fill = self._wait_for_fill(existing, fill_timeout_sec, symbol)
+                if fill is None:
+                    raise RuntimeError(
+                        f"Existing order {coid} for {symbol} did not fill "
+                        f"({_describe_trade_state(existing)})"
+                    )
+                fill_price, filled_qty = fill
+                legs = self.find_open_bracket_legs(symbol)
+                return BracketOrderResult(
+                    parent_order_id=existing.order.orderId,
+                    sl_order_id=legs.sl_order_id if legs else 0,
+                    tp_order_id=legs.tp_order_id if legs else 0,
+                    fill_price=fill_price,
+                    filled_quantity=filled_qty,
+                    client_order_id=coid,
+                )
 
         parent = MarketOrder("BUY", qty)
         parent.account = account
@@ -745,6 +800,10 @@ class IBKRClient:
         parent.transmit = False
         parent.tif = "DAY"
         parent.outsideRth = False
+        if coid:
+            parent.orderRef = coid
+
+        oca_group = f"mp-{parent.orderId}-oca"
 
         take_profit_order = LimitOrder("SELL", qty, round(take_profit, 2))
         take_profit_order.account = account
@@ -753,6 +812,10 @@ class IBKRClient:
         take_profit_order.transmit = False
         take_profit_order.tif = "DAY"
         take_profit_order.outsideRth = False
+        take_profit_order.ocaGroup = oca_group
+        take_profit_order.ocaType = 1  # Cancel remaining with block
+        if coid:
+            take_profit_order.orderRef = f"{coid}-tp"
 
         stop_loss_order = StopOrder("SELL", qty, round(stop_loss, 2))
         stop_loss_order.account = account
@@ -761,6 +824,10 @@ class IBKRClient:
         stop_loss_order.transmit = True
         stop_loss_order.tif = "DAY"
         stop_loss_order.outsideRth = False
+        stop_loss_order.ocaGroup = oca_group
+        stop_loss_order.ocaType = 1
+        if coid:
+            stop_loss_order.orderRef = f"{coid}-sl"
 
         parent_trade = self.ib.placeOrder(contract, parent)
         tp_trade = self.ib.placeOrder(contract, take_profit_order)
@@ -782,14 +849,39 @@ class IBKRClient:
             )
 
         fill_price, filled_qty = fill
+        resized = False
+        resize_failed = False
+        filled_int = int(filled_qty)
+        if filled_int < qty and filled_int >= 1:
+            ok_sl = self._resize_working_order(sl_trade, filled_int)
+            ok_tp = self._resize_working_order(tp_trade, filled_int)
+            resized = ok_sl and ok_tp
+            resize_failed = not resized
+            if resize_failed:
+                logger.error(
+                    "Partial fill child resize failed for %s (filled=%s requested=%s)",
+                    symbol,
+                    filled_int,
+                    qty,
+                )
+            else:
+                logger.info(
+                    "Resized SL/TP for %s to filled qty %s (requested %s)",
+                    symbol,
+                    filled_int,
+                    qty,
+                )
+
         logger.info(
-            "IBKR bracket BUY %s x %s @ $%.2f (parent=%s sl=%s tp=%s)",
+            "IBKR bracket BUY %s x %s @ $%.2f (parent=%s sl=%s tp=%s oca=%s coid=%s)",
             symbol,
             filled_qty,
             fill_price,
             parent_trade.order.orderId,
             sl_trade.order.orderId,
             tp_trade.order.orderId,
+            oca_group,
+            coid,
         )
 
         return BracketOrderResult(
@@ -798,7 +890,82 @@ class IBKRClient:
             tp_order_id=tp_trade.order.orderId,
             fill_price=fill_price,
             filled_quantity=filled_qty,
+            client_order_id=coid,
+            resized_children=resized,
+            resize_failed=resize_failed,
         )
+
+    @_ibkr_synchronized
+    def place_protective_orders(
+        self,
+        symbol: str,
+        quantity: float,
+        stop_loss: float,
+        take_profit: float,
+    ) -> Optional[BracketLegs]:
+        """Place DAY OCA SL/TP for an existing long with no live protection."""
+        if quantity < 1:
+            return None
+        if not self.is_connected():
+            return None
+        account = self._resolve_account()
+        contract = self._ensure_contract(symbol)
+        qty = int(quantity)
+        oca_group = f"mp-prot-{symbol}-{self.ib.client.getReqId()}-oca"
+
+        take_profit_order = LimitOrder("SELL", qty, round(take_profit, 2))
+        take_profit_order.account = account
+        take_profit_order.orderId = self.ib.client.getReqId()
+        take_profit_order.transmit = False
+        take_profit_order.tif = "DAY"
+        take_profit_order.outsideRth = False
+        take_profit_order.ocaGroup = oca_group
+        take_profit_order.ocaType = 1
+
+        stop_loss_order = StopOrder("SELL", qty, round(stop_loss, 2))
+        stop_loss_order.account = account
+        stop_loss_order.orderId = self.ib.client.getReqId()
+        stop_loss_order.transmit = True
+        stop_loss_order.tif = "DAY"
+        stop_loss_order.outsideRth = False
+        stop_loss_order.ocaGroup = oca_group
+        stop_loss_order.ocaType = 1
+
+        tp_trade = self.ib.placeOrder(contract, take_profit_order)
+        sl_trade = self.ib.placeOrder(contract, stop_loss_order)
+        self.ib.sleep(0.3)
+        return BracketLegs(
+            parent_order_id=None,
+            sl_order_id=sl_trade.order.orderId,
+            tp_order_id=tp_trade.order.orderId,
+            stop_loss=float(stop_loss),
+            take_profit=float(take_profit),
+        )
+
+    @_ibkr_synchronized
+    def cancel_orphaned_sell_brackets(self) -> int:
+        """Cancel working SELL SL/TP with no matching long position. Returns count."""
+        if not self.is_connected():
+            return 0
+        positions = {p.symbol: p.quantity for p in self.get_positions()}
+        cancelled = 0
+        self.ib.reqOpenOrders()
+        self.ib.sleep(0.2)
+        for trade in list(self.ib.openTrades()):
+            if str(trade.order.action).upper() != "SELL":
+                continue
+            if trade.orderStatus.status in TERMINAL_ORDER_STATUSES:
+                continue
+            symbol = from_ibkr_contract(trade.contract) or ""
+            if not symbol:
+                continue
+            held = positions.get(symbol.upper(), 0)
+            if held >= 1:
+                continue
+            self._cancel_trade(trade)
+            cancelled += 1
+            logger.info("Cancelled orphaned SELL order for %s (no position)", symbol)
+        return cancelled
 
     def _wait_for_fill(
         self,

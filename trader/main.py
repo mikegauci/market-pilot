@@ -30,7 +30,8 @@ from broker.ibkr import (
     is_kid_document_rejection,
     is_permanent_ibkr_eligibility_rejection,
 )
-from broker.reconcile import reconcile_orphan_ibkr_positions
+from broker.reconcile import reconcile_cycle
+from broker.symbol_locks import EXIT_LOCKS
 from config import Settings, load_settings
 from execution_mode import effective_execution_mode
 from instance_lock import acquire_trader_lock
@@ -717,6 +718,7 @@ def run() -> int:
     _eod_flat_verified_for_close: Optional[datetime] = None
     _eod_bar_audit_for_close: Optional[datetime] = None
     _ibkr_was_connected = ibkr.is_connected()
+    _reconcile_block_entries = False
 
     risk_manager: Optional[RiskManager] = None
     if db:
@@ -747,19 +749,41 @@ def run() -> int:
             )
 
         if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
-            reconciled = reconcile_orphan_ibkr_positions(
+            startup_reconcile = reconcile_cycle(
                 ibkr,
                 risk_manager,
                 db,
                 trading_mode,
                 risk_settings,
-                watchlist=watchlist,
+                notifier=lambda msg: notifier.send(msg),
+                fill_timeout_sec=settings.ibkr_fill_timeout_sec,
             )
-            if reconciled:
-                logger.info(
-                    "Startup reconciliation complete — %s orphan IBKR position(s) adopted",
-                    reconciled,
+            db.update_reconcile_status(
+                ok=startup_reconcile.ok and not startup_reconcile.block_entries,
+                detail=startup_reconcile.detail,
+            )
+            _reconcile_block_entries = startup_reconcile.block_entries
+            if startup_reconcile.block_entries:
+                entry_kill.activate(
+                    "reconcile_mismatch", datetime.now(timezone.utc)
                 )
+            logger.info(
+                "Startup reconciliation — adopted=%s protected=%s flattened=%s "
+                "attached=%s mismatches=%s ok=%s block_entries=%s",
+                startup_reconcile.adopted,
+                startup_reconcile.protected,
+                startup_reconcile.flattened,
+                startup_reconcile.attached_legs,
+                startup_reconcile.qty_mismatches,
+                startup_reconcile.ok,
+                startup_reconcile.block_entries,
+            )
+            if (
+                startup_reconcile.adopted
+                or startup_reconcile.protected
+                or startup_reconcile.flattened
+                or startup_reconcile.attached_legs
+            ):
                 _sync_portfolio_state(db, ibkr, risk_manager, execution_mode, [])
 
     signal.signal(signal.SIGINT, _handle_shutdown)
@@ -775,12 +799,43 @@ def run() -> int:
     last_live_bar_flush = 0.0
     last_general_news_refresh = 0.0
     last_quote_age_log = 0.0
+    last_reconcile = startup_mono
     gates_enforce_after_mono = startup_mono + float(
         max(0, risk_settings.quote_age_log_only_sec)
     )
     general_news_running = False
     general_news_lock = threading.Lock()
     data_source_label = "ibkr" if ibkr.is_connected() else "mock"
+
+    def _apply_reconcile_result(result) -> None:
+        nonlocal _reconcile_block_entries
+        if db is None:
+            return
+        db.update_reconcile_status(
+            ok=result.ok and not result.block_entries,
+            detail=result.detail,
+        )
+        _reconcile_block_entries = bool(result.block_entries)
+        now_utc_r = datetime.now(timezone.utc)
+        if result.block_entries:
+            changed = entry_kill.activate("reconcile_mismatch", now_utc_r)
+            if changed and entry_kill.should_alert(
+                now_utc_r, float(risk_settings.kill_alert_min_gap_sec)
+            ):
+                entry_kill.mark_alerted(now_utc_r)
+                notifier.send(
+                    f"Market Pilot ENTRY KILL ON: reconcile_mismatch ({result.detail})"
+                )
+        elif entry_kill.active and entry_kill.reason == "reconcile_mismatch":
+            entry_kill.active = False
+            entry_kill.reason = ""
+            entry_kill.activated_at = None
+            entry_kill.healthy_since = None
+            if entry_kill.should_alert(
+                now_utc_r, float(risk_settings.kill_alert_min_gap_sec)
+            ):
+                entry_kill.mark_alerted(now_utc_r)
+                notifier.send("Market Pilot ENTRY KILL cleared — reconcile ok")
 
     def _start_general_news_refresh() -> None:
         nonlocal last_general_news_refresh, general_news_running
@@ -1006,9 +1061,10 @@ def run() -> int:
             quotes = _get_quotes(settings, ibkr, mock, all_symbols)
             quotes_by_symbol: Dict[str, Quote] = {q.symbol: q for q in quotes}
 
-            # Resubscribe keepUpToDate bars after IBKR reconnect.
+            # Resubscribe keepUpToDate bars after IBKR reconnect; re-run reconcile.
             if settings.data_source == DataSource.IBKR:
                 connected_now = ibkr.is_connected()
+                just_reconnected = False
                 if connected_now and not _ibkr_was_connected:
                     logger.info("IBKR reconnected — resubscribing 1m TRADES bars")
                     ibkr.sync_watchlist_subscriptions(all_symbols)
@@ -1017,6 +1073,7 @@ def run() -> int:
                     _ibkr_market_data_mode = ibkr.ensure_market_data_ready(
                         all_symbols, wait_sec=1.0
                     )
+                    just_reconnected = True
                 elif (
                     not connected_now
                     and _ibkr_was_connected
@@ -1029,7 +1086,28 @@ def run() -> int:
                     _ibkr_market_data_mode = ibkr.ensure_market_data_ready(
                         all_symbols, wait_sec=1.0
                     )
+                    just_reconnected = True
                 _ibkr_was_connected = ibkr.is_connected()
+                if (
+                    just_reconnected
+                    and execution_mode == ExecutionMode.IBKR
+                    and risk_manager
+                    and db
+                    and ibkr.is_connected()
+                ):
+                    _apply_reconcile_result(
+                        reconcile_cycle(
+                            ibkr,
+                            risk_manager,
+                            db,
+                            trading_mode,
+                            risk_settings,
+                            notifier=lambda msg: notifier.send(msg),
+                            fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                        )
+                    )
+                    last_reconcile = time.monotonic()
+                    portfolio_dirty = True
 
             if (
                 settings.data_source == DataSource.IBKR
@@ -1069,6 +1147,30 @@ def run() -> int:
                     fill_timeout_sec=settings.ibkr_fill_timeout_sec,
                 ):
                     portfolio_dirty = True
+
+            # Periodic IBKR reconcile (paper/IBKR execution only).
+            now_mono_rec = time.monotonic()
+            reconcile_every = max(15, int(getattr(risk_settings, "reconcile_interval_sec", 60) or 60))
+            if (
+                execution_mode == ExecutionMode.IBKR
+                and risk_manager
+                and db
+                and ibkr.is_connected()
+                and (now_mono_rec - last_reconcile) >= reconcile_every
+            ):
+                _apply_reconcile_result(
+                    reconcile_cycle(
+                        ibkr,
+                        risk_manager,
+                        db,
+                        trading_mode,
+                        risk_settings,
+                        notifier=lambda msg: notifier.send(msg),
+                        fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                    )
+                )
+                last_reconcile = now_mono_rec
+                portfolio_dirty = True
 
             for quote in quotes:
                 # Universe scan still uses tick-built bars; entry symbols use keepUpToDate.
@@ -1166,8 +1268,8 @@ def run() -> int:
                         f"Market Pilot ENTRY KILL ON: {entry_kill.reason} "
                         f"(stale_share={feed_share:.0%})"
                     )
-            else:
-                # Recovery can start during the log-only window once ages look healthy.
+            elif entry_kill.reason != "reconcile_mismatch":
+                # Sticky reconcile_mismatch clears only via successful reconcile.
                 cleared = entry_kill.observe_healthy(
                     now_utc, float(risk_settings.kill_recover_healthy_sec)
                 )
@@ -1187,6 +1289,13 @@ def run() -> int:
                         f"Market Pilot ENTRY KILL ON: jev_transport "
                         f"(fail_rate={jev_transport_kill.failure_rate(now_utc):.0%})"
                     )
+            # Sticky reconcile block wins over feed recovery / takes priority after other kills.
+            if (
+                _reconcile_block_entries
+                and entry_kill.reason != "reconcile_mismatch"
+                and not feed_unhealthy
+            ):
+                entry_kill.activate("reconcile_mismatch", now_utc)
 
             now_mono = time.monotonic()
             if (
@@ -1768,39 +1877,96 @@ def run() -> int:
                                             ibkr_skip_reason,
                                         )
                                     else:
-                                        bracket = ibkr.place_bracket_buy(
-                                            trade.symbol,
-                                            trade.quantity,
-                                            trade.stop_loss,
-                                            trade.take_profit,
-                                            fill_timeout_sec=settings.ibkr_fill_timeout_sec,
-                                        )
-                                        trade.execution_mode = "ibkr"
-                                        trade.entry_price = bracket.fill_price
-                                        trade.quantity = bracket.filled_quantity
-                                        trade.position_value = (
-                                            bracket.fill_price
-                                            * bracket.filled_quantity
-                                        )
-                                        trade.ibkr_parent_order_id = (
-                                            bracket.parent_order_id
-                                        )
-                                        trade.ibkr_sl_order_id = bracket.sl_order_id
-                                        trade.ibkr_tp_order_id = bracket.tp_order_id
-                                        db.insert_trade(trade)
-                                        risk_manager.register_open_trade(trade)
-                                        confirmation_tracker.reset(trade.symbol)
-                                        trade_created = True
-                                        portfolio_dirty = True
-                                        logger.info(
-                                            "IBKR BUY %s x %.0f @ $%.2f "
-                                            "(SL $%.2f / TP $%.2f)",
-                                            trade.symbol,
-                                            trade.quantity,
-                                            trade.entry_price,
-                                            trade.stop_loss,
-                                            trade.take_profit,
-                                        )
+                                        coid = f"mp-{trade.id}-entry"
+                                        trade.client_order_id = coid
+                                        with EXIT_LOCKS.hold(trade.symbol):
+                                            bracket = ibkr.place_bracket_buy(
+                                                trade.symbol,
+                                                trade.quantity,
+                                                trade.stop_loss,
+                                                trade.take_profit,
+                                                fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                                                client_order_id=coid,
+                                            )
+                                            if bracket.resize_failed:
+                                                try:
+                                                    close = ibkr.close_long_position_safe(
+                                                        trade.symbol,
+                                                        float(int(bracket.filled_quantity)),
+                                                        parent_order_id=bracket.parent_order_id,
+                                                        sl_order_id=bracket.sl_order_id,
+                                                        tp_order_id=bracket.tp_order_id,
+                                                        fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                                                    )
+                                                    notifier.send(
+                                                        f"Market Pilot flattened {trade.symbol} "
+                                                        f"after partial-fill child resize failure "
+                                                        f"(filled={bracket.filled_quantity})"
+                                                    )
+                                                    trade_skip_reason = (
+                                                        "ibkr_partial_resize_failed_flattened"
+                                                    )
+                                                    logger.error(
+                                                        "Partial fill resize failed for %s — "
+                                                        "flattened (fill=$%.2f already_flat=%s)",
+                                                        trade.symbol,
+                                                        close.fill_price,
+                                                        close.already_flat,
+                                                    )
+                                                except Exception as flatten_exc:
+                                                    trade_skip_reason = (
+                                                        f"ibkr_partial_resize_failed ({flatten_exc})"
+                                                    )
+                                                    entry_kill.activate(
+                                                        "reconcile_mismatch",
+                                                        datetime.now(timezone.utc),
+                                                    )
+                                                    _reconcile_block_entries = True
+                                                    notifier.send(
+                                                        f"Market Pilot FAILED flatten after "
+                                                        f"partial resize on {trade.symbol}: "
+                                                        f"{flatten_exc}"
+                                                    )
+                                                    logger.error(
+                                                        "Failed flatten after resize fail %s: %s",
+                                                        trade.symbol,
+                                                        flatten_exc,
+                                                    )
+                                            else:
+                                                trade.execution_mode = "ibkr"
+                                                trade.entry_price = bracket.fill_price
+                                                trade.quantity = bracket.filled_quantity
+                                                trade.position_value = (
+                                                    bracket.fill_price
+                                                    * bracket.filled_quantity
+                                                )
+                                                trade.ibkr_parent_order_id = (
+                                                    bracket.parent_order_id
+                                                )
+                                                trade.ibkr_sl_order_id = bracket.sl_order_id
+                                                trade.ibkr_tp_order_id = bracket.tp_order_id
+                                                trade.client_order_id = (
+                                                    bracket.client_order_id or coid
+                                                )
+                                                db.insert_trade(trade)
+                                                risk_manager.register_open_trade(trade)
+                                                confirmation_tracker.reset(trade.symbol)
+                                                trade_created = True
+                                                portfolio_dirty = True
+                                                logger.info(
+                                                    "IBKR BUY %s x %.0f @ $%.2f "
+                                                    "(SL $%.2f / TP $%.2f)%s",
+                                                    trade.symbol,
+                                                    trade.quantity,
+                                                    trade.entry_price,
+                                                    trade.stop_loss,
+                                                    trade.take_profit,
+                                                    (
+                                                        " [children resized]"
+                                                        if bracket.resized_children
+                                                        else ""
+                                                    ),
+                                                )
                                 except Exception as exc:
                                     if is_permanent_ibkr_eligibility_rejection(exc):
                                         blocked = trade.symbol.upper()
