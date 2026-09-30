@@ -152,9 +152,9 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
       <SettingsFieldGroup className={cn(!dynamicEnabled && "opacity-60")}>
         <SettingsField
           id="watchlist_dynamic_size"
-          label="Max dynamic symbols"
-          description="Maximum EM names kept after each successful scan (not a fill quota)."
-          descriptionTitle="At most this many symbols with BUY at or above the min BUY floor replace the list after each scan. Weak days can leave fewer or none."
+          label="Ranked membership (top N)"
+          description="Names treated as on-list for demotion. Eval pool can be larger."
+          descriptionTitle="At most this many symbols with BUY at or above the min BUY floor define ranked membership for demotion exits."
         >
           <Input
             id="watchlist_dynamic_size"
@@ -166,10 +166,27 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
           />
         </SettingsField>
         <SettingsField
+          id="watchlist_eval_pool_size"
+          label="Eval pool size"
+          description="Symbols that get fast-loop Jev entry evaluation between slow scans (≥ ranked N)."
+          descriptionTitle="Screener persists this many names for entry evaluation. Ranked membership (top N above) still drives demotion. Defaults to ranked size."
+        >
+          <Input
+            id="watchlist_eval_pool_size"
+            name="watchlist_eval_pool_size"
+            type="number"
+            min={0}
+            max={50}
+            defaultValue={
+              settings.watchlist_eval_pool_size ?? settings.watchlist_dynamic_size ?? 5
+            }
+          />
+        </SettingsField>
+        <SettingsField
           id="watchlist_min_buy"
           label="Watchlist min BUY (%)"
-          description="Minimum Jev BUY to earn a dynamic watchlist slot."
-          descriptionTitle="Names below this BUY score are skipped even if they rank in the top N. Trade entries still require Min Jev confidence (usually higher)."
+          description="Minimum Jev BUY to earn a dynamic watchlist slot (independent of entry Min BUY)."
+          descriptionTitle="Names below this BUY score are skipped even if they rank in the top N. Trade entries still require Min BUY probability on a fresh eval."
         >
           <Input
             id="watchlist_min_buy"
@@ -445,8 +462,9 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
               )}
               {settings.em_universe_source ? ` · source ${settings.em_universe_source}` : ""}
               {" · "}
-              Universe syncs weekly from EEM + IEMG holdings (ETFs excluded). Periodic
-              verify marks chronically untradable names off.
+              Universe = US-listed ADR/stock of EEM/IEMG underlyings (not home-market
+              shares); ETFs and duplicate issuers excluded. Syncs weekly; verify marks
+              chronically untradable names off.
             </>
           ) : (
             <>

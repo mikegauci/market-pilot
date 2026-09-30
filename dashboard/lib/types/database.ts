@@ -8,6 +8,28 @@ export type BotStatus = {
   last_heartbeat: string | null;
   last_error: string | null;
   updated_at: string;
+  session_is_open?: boolean | null;
+  session_open_at?: string | null;
+  session_close_at?: string | null;
+  minutes_to_close?: number | null;
+  session_clock_error?: string | null;
+  eod_flat_verified_at?: string | null;
+  eod_flat_verify_ok?: boolean | null;
+  eod_flat_verify_detail?: string | null;
+  notifier_configured?: boolean | null;
+  entry_kill_active?: boolean | null;
+  entry_kill_reason?: string | null;
+  entry_kill_at?: string | null;
+  market_data_type?: number | null;
+  quote_age_p50_sec?: number | null;
+  quote_age_p95_sec?: number | null;
+  last_reconcile_at?: string | null;
+  reconcile_ok?: boolean | null;
+  reconcile_detail?: string | null;
+  daily_pnl?: number | null;
+  risk_halt_active?: boolean | null;
+  risk_halt_reason?: string | null;
+  last_risk_eval_at?: string | null;
 };
 
 export type Settings = {
@@ -28,6 +50,55 @@ export type Settings = {
   jev_sell_exit_threshold: number;
   /** Block new entries in a symbol for this many minutes after an exit (0 = off). */
   reentry_cooldown_minutes: number;
+  /** Aligns with Jev TRADE question horizon (minutes). */
+  prediction_horizon_minutes: number;
+  /** Block new entries this many minutes before session close. */
+  last_entry_cutoff_minutes_before_close: number;
+  /** Flatten open positions before the close (must stay true; overnight unsupported). */
+  eod_closeout_enabled: boolean;
+  eod_closeout_minutes_before_close: number;
+  eod_flat_verify_minutes_before_close: number;
+  /** Live NetLiq vs account_capital divergence alert threshold (decimal fraction). */
+  equity_divergence_alert_frac: number;
+  /** Phase 3: stale input / confirmation / kill switches */
+  stale_input_gates_enabled: boolean;
+  max_quote_age_sec: number;
+  kill_stale_quote_sec: number;
+  kill_stale_quote_share_frac: number;
+  quote_age_log_only_sec: number;
+  max_signal_age_sec: number;
+  max_bar_gap_sec: number;
+  max_news_pub_age_sec: number;
+  max_news_receipt_lag_sec: number;
+  pre_submit_recheck_enabled: boolean;
+  max_entry_price_drift_frac: number;
+  confirmation_mode: "legacy" | "distinct_bars";
+  confirmation_count: number;
+  kill_recover_healthy_sec: number;
+  kill_alert_min_gap_sec: number;
+  jev_transport_fail_rate_kill_frac: number;
+  jev_transport_fail_window_sec: number;
+  jev_timeout_sec: number;
+  jev_max_retries: number;
+  /** Phase 7: which metric gates entries. */
+  jev_gate_field: "buy_probability" | "confidence";
+  /** When set, request this model instead of the floating default. */
+  jev_model_pin: string | null;
+  jev_samples: number;
+  jev_spread_veto_enabled: boolean;
+  jev_spread_max_stddev: number;
+  /** Phase 4: IBKR reconcile interval (seconds). */
+  reconcile_interval_sec: number;
+  /** Place protective brackets on unprotected orphans (else flatten). */
+  reconcile_protect_orphans: boolean;
+  /** Phase 5: include unrealized MTM in daily-loss. */
+  daily_loss_include_unrealized: boolean;
+  /** Include fees (use net_pnl) in daily-loss. */
+  daily_loss_include_fees: boolean;
+  /** block_entries | flatten_and_block */
+  daily_loss_action: "block_entries" | "flatten_and_block";
+  drawdown_breaker_enabled: boolean;
+  drawdown_max_frac: number;
   /** 0 = off; block entries when 1m volume ratio is below this vs 10-bar average */
   min_volume_ratio: number;
   /** 0 = off; block entries / EM scan picks below this USD share price */
@@ -50,6 +121,20 @@ export type Settings = {
   demotion_jev_sell_on_loss: boolean;
   demotion_jev_sell_max_loss_pct: number;
   demotion_force_exit: boolean;
+  /** Phase 10: individually switchable entry / exit filters (defaults ON). */
+  buy_hold_margin_enabled: boolean;
+  rsi_veto_enabled: boolean;
+  price_floor_enabled: boolean;
+  spread_filter_enabled: boolean;
+  volume_filter_enabled: boolean;
+  ema20_filter_enabled: boolean;
+  benchmark_headwind_enabled: boolean;
+  news_filters_enabled: boolean;
+  correlation_cap_enabled: boolean;
+  confirmation_enabled: boolean;
+  soft_exit_block_winners_enabled: boolean;
+  /** Symbols for fast-loop entry eval; must be >= watchlist_dynamic_size. */
+  watchlist_eval_pool_size: number;
   em_universe_synced_at: string | null;
   em_universe_source: string | null;
   updated_at: string;
@@ -63,7 +148,27 @@ export type EmUniverseRow = {
   country: string | null;
   tradable: boolean;
   instrument_type?: "adr" | "stock" | "etf" | null;
+  issuer_key?: string | null;
+  exchange?: string | null;
+  currency?: string | null;
+  ibkr_conid?: number | null;
+  listing_class?: string | null;
   updated_at: string;
+};
+
+export type EmUniverseSnapshot = {
+  id: string;
+  as_of: string;
+  source: string;
+  symbols: Array<{
+    symbol: string;
+    name?: string;
+    weight_bps?: number;
+    instrument_type?: string;
+    issuer_key?: string;
+    tradable?: boolean;
+  }>;
+  created_at: string;
 };
 
 export type JevRanking = {
@@ -96,7 +201,15 @@ export type NewsArticleSnapshot = {
   url?: string | null;
   source?: string | null;
   published_at?: string | null;
+  fetched_at?: string | null;
   image?: string | null;
+  sentiment?: number | null;
+  tags?: string[] | null;
+  relevance?: number | null;
+  event_type?: string | null;
+  severity?: number | null;
+  novelty?: number | null;
+  fingerprint?: string | null;
 };
 
 export type MarketNewsRow = {
@@ -117,6 +230,7 @@ export type MarketNewsRow = {
 
 export type MarketSnapshotNews = {
   news_sentiment?: number | null;
+  news_status?: "missing" | "neutral" | "active" | null;
   news_headline_count?: number | null;
   news_top_headline?: string | null;
   news_tags?: string[] | null;
@@ -154,6 +268,16 @@ export type Prediction = {
   sell_probability: number;
   trade_created: boolean;
   trade_skip_reason?: string | null;
+  skip_reasons?: string[] | null;
+  model?: string | null;
+  config_id?: string | null;
+  decision_bid?: number | null;
+  decision_ask?: number | null;
+  jev_question_key?: string | null;
+  jev_request_at?: string | null;
+  jev_confidence?: number | null;
+  jev_prob_stddev?: number | null;
+  jev_samples_used?: number | null;
   market_snapshot?: MarketSnapshot | null;
   created_at: string;
 };
@@ -177,6 +301,14 @@ export type Trade = {
   jev_buy_probability: number | null;
   execution_mode?: "simulated" | "ibkr";
   exit_reason?: string | null;
+  config_id?: string | null;
+  decision_price?: number | null;
+  fill_bid?: number | null;
+  fill_ask?: number | null;
+  mae?: number | null;
+  mfe?: number | null;
+  slippage?: number | null;
+  commission?: number | null;
   created_at: string;
 };
 
@@ -189,6 +321,50 @@ export type TradeCommand = {
   requested_at: string;
   processed_at: string | null;
   error: string | null;
+};
+
+export type ReconciliationEvent = {
+  id: string;
+  created_at: string;
+  symbol: string;
+  event_type: string;
+  detail: Record<string, unknown> | string | null;
+  resolved_at: string | null;
+};
+
+export type DecisionLogRow = {
+  id: string;
+  created_at: string;
+  symbol: string;
+  eval_at: string | null;
+  config_id?: string | null;
+  prediction_id?: string | null;
+  outcome: string;
+  reasons: string[] | null;
+  detail?: Record<string, unknown> | null;
+};
+
+export type SettingsAuditLog = {
+  id: string;
+  created_at: string;
+  actor_user_id: string;
+  actor_email: string | null;
+  action: "settings_update" | "bot_toggle" | string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+};
+
+export type SignalForwardReturn = {
+  id: string;
+  prediction_id: string;
+  symbol: string;
+  signal_at: string;
+  signal_price: number;
+  horizon_minutes: number;
+  forward_at: string;
+  forward_price: number;
+  forward_return: number;
+  created_at?: string;
 };
 
 export type Position = {

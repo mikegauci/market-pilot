@@ -4,7 +4,7 @@ import logging
 import re
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from typing import Callable, Dict, List, Optional, TypeVar
 
@@ -40,8 +40,10 @@ MAX_EM_UNIVERSE_SIZE = 80
 GENERAL_NEWS_FAILURE_BACKOFF_SEC = 60.0
 
 # Transient macOS/httpx failures (EAGAIN / Errno 35) under concurrent load.
+# Keep retries short so a stuck PostgREST call cannot block heartbeats for minutes.
 _DB_TRANSIENT_RETRIES = 3
-_DB_TRANSIENT_BACKOFF_SEC = 0.05
+_DB_TRANSIENT_BACKOFF_SEC = 0.4
+_DB_HTTP_TIMEOUT = httpx.Timeout(12.0, connect=8.0)
 
 F = TypeVar("F", bound=Callable[..., object])
 
@@ -56,6 +58,7 @@ def _is_transient_db_error(exc: BaseException) -> bool:
             httpx.RemoteProtocolError,
             httpx.ReadTimeout,
             httpx.ConnectTimeout,
+            httpx.TimeoutException,
         ),
     ):
         return True
@@ -64,6 +67,10 @@ def _is_transient_db_error(exc: BaseException) -> bool:
         "resource temporarily unavailable" in message
         or "errno 35" in message
         or "connection reset" in message
+        or "statement timeout" in message
+        or "57014" in message
+        or "canceling statement" in message
+        or "timed out" in message
     )
 
 
@@ -101,7 +108,7 @@ def _build_supabase_http_client() -> httpx.Client:
     """HTTP/1.1 only — HTTP/2 multiplex + ib_insync often yields Errno 35 on macOS."""
     return httpx.Client(
         http2=False,
-        timeout=httpx.Timeout(60.0, connect=15.0),
+        timeout=_DB_HTTP_TIMEOUT,
     )
 
 
@@ -155,6 +162,15 @@ def _trade_from_row(row: dict) -> TradeRecord:
         ibkr_parent_order_id=int(row["ibkr_parent_order_id"]) if row.get("ibkr_parent_order_id") is not None else None,
         ibkr_sl_order_id=int(row["ibkr_sl_order_id"]) if row.get("ibkr_sl_order_id") is not None else None,
         ibkr_tp_order_id=int(row["ibkr_tp_order_id"]) if row.get("ibkr_tp_order_id") is not None else None,
+        client_order_id=str(row["client_order_id"]) if row.get("client_order_id") else None,
+        config_id=str(row["config_id"]) if row.get("config_id") else None,
+        decision_price=float(row["decision_price"]) if row.get("decision_price") is not None else None,
+        fill_bid=float(row["fill_bid"]) if row.get("fill_bid") is not None else None,
+        fill_ask=float(row["fill_ask"]) if row.get("fill_ask") is not None else None,
+        mae=float(row["mae"]) if row.get("mae") is not None else None,
+        mfe=float(row["mfe"]) if row.get("mfe") is not None else None,
+        slippage=float(row["slippage"]) if row.get("slippage") is not None else None,
+        commission=float(row["commission"]) if row.get("commission") is not None else None,
     )
 
 
@@ -186,6 +202,95 @@ class SupabaseRepository:
             "last_error": status.last_error,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+        if status.session_is_open is not None:
+            payload["session_is_open"] = status.session_is_open
+        if status.session_open_at is not None:
+            payload["session_open_at"] = status.session_open_at.isoformat()
+        elif status.session_clock_error is not None:
+            payload["session_open_at"] = None
+        if status.session_close_at is not None:
+            payload["session_close_at"] = status.session_close_at.isoformat()
+        elif status.session_clock_error is not None:
+            payload["session_close_at"] = None
+        if status.minutes_to_close is not None or status.session_clock_error is not None:
+            payload["minutes_to_close"] = status.minutes_to_close
+        if status.session_clock_error is not None or status.session_is_open is not None:
+            payload["session_clock_error"] = status.session_clock_error
+        if status.eod_flat_verified_at is not None:
+            payload["eod_flat_verified_at"] = status.eod_flat_verified_at.isoformat()
+        if status.eod_flat_verify_ok is not None:
+            payload["eod_flat_verify_ok"] = status.eod_flat_verify_ok
+        if status.eod_flat_verify_detail is not None:
+            payload["eod_flat_verify_detail"] = status.eod_flat_verify_detail
+        if status.notifier_configured is not None:
+            payload["notifier_configured"] = status.notifier_configured
+        if status.entry_kill_active is not None:
+            payload["entry_kill_active"] = status.entry_kill_active
+        if status.entry_kill_reason is not None or status.entry_kill_active is not None:
+            payload["entry_kill_reason"] = status.entry_kill_reason
+        if status.entry_kill_at is not None:
+            payload["entry_kill_at"] = status.entry_kill_at.isoformat()
+        elif status.entry_kill_active is False:
+            payload["entry_kill_at"] = None
+        if status.market_data_type is not None:
+            payload["market_data_type"] = status.market_data_type
+        if status.quote_age_p50_sec is not None:
+            payload["quote_age_p50_sec"] = status.quote_age_p50_sec
+        if status.quote_age_p95_sec is not None:
+            payload["quote_age_p95_sec"] = status.quote_age_p95_sec
+        if status.last_reconcile_at is not None:
+            payload["last_reconcile_at"] = status.last_reconcile_at.isoformat()
+        if status.reconcile_ok is not None:
+            payload["reconcile_ok"] = status.reconcile_ok
+        if status.reconcile_detail is not None:
+            payload["reconcile_detail"] = status.reconcile_detail
+        if status.daily_pnl is not None:
+            payload["daily_pnl"] = status.daily_pnl
+        if status.risk_halt_active is not None:
+            payload["risk_halt_active"] = status.risk_halt_active
+        if status.risk_halt_reason is not None or status.risk_halt_active is not None:
+            payload["risk_halt_reason"] = status.risk_halt_reason
+        if status.last_risk_eval_at is not None:
+            payload["last_risk_eval_at"] = status.last_risk_eval_at.isoformat()
+        self.client.table("bot_status").update(payload).eq("id", 1).execute()
+
+    @_db_synchronized
+    def update_eod_flat_verify(
+        self,
+        *,
+        verified_at: datetime,
+        ok: bool,
+        detail: str,
+    ) -> None:
+        payload = {
+            "eod_flat_verified_at": verified_at.isoformat(),
+            "eod_flat_verify_ok": ok,
+            "eod_flat_verify_detail": detail,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.client.table("bot_status").update(payload).eq("id", 1).execute()
+
+    @_db_synchronized
+    def update_session_clock(
+        self,
+        *,
+        is_open: Optional[bool],
+        open_at: Optional[datetime],
+        close_at: Optional[datetime],
+        minutes_to_close: Optional[float],
+        error: Optional[str],
+        notifier_configured: Optional[bool] = None,
+    ) -> None:
+        payload = {
+            "session_is_open": is_open,
+            "session_open_at": open_at.isoformat() if open_at else None,
+            "session_close_at": close_at.isoformat() if close_at else None,
+            "minutes_to_close": minutes_to_close,
+            "session_clock_error": error,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if notifier_configured is not None:
+            payload["notifier_configured"] = notifier_configured
         self.client.table("bot_status").update(payload).eq("id", 1).execute()
 
     @_db_synchronized
@@ -348,13 +453,32 @@ class SupabaseRepository:
                 "max_position_size, max_daily_loss, max_open_positions, "
                 "stop_loss_percentage, take_profit_percentage, max_hold_minutes, "
                 "min_hold_minutes, jev_sell_exit_threshold, reentry_cooldown_minutes, "
+                "prediction_horizon_minutes, last_entry_cutoff_minutes_before_close, "
+                "eod_closeout_enabled, eod_closeout_minutes_before_close, "
+                "eod_flat_verify_minutes_before_close, equity_divergence_alert_frac, "
                 "min_volume_ratio, min_share_price, "
+                "stale_input_gates_enabled, max_quote_age_sec, kill_stale_quote_sec, "
+                "kill_stale_quote_share_frac, quote_age_log_only_sec, max_signal_age_sec, "
+                "max_bar_gap_sec, max_news_pub_age_sec, max_news_receipt_lag_sec, "
+                "pre_submit_recheck_enabled, max_entry_price_drift_frac, "
+                "confirmation_mode, confirmation_count, kill_recover_healthy_sec, "
+                "kill_alert_min_gap_sec, jev_transport_fail_rate_kill_frac, "
+                "jev_transport_fail_window_sec, jev_timeout_sec, jev_max_retries, "
+                "jev_gate_field, jev_model_pin, jev_samples, "
+                "jev_spread_veto_enabled, jev_spread_max_stddev, "
+                "reconcile_interval_sec, reconcile_protect_orphans, "
+                "daily_loss_include_unrealized, daily_loss_include_fees, "
+                "daily_loss_action, drawdown_breaker_enabled, drawdown_max_frac, "
                 "account_capital, risk_sync_equity, watchlist, watchlist_core, "
                 "watchlist_dynamic_enabled, watchlist_dynamic_size, "
-                "watchlist_min_buy, "
+                "watchlist_min_buy, watchlist_eval_pool_size, "
                 "watchlist_refresh_minutes, benchmark_symbol, watchlist_jev_rankings, "
                 "watchlist_screener_ran_at, demotion_exits_enabled, demotion_max_hold_ratio, "
-                "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit"
+                "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit, "
+                "buy_hold_margin_enabled, rsi_veto_enabled, price_floor_enabled, "
+                "spread_filter_enabled, volume_filter_enabled, ema20_filter_enabled, "
+                "benchmark_headwind_enabled, news_filters_enabled, correlation_cap_enabled, "
+                "confirmation_enabled, soft_exit_block_winners_enabled"
             )
             .eq("id", 1)
             .single()
@@ -372,6 +496,15 @@ class SupabaseRepository:
         )
         self._cached_risk_sync_equity = risk_sync_equity
         screener_ran_at = data.get("watchlist_screener_ran_at")
+        from strategy.horizon import sanitize_horizon_eod_fields
+        from risk.sanitize import (
+            apply_order_affecting_ceilings,
+            sanitize_phase7_fields,
+        )
+
+        apply_order_affecting_ceilings(data)
+        horizon = sanitize_horizon_eod_fields(data)
+        phase7 = sanitize_phase7_fields(data)
         return RiskSettings(
             minimum_jev_confidence=float(data.get("minimum_jev_confidence", 0.85)),
             signal_record_threshold=float(data.get("signal_record_threshold", 0.80)),
@@ -385,8 +518,61 @@ class SupabaseRepository:
             min_hold_minutes=float(data.get("min_hold_minutes", 15)),
             jev_sell_exit_threshold=float(data.get("jev_sell_exit_threshold", 0.95)),
             reentry_cooldown_minutes=float(data.get("reentry_cooldown_minutes", 45)),
+            prediction_horizon_minutes=int(horizon["prediction_horizon_minutes"]),
+            last_entry_cutoff_minutes_before_close=int(
+                horizon["last_entry_cutoff_minutes_before_close"]
+            ),
+            eod_closeout_enabled=bool(horizon["eod_closeout_enabled"]),
+            eod_closeout_minutes_before_close=int(
+                horizon["eod_closeout_minutes_before_close"]
+            ),
+            eod_flat_verify_minutes_before_close=int(
+                horizon["eod_flat_verify_minutes_before_close"]
+            ),
+            equity_divergence_alert_frac=float(horizon["equity_divergence_alert_frac"]),
             min_volume_ratio=float(data.get("min_volume_ratio", 0.5)),
             min_share_price=float(data.get("min_share_price", 20)),
+            stale_input_gates_enabled=bool(data.get("stale_input_gates_enabled", True)),
+            max_quote_age_sec=int(data.get("max_quote_age_sec", 5)),
+            kill_stale_quote_sec=int(data.get("kill_stale_quote_sec", 15)),
+            kill_stale_quote_share_frac=float(
+                data.get("kill_stale_quote_share_frac", 0.5)
+            ),
+            quote_age_log_only_sec=int(data.get("quote_age_log_only_sec", 300)),
+            max_signal_age_sec=int(data.get("max_signal_age_sec", 30)),
+            max_bar_gap_sec=int(data.get("max_bar_gap_sec", 90)),
+            max_news_pub_age_sec=int(data.get("max_news_pub_age_sec", 3600)),
+            max_news_receipt_lag_sec=int(data.get("max_news_receipt_lag_sec", 600)),
+            pre_submit_recheck_enabled=bool(data.get("pre_submit_recheck_enabled", True)),
+            max_entry_price_drift_frac=float(
+                data.get("max_entry_price_drift_frac", 0.002)
+            ),
+            confirmation_mode=str(data.get("confirmation_mode") or "distinct_bars"),
+            confirmation_count=int(data.get("confirmation_count", 2)),
+            kill_recover_healthy_sec=int(data.get("kill_recover_healthy_sec", 120)),
+            kill_alert_min_gap_sec=int(data.get("kill_alert_min_gap_sec", 60)),
+            jev_transport_fail_rate_kill_frac=float(
+                data.get("jev_transport_fail_rate_kill_frac", 0.5)
+            ),
+            jev_transport_fail_window_sec=int(
+                data.get("jev_transport_fail_window_sec", 60)
+            ),
+            jev_timeout_sec=float(phase7["jev_timeout_sec"]),
+            jev_max_retries=int(phase7["jev_max_retries"]),
+            jev_gate_field=str(phase7["jev_gate_field"]),
+            jev_model_pin=phase7["jev_model_pin"],
+            jev_samples=int(phase7["jev_samples"]),
+            jev_spread_veto_enabled=bool(phase7["jev_spread_veto_enabled"]),
+            jev_spread_max_stddev=float(phase7["jev_spread_max_stddev"]),
+            reconcile_interval_sec=int(data.get("reconcile_interval_sec", 60)),
+            reconcile_protect_orphans=bool(data.get("reconcile_protect_orphans", True)),
+            daily_loss_include_unrealized=bool(
+                data.get("daily_loss_include_unrealized", True)
+            ),
+            daily_loss_include_fees=bool(data.get("daily_loss_include_fees", False)),
+            daily_loss_action=str(data.get("daily_loss_action") or "block_entries"),
+            drawdown_breaker_enabled=bool(data.get("drawdown_breaker_enabled", False)),
+            drawdown_max_frac=float(data.get("drawdown_max_frac", 0.10)),
             account_capital=float(data.get("account_capital", 1000)),
             risk_sync_equity=risk_sync_equity,
             watchlist=[str(s).upper() for s in watchlist],
@@ -394,6 +580,15 @@ class SupabaseRepository:
             watchlist_dynamic_enabled=bool(data.get("watchlist_dynamic_enabled", True)),
             watchlist_dynamic_size=int(data.get("watchlist_dynamic_size", 5)),
             watchlist_min_buy=float(data.get("watchlist_min_buy", 0.6)),
+            watchlist_eval_pool_size=max(
+                int(data.get("watchlist_dynamic_size", 5)),
+                int(
+                    data.get(
+                        "watchlist_eval_pool_size",
+                        data.get("watchlist_dynamic_size", 5),
+                    )
+                ),
+            ),
             watchlist_refresh_minutes=int(data.get("watchlist_refresh_minutes", 30)),
             benchmark_symbol=str(data.get("benchmark_symbol") or "EEM").upper(),
             watchlist_jev_rankings=self._parse_jev_rankings(
@@ -409,6 +604,21 @@ class SupabaseRepository:
                 data.get("demotion_jev_sell_max_loss_pct", 0.02)
             ),
             demotion_force_exit=bool(data.get("demotion_force_exit", False)),
+            buy_hold_margin_enabled=bool(data.get("buy_hold_margin_enabled", True)),
+            rsi_veto_enabled=bool(data.get("rsi_veto_enabled", True)),
+            price_floor_enabled=bool(data.get("price_floor_enabled", True)),
+            spread_filter_enabled=bool(data.get("spread_filter_enabled", True)),
+            volume_filter_enabled=bool(data.get("volume_filter_enabled", True)),
+            ema20_filter_enabled=bool(data.get("ema20_filter_enabled", True)),
+            benchmark_headwind_enabled=bool(
+                data.get("benchmark_headwind_enabled", True)
+            ),
+            news_filters_enabled=bool(data.get("news_filters_enabled", True)),
+            correlation_cap_enabled=bool(data.get("correlation_cap_enabled", True)),
+            confirmation_enabled=bool(data.get("confirmation_enabled", True)),
+            soft_exit_block_winners_enabled=bool(
+                data.get("soft_exit_block_winners_enabled", True)
+            ),
         )
 
     @_db_synchronized
@@ -493,18 +703,49 @@ class SupabaseRepository:
     @_db_synchronized
     def set_em_universe_tradable(self, symbol: str, tradable: bool) -> bool:
         """Update tradable flag. Returns True when at least one em_universe row changed."""
+        return self.set_em_universe_contract(symbol, tradable=tradable)
+
+    @_db_synchronized
+    def set_em_universe_contract(
+        self,
+        symbol: str,
+        *,
+        tradable: bool,
+        ibkr_conid: int | None = None,
+        exchange: str | None = None,
+        currency: str | None = "USD",
+    ) -> bool:
+        """Update tradable + optional IBKR contract fields."""
+        payload: dict = {
+            "tradable": tradable,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if not tradable:
+            payload["ibkr_conid"] = None
+        elif ibkr_conid is not None:
+            payload["ibkr_conid"] = int(ibkr_conid)
+        if exchange is not None:
+            payload["exchange"] = exchange
+        if currency is not None:
+            payload["currency"] = currency
         result = (
             self.client.table("em_universe")
-            .update(
-                {
-                    "tradable": tradable,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
+            .update(payload)
             .eq("symbol", symbol.upper())
             .execute()
         )
         return bool(result.data)
+
+    @_db_synchronized
+    def get_em_universe_snapshots(self, limit: int = 20) -> List[dict]:
+        result = (
+            self.client.table("em_universe_snapshots")
+            .select("id, as_of, source, symbols, created_at")
+            .order("as_of", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return list(result.data or [])
 
     @_db_synchronized
     def get_bars(self, symbol: str, bar_size: str) -> List[Bar]:
@@ -668,20 +909,100 @@ class SupabaseRepository:
         return latest
 
     @_db_synchronized
-    def get_daily_realized_pnl(self) -> float:
-        today = datetime.now(timezone.utc).date().isoformat()
+    def get_daily_realized_pnl(
+        self,
+        *,
+        trading_date: Optional[date] = None,
+        include_fees: bool = False,
+    ) -> float:
+        from market.hours import us_trading_date
+        from risk.daily_pnl import et_day_bounds_utc, sum_realized_from_rows
+
+        day = trading_date or us_trading_date()
+        start_utc, end_utc = et_day_bounds_utc(day)
         result = (
             self.client.table("trades")
-            .select("net_pnl")
+            .select("net_pnl, gross_pnl")
             .eq("status", "closed")
-            .gte("exit_time", f"{today}T00:00:00+00:00")
+            .gte("exit_time", start_utc.isoformat())
+            .lt("exit_time", end_utc.isoformat())
             .execute()
         )
-        total = 0.0
+        return sum_realized_from_rows(result.data or [], include_fees=include_fees)
+
+    @_db_synchronized
+    def get_portfolio_equity_high_water(self, *, limit: int = 500) -> Optional[float]:
+        """Max equity from recent portfolio_history rows (NetLiq / equity)."""
+        result = (
+            self.client.table("portfolio_history")
+            .select("equity")
+            .order("timestamp", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        peak: Optional[float] = None
         for row in result.data or []:
-            if row.get("net_pnl") is not None:
-                total += float(row["net_pnl"])
-        return total
+            if row.get("equity") is None:
+                continue
+            val = float(row["equity"])
+            peak = val if peak is None else max(peak, val)
+        return peak
+
+    @_db_synchronized
+    def get_active_risk_halts(
+        self, *, trading_date: date
+    ) -> List[dict]:
+        result = (
+            self.client.table("risk_halts")
+            .select("id, trading_date, halt_type, action_taken, detail, created_at")
+            .eq("trading_date", trading_date.isoformat())
+            .is_("cleared_at", "null")
+            .execute()
+        )
+        return list(result.data or [])
+
+    @_db_synchronized
+    def clear_stale_risk_halts(self, *, before_trading_date: date) -> int:
+        """Mark active halts from prior US trading dates as cleared."""
+        now = datetime.now(timezone.utc).isoformat()
+        result = (
+            self.client.table("risk_halts")
+            .update({"cleared_at": now})
+            .lt("trading_date", before_trading_date.isoformat())
+            .is_("cleared_at", "null")
+            .execute()
+        )
+        return len(result.data or [])
+
+    @_db_synchronized
+    def insert_risk_halt(
+        self,
+        *,
+        trading_date: date,
+        halt_type: str,
+        action_taken: str,
+        detail: Optional[dict] = None,
+    ) -> bool:
+        """Insert active halt. Returns False if one already exists (unique conflict)."""
+        payload = {
+            "trading_date": trading_date.isoformat(),
+            "halt_type": halt_type,
+            "action_taken": action_taken,
+            "detail": detail or {},
+        }
+        try:
+            self.client.table("risk_halts").insert(payload).execute()
+            return True
+        except Exception as exc:
+            # Unique active index — already halted today.
+            logger = __import__("logging").getLogger(__name__)
+            logger.info(
+                "risk_halt already active for %s/%s: %s",
+                trading_date,
+                halt_type,
+                exc,
+            )
+            return False
 
     @_db_synchronized
     def get_total_realized_pnl(self) -> float:
@@ -717,13 +1038,143 @@ class SupabaseRepository:
             "ibkr_parent_order_id": trade.ibkr_parent_order_id,
             "ibkr_sl_order_id": trade.ibkr_sl_order_id,
             "ibkr_tp_order_id": trade.ibkr_tp_order_id,
-            "commission": 0,
-            "slippage": 0,
+            "client_order_id": trade.client_order_id,
+            "commission": trade.commission if trade.commission is not None else 0,
+            "slippage": trade.slippage if trade.slippage is not None else 0,
+            "config_id": trade.config_id,
+            "decision_price": trade.decision_price,
+            "fill_bid": trade.fill_bid,
+            "fill_ask": trade.fill_ask,
+            "mae": trade.mae,
+            "mfe": trade.mfe,
             "created_at": now,
             "updated_at": now,
         }
-        self.client.table("trades").insert(payload).execute()
+        # Drop nulls for optional columns so older DBs aren't required.
+        self.client.table("trades").insert(
+            {k: v for k, v in payload.items() if v is not None or k in {
+                "commission", "slippage", "jev_buy_probability",
+                "ibkr_parent_order_id", "ibkr_sl_order_id", "ibkr_tp_order_id",
+                "client_order_id",
+            }}
+        ).execute()
         return trade.id
+
+    @_db_synchronized
+    def update_trade_excursions(
+        self,
+        trade_id: str,
+        *,
+        mae: float,
+        mfe: float,
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("trades").update(
+            {"mae": mae, "mfe": mfe, "updated_at": now}
+        ).eq("id", trade_id).execute()
+
+    @_db_synchronized
+    def ensure_config_version(self, config_hash: str, config: dict) -> str:
+        existing = (
+            self.client.table("config_versions")
+            .select("id")
+            .eq("config_hash", config_hash)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return str(existing.data[0]["id"])
+        import uuid as _uuid
+
+        new_id = str(_uuid.uuid4())
+        self.client.table("config_versions").insert(
+            {"id": new_id, "config_hash": config_hash, "config": config}
+        ).execute()
+        return new_id
+
+    @_db_synchronized
+    def insert_decision_log(
+        self,
+        *,
+        symbol: str,
+        eval_at: datetime,
+        outcome: str,
+        reasons: Optional[List[str]] = None,
+        config_id: Optional[str] = None,
+        prediction_id: Optional[str] = None,
+        detail: Optional[dict] = None,
+    ) -> None:
+        payload = {
+            "symbol": str(symbol).upper(),
+            "eval_at": eval_at.isoformat(),
+            "outcome": outcome,
+            "reasons": list(reasons or []),
+            "config_id": config_id,
+            "prediction_id": prediction_id,
+            "detail": detail or {},
+        }
+        self.client.table("decision_logs").insert(payload).execute()
+
+    @_db_synchronized
+    def list_predictions_needing_forward_return(
+        self,
+        *,
+        older_than: datetime,
+        limit: int = 50,
+    ) -> List[dict]:
+        """Predictions with timestamp <= older_than and no signal_forward_returns row."""
+        result = (
+            self.client.table("predictions")
+            .select("id, symbol, timestamp, price")
+            .lte("timestamp", older_than.isoformat())
+            .order("timestamp", desc=True)
+            .limit(limit * 3)
+            .execute()
+        )
+        rows = list(result.data or [])
+        if not rows:
+            return []
+        ids = [str(r["id"]) for r in rows]
+        existing = (
+            self.client.table("signal_forward_returns")
+            .select("prediction_id")
+            .in_("prediction_id", ids)
+            .execute()
+        )
+        done = {str(r["prediction_id"]) for r in (existing.data or [])}
+        out = [r for r in rows if str(r["id"]) not in done]
+        return out[:limit]
+
+    @_db_synchronized
+    def insert_signal_forward_return(
+        self,
+        *,
+        prediction_id: str,
+        symbol: str,
+        signal_at: datetime,
+        signal_price: float,
+        horizon_minutes: int,
+        forward_at: datetime,
+        forward_price: float,
+        forward_return: float,
+    ) -> bool:
+        try:
+            self.client.table("signal_forward_returns").insert(
+                {
+                    "prediction_id": prediction_id,
+                    "symbol": str(symbol).upper(),
+                    "signal_at": signal_at.isoformat(),
+                    "signal_price": signal_price,
+                    "horizon_minutes": int(horizon_minutes),
+                    "forward_at": forward_at.isoformat(),
+                    "forward_price": forward_price,
+                    "forward_return": forward_return,
+                }
+            ).execute()
+            return True
+        except Exception as exc:
+            logger.debug("insert_signal_forward_return skipped: %s", exc)
+            return False
 
     @_db_synchronized
     def update_trade_ibkr_bracket(self, trade: TradeRecord) -> None:
@@ -734,9 +1185,45 @@ class SupabaseRepository:
             "ibkr_parent_order_id": trade.ibkr_parent_order_id,
             "ibkr_sl_order_id": trade.ibkr_sl_order_id,
             "ibkr_tp_order_id": trade.ibkr_tp_order_id,
+            "quantity": trade.quantity,
+            "position_value": trade.position_value,
             "updated_at": now,
         }
+        if trade.client_order_id is not None:
+            payload["client_order_id"] = trade.client_order_id
         self.client.table("trades").update(payload).eq("id", trade.id).execute()
+
+    @_db_synchronized
+    def insert_reconciliation_event(
+        self,
+        *,
+        symbol: str,
+        event_type: str,
+        detail: Optional[dict] = None,
+    ) -> None:
+        payload = {
+            "symbol": str(symbol).upper() if symbol != "*" else "*",
+            "event_type": event_type,
+            "detail": detail or {},
+        }
+        self.client.table("reconciliation_events").insert(payload).execute()
+
+    @_db_synchronized
+    def update_reconcile_status(
+        self,
+        *,
+        ok: bool,
+        detail: str,
+        at: Optional[datetime] = None,
+    ) -> None:
+        now = at or datetime.now(timezone.utc)
+        payload = {
+            "last_reconcile_at": now.isoformat(),
+            "reconcile_ok": bool(ok),
+            "reconcile_detail": detail[:500] if detail else "",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.client.table("bot_status").update(payload).eq("id", 1).execute()
 
     @_db_synchronized
     def close_trade(
@@ -749,6 +1236,9 @@ class SupabaseRepository:
         *,
         filled_quantity: Optional[float] = None,
         exit_reason: Optional[str] = None,
+        mae: Optional[float] = None,
+        mfe: Optional[float] = None,
+        slippage: Optional[float] = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         payload = {
@@ -764,6 +1254,12 @@ class SupabaseRepository:
             payload["position_value"] = round(exit_price * filled_quantity, 6)
         if exit_reason:
             payload["exit_reason"] = exit_reason
+        if mae is not None:
+            payload["mae"] = mae
+        if mfe is not None:
+            payload["mfe"] = mfe
+        if slippage is not None:
+            payload["slippage"] = slippage
         self.client.table("trades").update(payload).eq("id", trade_id).execute()
 
     @_db_synchronized
@@ -873,20 +1369,27 @@ class SupabaseRepository:
         include_portfolio_history: bool = True,
         include_market_snapshots: bool = False,
     ) -> None:
-        if include_portfolio_history:
-            self._write_portfolio_snapshot(
-                account=account,
-                simulated_portfolio=simulated_portfolio,
-                unrealized_pnl=self._unrealized_pnl_from_positions(ibkr_positions),
-            )
-        self._sync_positions(
-            quotes,
-            ibkr_positions=ibkr_positions,
-            open_trades=open_trades,
-        )
-        if include_market_snapshots:
-            self.insert_market_snapshots(quotes)
+        # Publish liveness first so dashboard offline detection survives slow syncs.
         self.update_bot_status(status)
+        try:
+            if include_portfolio_history:
+                self._write_portfolio_snapshot(
+                    account=account,
+                    simulated_portfolio=simulated_portfolio,
+                    unrealized_pnl=self._unrealized_pnl_from_positions(ibkr_positions),
+                )
+            self._sync_positions(
+                quotes,
+                ibkr_positions=ibkr_positions,
+                open_trades=open_trades,
+            )
+            if include_market_snapshots:
+                self.insert_market_snapshots(quotes)
+        except Exception as exc:
+            logger.warning(
+                "Heartbeat liveness published; portfolio/position sync failed: %s",
+                exc,
+            )
 
     @_db_synchronized
     def insert_simulated_portfolio(self, portfolio: SimulatedPortfolio) -> None:
@@ -907,8 +1410,20 @@ class SupabaseRepository:
         prediction: JevPrediction,
         trade_created: bool = False,
         trade_skip_reason: Optional[str] = None,
-    ) -> None:
+        *,
+        config_id: Optional[str] = None,
+        skip_reasons: Optional[List[str]] = None,
+        decision_bid: Optional[float] = None,
+        decision_ask: Optional[float] = None,
+        prediction_id: Optional[str] = None,
+    ) -> Optional[str]:
+        from risk.execution_log import truncate_jev_raw
+        import uuid as _uuid
+
+        pid = prediction_id or str(_uuid.uuid4())
+        request_at = getattr(prediction, "request_at", None)
         payload = {
+            "id": pid,
             "symbol": prediction.symbol,
             "timestamp": prediction.timestamp.isoformat(),
             "price": state.price,
@@ -918,8 +1433,23 @@ class SupabaseRepository:
             "market_snapshot": state.to_dict(),
             "trade_created": trade_created,
             "trade_skip_reason": None if trade_created else trade_skip_reason,
+            "model": prediction.model or None,
+            "config_id": config_id,
+            "jev_raw": truncate_jev_raw(prediction.raw),
+            "skip_reasons": list(skip_reasons or []) or None,
+            "decision_bid": decision_bid,
+            "decision_ask": decision_ask,
+            "jev_question_key": getattr(prediction, "question_key", None),
+            "jev_request_at": request_at.isoformat() if request_at else None,
+            "jev_confidence": getattr(prediction, "confidence", None),
+            "jev_prob_stddev": getattr(prediction, "prob_stddev", None),
+            "jev_samples_used": getattr(prediction, "samples_used", None),
         }
-        self.client.table("predictions").insert(payload).execute()
+        cleaned = {k: v for k, v in payload.items() if v is not None or k in {
+            "trade_skip_reason", "trade_created", "market_snapshot",
+        }}
+        self.client.table("predictions").insert(cleaned).execute()
+        return pid
 
     @_db_synchronized
     def upsert_market_news(self, rows: List[dict], *, keep: int = 100) -> int:

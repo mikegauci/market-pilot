@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import math
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, List, Optional
@@ -24,6 +23,7 @@ from models.types import (
     TradeRecord,
     TradingMode,
 )
+from risk.sizing import compute_position_sizing, paper_available_cash
 
 logger = logging.getLogger(__name__)
 
@@ -113,37 +113,47 @@ class RiskManager:
         return sum(t.position_value for t in self.open_trades)
 
     def _available_cash(self) -> float:
-        return self.effective_capital + self.total_realized_pnl - self._deployed_capital()
+        """Cash available for a new entry.
+
+        Paper: account_capital - deployed notional (ignore IBKR paper cash / NetLiq).
+        Live: sizing_capital (min NetLiq, account_capital) + realized - deployed.
+        """
+        deployed = self._deployed_capital()
+        if self.trading_mode == TradingMode.PAPER:
+            return paper_available_cash(
+                account_capital=self.settings.account_capital,
+                deployed_notional=deployed,
+            )
+        return self.effective_capital + self.total_realized_pnl - deployed
 
     def _unrealized_pnl(self, quotes: Dict[str, Quote]) -> float:
-        total = 0.0
-        for trade in self.open_trades:
-            quote = quotes.get(trade.symbol)
-            if quote is None or quote.price is None:
-                continue
-            total += (quote.price - trade.entry_price) * trade.quantity
-        return total
+        from risk.daily_pnl import unrealized_pnl
+
+        return unrealized_pnl(self.open_trades, quotes)
 
     def _daily_pnl(self, quotes: Dict[str, Quote]) -> float:
-        return self.daily_realized_pnl + self._unrealized_pnl(quotes)
+        from risk.daily_pnl import compute_daily_loss_pnl
 
-    def compute_position_size(self, price: float) -> Optional[tuple[float, float]]:
+        return compute_daily_loss_pnl(
+            realized_pnl=self.daily_realized_pnl,
+            open_trades=self.open_trades,
+            quotes=quotes,
+            risk_settings=self.settings,
+        )
+
+    def compute_position_size(self, price: float):
         """Return (quantity, position_value) or None if size is too small."""
-        if price <= 0:
+        result = compute_position_sizing(
+            price=price,
+            risk_per_trade=self.settings.risk_per_trade,
+            stop_loss_percentage=self.settings.stop_loss_percentage,
+            max_position_size=self.settings.max_position_size,
+            available_cash=self._available_cash(),
+            portfolio_slots_full=False,
+        )
+        if not result.ok:
             return None
-
-        stop_pct = self.settings.stop_loss_percentage
-        if stop_pct <= 0:
-            return None
-
-        risk_based = self.settings.risk_per_trade / stop_pct
-        position_value = min(self.settings.max_position_size, risk_based)
-        quantity = math.floor(position_value / price)
-        if quantity < 1:
-            return None
-
-        actual_value = quantity * price
-        return quantity, actual_value
+        return result.quantity, result.position_value
 
     def evaluate_entry(
         self,
@@ -168,20 +178,49 @@ class RiskManager:
                 f"reentry_cooldown ({reentry_remaining:.0f}m left)",
             )
 
-        if len(self.open_trades) >= self.settings.max_open_positions:
+        slots_full = len(self.open_trades) >= self.settings.max_open_positions
+        sizing = compute_position_sizing(
+            price=state.price,
+            risk_per_trade=self.settings.risk_per_trade,
+            stop_loss_percentage=self.settings.stop_loss_percentage,
+            max_position_size=self.settings.max_position_size,
+            available_cash=self._available_cash(),
+            portfolio_slots_full=slots_full,
+        )
+        if sizing.sizing_binding == "portfolio":
             return TradeDecision(False, "max_open_positions")
-
-        sizing = self.compute_position_size(state.price)
-        if sizing is None:
+        if sizing.sizing_binding == "too_small":
+            logger.info(
+                "Sizing skip %s: shares<1 binding=%s requested_risk=%.2f",
+                state.symbol,
+                sizing.sizing_binding,
+                sizing.requested_risk_usd,
+            )
             return TradeDecision(False, "position_too_small")
-
-        quantity, position_value = sizing
-
-        if position_value > self._available_cash():
+        if sizing.sizing_binding == "invalid" or not sizing.ok:
+            return TradeDecision(False, "position_too_small")
+        if sizing.sizing_binding == "cash":
+            # Still may have qty if partial cash; only reject when qty < 1 (handled above)
+            # or when cash cannot fund even 1 share — already too_small.
+            pass
+        if sizing.position_value > self._available_cash() + 1e-6:
             return TradeDecision(False, "insufficient_capital")
 
         if self._daily_pnl(quotes_by_symbol) <= -self.settings.max_daily_loss:
             return TradeDecision(False, "max_daily_loss")
+
+        # Sticky risk halt (hydrated / set by RiskHaltCoordinator) checked by caller
+        # via entry_block; keep evaluate_entry PnL gate for live breach.
+
+        logger.info(
+            "Sizing %s: qty=%s value=%.2f requested_risk=%.2f planned_risk=%.2f binding=%s",
+            state.symbol,
+            sizing.quantity,
+            sizing.position_value,
+            sizing.requested_risk_usd,
+            sizing.planned_risk_usd,
+            sizing.sizing_binding,
+        )
 
         entry_price = state.price
         stop_loss = round(entry_price * (1 - self.settings.stop_loss_percentage), 6)
@@ -194,8 +233,8 @@ class RiskManager:
             side="buy",
             entry_time=now,
             entry_price=entry_price,
-            quantity=quantity,
-            position_value=position_value,
+            quantity=float(sizing.quantity),
+            position_value=sizing.position_value,
             stop_loss=stop_loss,
             take_profit=take_profit,
             status="open",

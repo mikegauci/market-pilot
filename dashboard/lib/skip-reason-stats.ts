@@ -38,6 +38,7 @@ const RISK_REASONS = new Set([
   "max_open_positions",
   "insufficient_capital",
   "max_daily_loss",
+  "drawdown_halt",
   "position_too_small",
   "invalid_price",
   "correlation_cap",
@@ -77,7 +78,7 @@ export function normalizeSkipReasonKey(reason: string | null | undefined): strin
 
 export function skipReasonLabel(key: string): string {
   const labels: Record<string, string> = {
-    below_trade_threshold: "Below confidence threshold",
+    below_trade_threshold: "Below BUY probability threshold",
     buy_hold_margin: "BUY–HOLD margin too narrow",
     hold_dominant: "HOLD dominant",
     sell_dominant: "SELL dominant",
@@ -97,6 +98,7 @@ export function skipReasonLabel(key: string): string {
     max_open_positions: "Max positions reached",
     insufficient_capital: "Insufficient capital",
     max_daily_loss: "Daily loss limit hit",
+    drawdown_halt: "Drawdown breaker tripped",
     position_too_small: "Position too small",
     invalid_price: "Invalid price",
     correlation_cap: "Correlation cap",

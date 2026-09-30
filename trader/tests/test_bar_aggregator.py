@@ -48,6 +48,35 @@ class BarAggregatorTests(unittest.TestCase):
         self.assertEqual(agg.change_pct(1), round((105.0 - 104.0) / 104.0 * 100, 4))
         self.assertEqual(agg.change_pct(5), round((105.0 - 100.0) / 100.0 * 100, 4))
 
+    def test_real_volume_only_skips_zero_volume_bars(self) -> None:
+        from market.bar_aggregator import MinuteBar
+
+        agg = MinuteBarAggregator()
+        base = datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc)
+        agg.replace_completed_bars(
+            [
+                MinuteBar(base, 100, 100, 100, 100, 500),
+                MinuteBar(base + timedelta(minutes=1), 101, 101, 101, 101, 0),
+                MinuteBar(base + timedelta(minutes=2), 102, 102, 102, 102, 600),
+            ]
+        )
+        self.assertEqual(agg.real_volume_bar_count(), 2)
+        self.assertEqual(agg.closes(real_volume_only=True), [100.0, 102.0])
+        self.assertEqual(
+            agg.change_pct(1, real_volume_only=True),
+            round((102.0 - 100.0) / 100.0 * 100, 4),
+        )
+
+    def test_closes_include_live_price_without_forming_bar(self) -> None:
+        from market.bar_aggregator import MinuteBar
+
+        agg = MinuteBarAggregator()
+        base = datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc)
+        agg.replace_completed_bars(
+            [MinuteBar(base, 100, 100, 100, 100, 500)]
+        )
+        self.assertEqual(agg.closes(live_price=101.5), [100.0, 101.5])
+
     def test_minute_bar_store_ensure_symbol(self) -> None:
         store = MinuteBarStore(["AAPL"])
         store.get("MSFT").record_point(datetime.now(timezone.utc), 200.0, 100)

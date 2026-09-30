@@ -70,7 +70,7 @@ export function SettingsSummary({
       <div className="mt-3">
         <SettingRow label="Risk profile" value={formatProfileTitle(profile)} />
         <SettingRow
-          label="Min Jev confidence"
+          label="Min BUY probability"
           value={formatPercent(settings.minimum_jev_confidence)}
         />
         <SettingRow label="Max open positions" value={String(settings.max_open_positions)} />

@@ -14,7 +14,7 @@ cp .env.example .env.local
 
 2. Fill in `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from [Supabase API settings](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/settings/api) (publishable or anon key — **not** service_role).
 
-3. Create a user in [Supabase Auth](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/auth/users) (email + password).
+3. Create a user in [Supabase Auth](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/auth/users) (email + password), then insert their UUID into `dashboard_allowed_users`. Public sign-ups must stay disabled.
 
 4. Install and run:
 
@@ -69,6 +69,9 @@ Production: [market-pilot-dashboard on Vercel](https://vercel.com/mikegaucis-pro
 
 ## Security
 
-- RLS policies allow authenticated users to read all tables
-- Dashboard may update `bot_status` and `settings` only (paper mode enforced — cannot set live trading from UI)
+- RLS restricts dashboard access to users in `dashboard_allowed_users` (seeded owner allowlist). Add a row (and Auth user) before granting access.
+- Disable public Auth sign-ups in the [Supabase Auth providers](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/auth/providers) settings (“Allow new users to sign up” off). Create users only in the Auth admin UI.
+- Middleware also rejects non-allowlisted sessions (`DASHBOARD_ALLOWED_USER_IDS` optional comma UUID list; defaults include the owner UUID).
+- Settings/bot changes write to `settings_audit_log`. Login uses Supabase Auth rate limits plus a short client cooldown after failed attempts.
+- Dashboard may update `bot_status` and `settings` only (paper mode enforced — cannot set live trading from UI). Engine-side Phase 7 sanitize still clamps order-affecting values.
 - Never put `SUPABASE_SERVICE_ROLE_KEY` in dashboard env vars

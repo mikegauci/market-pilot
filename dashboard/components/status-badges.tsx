@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getMarketStatus, type MarketStatus } from "@/lib/market-hours";
+import { getMarketStatusFromBot, type MarketStatus } from "@/lib/market-hours";
 import { getTradeModeCopy } from "@/lib/trade-mode";
 import { getDisplayStatus, getStableDisplayNow } from "@/lib/trader-status";
 import type { BotStatus } from "@/lib/types/database";
@@ -28,7 +28,7 @@ export function StatusBadges({
   useEffect(() => {
     if (!mounted) return;
     setDisplay(getDisplayStatus(status));
-    setMarket(getMarketStatus());
+    setMarket(getMarketStatusFromBot(status));
   }, [
     mounted,
     status.enabled,
@@ -38,6 +38,11 @@ export function StatusBadges({
     status.last_error,
     status.trading_mode,
     status.execution_mode,
+    status.session_is_open,
+    status.session_open_at,
+    status.session_close_at,
+    status.minutes_to_close,
+    status.session_clock_error,
   ]);
 
   useEffect(() => {
@@ -45,7 +50,7 @@ export function StatusBadges({
 
     const tick = () => {
       setDisplay(getDisplayStatus(statusRef.current));
-      setMarket(getMarketStatus());
+      setMarket(getMarketStatusFromBot(statusRef.current));
     };
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
@@ -132,10 +137,39 @@ function StatusPanel({
       : display.traderOnline
         ? "Waiting"
         : "Unavailable";
+  const entryKill = Boolean(status.entry_kill_active);
+  const mdType = status.market_data_type;
+  const reconcileOk = status.reconcile_ok;
+  const reconcileLabel =
+    reconcileOk === true
+      ? "OK"
+      : reconcileOk === false
+        ? "Issue"
+        : "—";
+  const reconcileActive = reconcileOk === true;
 
   if (variant === "sidebar") {
     return (
       <div className="w-full rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+        {entryKill ? (
+          <p className="mb-2 rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-200">
+            Entry kill: {status.entry_kill_reason || "active"}
+            {mdType != null ? ` · MD type ${mdType}` : ""}
+          </p>
+        ) : null}
+        {reconcileOk === false ? (
+          <p className="mb-2 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-200">
+            Reconcile: {status.reconcile_detail || "needs attention"}
+          </p>
+        ) : null}
+        {status.risk_halt_active ? (
+          <p className="mb-2 rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-200">
+            Risk halt: {status.risk_halt_reason || "active"}
+            {status.daily_pnl != null
+              ? ` · daily P&L ${Number(status.daily_pnl).toFixed(0)}`
+              : ""}
+          </p>
+        ) : null}
         <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
           System status
         </p>
@@ -178,6 +212,16 @@ function StatusPanel({
             active={display.ibkrConnected}
           />
           <SidebarStatusRow label="Signals" value={signalsLabel} active={signalsActive} />
+          <SidebarStatusRow
+            label="Reconcile"
+            value={reconcileLabel}
+            active={reconcileActive}
+          />
+          <SidebarStatusRow
+            label="Risk halt"
+            value={status.risk_halt_active ? status.risk_halt_reason || "On" : "Off"}
+            active={!status.risk_halt_active}
+          />
         </div>
 
         <p className="mt-2 text-[10px] text-zinc-500" suppressHydrationWarning>
@@ -196,6 +240,23 @@ function StatusPanel({
 
   return (
     <div className="w-full max-w-2xl rounded-xl border border-zinc-800 bg-zinc-900/80 p-4">
+      {entryKill ? (
+        <p className="mb-3 rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          Entry kill active: {status.entry_kill_reason || "active"}
+          {mdType != null ? ` · marketDataType=${mdType}` : ""}
+          {status.quote_age_p95_sec != null
+            ? ` · quote age p95=${Number(status.quote_age_p95_sec).toFixed(1)}s`
+            : ""}
+        </p>
+      ) : null}
+      {status.risk_halt_active ? (
+        <p className="mb-3 rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          Risk halt: {status.risk_halt_reason || "active"}
+          {status.daily_pnl != null
+            ? ` · daily P&L ${Number(status.daily_pnl).toFixed(2)}`
+            : ""}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">System status</p>
@@ -253,6 +314,30 @@ function StatusPanel({
           value={signalsLabel}
           active={signalsActive}
           tone="purple"
+        />
+        <StatusItem
+          label="Reconcile"
+          value={
+            reconcileOk === true
+              ? "OK"
+              : reconcileOk === false
+                ? status.reconcile_detail || "Issue"
+                : "—"
+          }
+          active={reconcileActive}
+          tone="teal"
+        />
+        <StatusItem
+          label="Risk halt"
+          value={
+            status.risk_halt_active
+              ? status.risk_halt_reason || "Active"
+              : status.daily_pnl != null
+                ? `Off · P&L ${Number(status.daily_pnl).toFixed(0)}`
+                : "Off"
+          }
+          active={!status.risk_halt_active}
+          tone="emerald"
         />
       </div>
 

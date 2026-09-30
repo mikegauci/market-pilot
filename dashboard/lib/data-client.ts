@@ -5,6 +5,7 @@ import type {
   Position,
   Prediction,
   Settings,
+  SignalForwardReturn,
   SymbolBar,
   Trade,
   TradeCommand,
@@ -188,6 +189,22 @@ export async function fetchAnalyticsPredictions(limit = 2000): Promise<Predictio
     return [];
   }
   return (data ?? []) as Prediction[];
+}
+
+export async function fetchSignalForwardReturns(
+  limit = 2000,
+): Promise<SignalForwardReturn[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("signal_forward_returns")
+    .select("*")
+    .order("signal_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    logFetchError("signal_forward_returns", error.message);
+    return [];
+  }
+  return (data ?? []) as SignalForwardReturn[];
 }
 
 export async function fetchLatestPredictionsBySymbol(limit = 500): Promise<Prediction[]> {

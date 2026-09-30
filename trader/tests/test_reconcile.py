@@ -70,6 +70,21 @@ class TestOrphanIbkrSymbols(unittest.TestCase):
         orphans = orphan_ibkr_symbols(positions, [], watchlist={"META"})
         self.assertEqual(orphans, [])
 
+    def test_includes_non_watchlist_when_watchlist_none(self) -> None:
+        positions = [
+            Position(
+                symbol="TSLA",
+                quantity=5.0,
+                avg_cost=300.0,
+                market_price=301.0,
+                market_value=1505.0,
+                unrealized_pnl=5.0,
+            )
+        ]
+        orphans = orphan_ibkr_symbols(positions, [], watchlist=None)
+        self.assertEqual(len(orphans), 1)
+        self.assertEqual(orphans[0].symbol, "TSLA")
+
 
 class TestBuildReconciledTrade(unittest.TestCase):
     def test_uses_bracket_legs_when_present(self) -> None:

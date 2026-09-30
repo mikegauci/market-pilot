@@ -94,6 +94,8 @@ class TestDemotionForceExit(unittest.TestCase):
         self.assertEqual(symbols, {"NU"})
 
     def test_ibkr_demotion_force_exit(self) -> None:
+        from models.types import CloseLongResult
+
         manager = RiskManager(
             settings=_settings(),
             trading_mode=TradingMode.PAPER,
@@ -108,7 +110,11 @@ class TestDemotionForceExit(unittest.TestCase):
             ],
         )
         ibkr = MagicMock()
-        ibkr.close_long_position.return_value = (99.0, 1.0)
+        ibkr.close_long_position_safe.return_value = CloseLongResult(
+            fill_price=99.0,
+            filled_quantity=1.0,
+            already_flat=False,
+        )
         db = MagicMock()
         db.get_daily_realized_pnl.return_value = 0.0
 
@@ -120,7 +126,7 @@ class TestDemotionForceExit(unittest.TestCase):
         )
 
         self.assertTrue(closed)
-        ibkr.close_long_position.assert_called_once()
+        ibkr.close_long_position_safe.assert_called_once()
         db.close_trade.assert_called_once()
         self.assertEqual(db.close_trade.call_args.kwargs["exit_reason"], "demotion_exit")
         self.assertEqual(manager.open_trades, [])

@@ -22,13 +22,62 @@ const baseFields = {
   min_hold_minutes: "15",
   jev_sell_exit_threshold: "95",
   reentry_cooldown_minutes: "45",
+  prediction_horizon_minutes: "15",
+  last_entry_cutoff_minutes_before_close: "40",
+  eod_closeout_enabled: "on",
+  eod_closeout_minutes_before_close: "10",
+  eod_flat_verify_minutes_before_close: "5",
+  equity_divergence_alert_frac: "5",
+  stale_input_gates_enabled: "on",
+  max_quote_age_sec: "5",
+  kill_stale_quote_sec: "15",
+  kill_stale_quote_share_pct: "50",
+  quote_age_log_only_sec: "300",
+  max_signal_age_sec: "30",
+  max_bar_gap_sec: "90",
+  max_news_pub_age_sec: "3600",
+  max_news_receipt_lag_sec: "600",
+  pre_submit_recheck_enabled: "on",
+  max_entry_price_drift_bps: "20",
+  confirmation_mode: "distinct_bars",
+  confirmation_count: "2",
+  kill_recover_healthy_sec: "120",
+  kill_alert_min_gap_sec: "60",
+  jev_transport_fail_rate_kill_pct: "50",
+  jev_transport_fail_window_sec: "60",
+  jev_timeout_sec: "2",
+  jev_max_retries: "1",
+  jev_gate_field: "buy_probability",
+  jev_model_pin: "",
+  jev_samples: "1",
+  jev_spread_max_stddev: "0.05",
+  reconcile_interval_sec: "60",
+  reconcile_protect_orphans: "on",
+  daily_loss_include_unrealized: "on",
+  daily_loss_include_fees: "",
+  daily_loss_action: "block_entries",
+  drawdown_breaker_enabled: "",
+  drawdown_max_pct: "10",
+  account_capital: "10000",
   min_volume_ratio: "0.5",
   min_share_price: "20",
   watchlist_core: "AAPL, MSFT",
   benchmark_symbol: "EEM",
   watchlist_dynamic_size: "5",
   watchlist_min_buy: "60",
+  watchlist_eval_pool_size: "5",
   watchlist_refresh_minutes: "30",
+  buy_hold_margin_enabled: "on",
+  rsi_veto_enabled: "on",
+  price_floor_enabled: "on",
+  spread_filter_enabled: "on",
+  volume_filter_enabled: "on",
+  ema20_filter_enabled: "on",
+  benchmark_headwind_enabled: "on",
+  news_filters_enabled: "on",
+  correlation_cap_enabled: "on",
+  confirmation_enabled: "on",
+  soft_exit_block_winners_enabled: "on",
 };
 
 describe("parseSettingsForm risk_profile", () => {
@@ -124,16 +173,26 @@ describe("parseSettingsForm watchlist min buy", () => {
     expect(parsed.watchlist_min_buy).toBe(0.6);
   });
 
-  it("rejects watchlist min buy above trade confidence", () => {
-    expect(() =>
-      parseSettingsForm(
-        form({
-          ...baseFields,
-          minimum_jev_confidence: "80",
-          watchlist_min_buy: "85",
-        }),
-      ),
-    ).toThrow("Watchlist min BUY (%) must be at or below Min Jev confidence (%)");
+  it("allows watchlist min buy above trade confidence (independent floors)", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        minimum_jev_confidence: "80",
+        watchlist_min_buy: "85",
+      }),
+    );
+    expect(parsed.watchlist_min_buy).toBe(0.85);
+  });
+
+  it("clamps eval pool size up to dynamic size", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        watchlist_dynamic_size: "8",
+        watchlist_eval_pool_size: "3",
+      }),
+    );
+    expect(parsed.watchlist_eval_pool_size).toBe(8);
   });
 });
 
@@ -176,5 +235,53 @@ describe("parseSettingsForm exit tuning", () => {
         }),
       ),
     ).toThrow("Min hold (minutes) must be at or below max hold when max hold is on");
+  });
+});
+
+describe("parseSettingsForm eod closeout", () => {
+  it("rejects eod_closeout_enabled off", () => {
+    expect(() =>
+      parseSettingsForm(form({ ...baseFields, eod_closeout_enabled: "" })),
+    ).toThrow("End-of-day closeout must stay ON");
+  });
+
+  it("parses equity divergence as fraction", () => {
+    const parsed = parseSettingsForm(
+      form({ ...baseFields, equity_divergence_alert_frac: "5" }),
+    );
+    expect(parsed.equity_divergence_alert_frac).toBe(0.05);
+    expect(parsed.account_capital).toBe(10000);
+    expect(parsed.prediction_horizon_minutes).toBe(15);
+  });
+
+  it("parses reconcile interval defaults", () => {
+    const parsed = parseSettingsForm(form(baseFields));
+    expect(parsed.reconcile_interval_sec).toBe(60);
+    expect(parsed.reconcile_protect_orphans).toBe(true);
+    expect(parsed.daily_loss_include_unrealized).toBe(true);
+    expect(parsed.daily_loss_include_fees).toBe(false);
+    expect(parsed.daily_loss_action).toBe("block_entries");
+    expect(parsed.drawdown_breaker_enabled).toBe(false);
+    expect(parsed.drawdown_max_frac).toBe(0.1);
+  });
+
+  it("rejects reconcile interval out of range", () => {
+    expect(() =>
+      parseSettingsForm(form({ ...baseFields, reconcile_interval_sec: "10" })),
+    ).toThrow("Reconcile interval must be an integer from 15 to 600 seconds");
+  });
+
+  it("parses flatten daily loss action and drawdown", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        daily_loss_action: "flatten_and_block",
+        drawdown_breaker_enabled: "on",
+        drawdown_max_pct: "15",
+      }),
+    );
+    expect(parsed.daily_loss_action).toBe("flatten_and_block");
+    expect(parsed.drawdown_breaker_enabled).toBe(true);
+    expect(parsed.drawdown_max_frac).toBe(0.15);
   });
 });

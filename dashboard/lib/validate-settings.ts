@@ -16,7 +16,7 @@ function parseRequiredNumber(formData: FormData, name: string): number {
 
 function labelFor(name: string): string {
   const labels: Record<string, string> = {
-    minimum_jev_confidence: "Min Jev confidence (%)",
+    minimum_jev_confidence: "Min BUY probability (%)",
     signal_record_threshold: "Signal record threshold (%)",
     risk_per_trade: "Risk per trade",
     max_position_size: "Max position size",
@@ -28,10 +28,19 @@ function labelFor(name: string): string {
     min_hold_minutes: "Min hold (minutes)",
     jev_sell_exit_threshold: "Jev SELL exit (%)",
     reentry_cooldown_minutes: "Re-entry cooldown (minutes)",
+    prediction_horizon_minutes: "Prediction horizon (minutes)",
+    last_entry_cutoff_minutes_before_close: "Last-entry cutoff (minutes before close)",
+    eod_closeout_minutes_before_close: "EOD closeout (minutes before close)",
+    eod_flat_verify_minutes_before_close: "EOD flat-verify (minutes before close)",
+    equity_divergence_alert_frac: "Equity divergence alert (%)",
+    account_capital: "Account capital ($)",
     watchlist_dynamic_size: "Dynamic top-N",
     watchlist_min_buy: "Watchlist min BUY (%)",
     min_volume_ratio: "Min volume ratio",
     min_share_price: "Min share price ($)",
+    reconcile_interval_sec: "Reconcile interval (sec)",
+    jev_samples: "Jev samples",
+    jev_spread_max_stddev: "Jev spread max stddev",
   };
   return labels[name] ?? name;
 }
@@ -49,6 +58,44 @@ export type ParsedSettings = {
   min_hold_minutes: number;
   jev_sell_exit_threshold: number;
   reentry_cooldown_minutes: number;
+  prediction_horizon_minutes: number;
+  last_entry_cutoff_minutes_before_close: number;
+  eod_closeout_enabled: boolean;
+  eod_closeout_minutes_before_close: number;
+  eod_flat_verify_minutes_before_close: number;
+  equity_divergence_alert_frac: number;
+  stale_input_gates_enabled: boolean;
+  max_quote_age_sec: number;
+  kill_stale_quote_sec: number;
+  kill_stale_quote_share_frac: number;
+  quote_age_log_only_sec: number;
+  max_signal_age_sec: number;
+  max_bar_gap_sec: number;
+  max_news_pub_age_sec: number;
+  max_news_receipt_lag_sec: number;
+  pre_submit_recheck_enabled: boolean;
+  max_entry_price_drift_frac: number;
+  confirmation_mode: "legacy" | "distinct_bars";
+  confirmation_count: number;
+  kill_recover_healthy_sec: number;
+  kill_alert_min_gap_sec: number;
+  jev_transport_fail_rate_kill_frac: number;
+  jev_transport_fail_window_sec: number;
+  jev_timeout_sec: number;
+  jev_max_retries: number;
+  jev_gate_field: "buy_probability" | "confidence";
+  jev_model_pin: string | null;
+  jev_samples: number;
+  jev_spread_veto_enabled: boolean;
+  jev_spread_max_stddev: number;
+  reconcile_interval_sec: number;
+  reconcile_protect_orphans: boolean;
+  daily_loss_include_unrealized: boolean;
+  daily_loss_include_fees: boolean;
+  daily_loss_action: "block_entries" | "flatten_and_block";
+  drawdown_breaker_enabled: boolean;
+  drawdown_max_frac: number;
+  account_capital: number;
   min_volume_ratio: number;
   min_share_price: number;
   risk_profile: RiskProfile;
@@ -64,6 +111,18 @@ export type ParsedSettings = {
   demotion_jev_sell_on_loss: boolean;
   demotion_jev_sell_max_loss_pct: number;
   demotion_force_exit: boolean;
+  buy_hold_margin_enabled: boolean;
+  rsi_veto_enabled: boolean;
+  price_floor_enabled: boolean;
+  spread_filter_enabled: boolean;
+  volume_filter_enabled: boolean;
+  ema20_filter_enabled: boolean;
+  benchmark_headwind_enabled: boolean;
+  news_filters_enabled: boolean;
+  correlation_cap_enabled: boolean;
+  confirmation_enabled: boolean;
+  soft_exit_block_winners_enabled: boolean;
+  watchlist_eval_pool_size: number;
 };
 
 function parseRiskProfile(formData: FormData): RiskProfile {
@@ -109,11 +168,35 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     formData,
     "reentry_cooldown_minutes",
   );
+  const prediction_horizon_minutes = parseRequiredNumber(
+    formData,
+    "prediction_horizon_minutes",
+  );
+  const last_entry_cutoff_minutes_before_close = parseRequiredNumber(
+    formData,
+    "last_entry_cutoff_minutes_before_close",
+  );
+  const eod_closeout_enabled =
+    String(formData.get("eod_closeout_enabled") ?? "on") === "on";
+  const eod_closeout_minutes_before_close = parseRequiredNumber(
+    formData,
+    "eod_closeout_minutes_before_close",
+  );
+  const eod_flat_verify_minutes_before_close = parseRequiredNumber(
+    formData,
+    "eod_flat_verify_minutes_before_close",
+  );
+  const equity_divergence_alert_pct = parseRequiredNumber(
+    formData,
+    "equity_divergence_alert_frac",
+  );
+  const equity_divergence_alert_frac = equity_divergence_alert_pct / 100;
+  const account_capital = parseRequiredNumber(formData, "account_capital");
   const min_volume_ratio = parseRequiredNumber(formData, "min_volume_ratio");
   const min_share_price = parseRequiredNumber(formData, "min_share_price");
 
   if (signal_record_threshold > minimum_jev_confidence) {
-    throw new Error("Signal record threshold (%) must be at or below Min Jev confidence (%)");
+    throw new Error("Signal record threshold (%) must be at or below Min BUY probability (%)");
   }
   if (risk_per_trade <= 0) {
     throw new Error("Risk per trade must be greater than 0");
@@ -123,6 +206,9 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   if (max_daily_loss <= 0) {
     throw new Error("Max daily loss must be greater than 0");
+  }
+  if (account_capital <= 0) {
+    throw new Error("Account capital must be greater than 0");
   }
   if (!Number.isInteger(max_open_positions) || max_open_positions < 1) {
     throw new Error("Max open positions must be a whole number of at least 1");
@@ -138,6 +224,48 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   if (max_hold_minutes > 0 && min_hold_minutes > max_hold_minutes) {
     throw new Error("Min hold (minutes) must be at or below max hold when max hold is on");
+  }
+  if (
+    !Number.isInteger(prediction_horizon_minutes) ||
+    prediction_horizon_minutes < 1 ||
+    prediction_horizon_minutes > 480
+  ) {
+    throw new Error("Prediction horizon (minutes) must be a whole number from 1 to 480");
+  }
+  if (
+    !Number.isInteger(last_entry_cutoff_minutes_before_close) ||
+    last_entry_cutoff_minutes_before_close < 1 ||
+    last_entry_cutoff_minutes_before_close > 120
+  ) {
+    throw new Error("Last-entry cutoff must be a whole number from 1 to 120");
+  }
+  if (!eod_closeout_enabled) {
+    throw new Error(
+      "End-of-day closeout must stay ON while overnight holding is not supported",
+    );
+  }
+  if (
+    !Number.isInteger(eod_closeout_minutes_before_close) ||
+    eod_closeout_minutes_before_close < 5 ||
+    eod_closeout_minutes_before_close > 15
+  ) {
+    throw new Error("EOD closeout must be a whole number from 5 to 15");
+  }
+  if (
+    !Number.isInteger(eod_flat_verify_minutes_before_close) ||
+    eod_flat_verify_minutes_before_close < 1 ||
+    eod_flat_verify_minutes_before_close > 10
+  ) {
+    throw new Error("EOD flat-verify must be a whole number from 1 to 10");
+  }
+  if (eod_flat_verify_minutes_before_close >= eod_closeout_minutes_before_close) {
+    throw new Error("EOD flat-verify must be less than EOD closeout minutes");
+  }
+  if (last_entry_cutoff_minutes_before_close < eod_closeout_minutes_before_close) {
+    throw new Error("Last-entry cutoff must be at or above EOD closeout minutes");
+  }
+  if (equity_divergence_alert_frac < 0.01 || equity_divergence_alert_frac > 0.5) {
+    throw new Error("Equity divergence alert (%) must be between 1 and 50");
   }
   if (jev_sell_exit_threshold < 0.5) {
     throw new Error("Jev SELL exit (%) must be at least 50");
@@ -184,9 +312,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     throw new Error("Dynamic watchlist size must be a whole number from 0 to 20");
   }
   const watchlist_min_buy = parseConfidencePercent(formData, "watchlist_min_buy");
-  if (watchlist_min_buy > minimum_jev_confidence) {
-    throw new Error("Watchlist min BUY (%) must be at or below Min Jev confidence (%)");
-  }
+  // Membership floor is independent of entry threshold (Phase 10); no hard reject.
   const watchlist_refresh_minutes = Number(formData.get("watchlist_refresh_minutes") ?? 30);
   if (
     !Number.isInteger(watchlist_refresh_minutes) ||
@@ -194,6 +320,19 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     watchlist_refresh_minutes > 240
   ) {
     throw new Error("Jev scan interval must be a whole number from 5 to 240 minutes");
+  }
+  let watchlist_eval_pool_size = Number(
+    formData.get("watchlist_eval_pool_size") ?? watchlist_dynamic_size,
+  );
+  if (
+    !Number.isInteger(watchlist_eval_pool_size) ||
+    watchlist_eval_pool_size < 0 ||
+    watchlist_eval_pool_size > 50
+  ) {
+    throw new Error("Eval pool size must be a whole number from 0 to 50");
+  }
+  if (watchlist_eval_pool_size < watchlist_dynamic_size) {
+    watchlist_eval_pool_size = watchlist_dynamic_size;
   }
   const benchmark_symbol = String(formData.get("benchmark_symbol") ?? "EEM")
     .trim()
@@ -227,6 +366,142 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
       : String(formData.get("demotion_jev_sell_on_loss") ?? "") === "on";
   const demotion_jev_sell_max_loss_pct = stop_loss_percentage;
 
+  const parseToggle = (name: string) =>
+    String(formData.get(name) ?? "") === "on";
+  const buy_hold_margin_enabled = parseToggle("buy_hold_margin_enabled");
+  const rsi_veto_enabled = parseToggle("rsi_veto_enabled");
+  const price_floor_enabled = parseToggle("price_floor_enabled");
+  const spread_filter_enabled = parseToggle("spread_filter_enabled");
+  const volume_filter_enabled = parseToggle("volume_filter_enabled");
+  const ema20_filter_enabled = parseToggle("ema20_filter_enabled");
+  const benchmark_headwind_enabled = parseToggle("benchmark_headwind_enabled");
+  const news_filters_enabled = parseToggle("news_filters_enabled");
+  const correlation_cap_enabled = parseToggle("correlation_cap_enabled");
+  const confirmation_enabled = parseToggle("confirmation_enabled");
+  const soft_exit_block_winners_enabled = parseToggle(
+    "soft_exit_block_winners_enabled",
+  );
+
+  const stale_input_gates_enabled =
+    String(formData.get("stale_input_gates_enabled") ?? "on") === "on";
+  const max_quote_age_sec = parseRequiredNumber(formData, "max_quote_age_sec");
+  const kill_stale_quote_sec = parseRequiredNumber(formData, "kill_stale_quote_sec");
+  const kill_stale_quote_share_frac =
+    parseRequiredNumber(formData, "kill_stale_quote_share_pct") / 100;
+  const quote_age_log_only_sec = parseRequiredNumber(formData, "quote_age_log_only_sec");
+  const max_signal_age_sec = parseRequiredNumber(formData, "max_signal_age_sec");
+  const max_bar_gap_sec = parseRequiredNumber(formData, "max_bar_gap_sec");
+  const max_news_pub_age_sec = parseRequiredNumber(formData, "max_news_pub_age_sec");
+  const max_news_receipt_lag_sec = parseRequiredNumber(
+    formData,
+    "max_news_receipt_lag_sec",
+  );
+  const pre_submit_recheck_enabled =
+    String(formData.get("pre_submit_recheck_enabled") ?? "on") === "on";
+  const max_entry_price_drift_frac =
+    parseRequiredNumber(formData, "max_entry_price_drift_bps") / 10_000;
+  const confirmation_mode_raw = String(formData.get("confirmation_mode") ?? "distinct_bars");
+  const confirmation_mode =
+    confirmation_mode_raw === "legacy" ? "legacy" : "distinct_bars";
+  const confirmation_count = parseRequiredNumber(formData, "confirmation_count");
+  const kill_recover_healthy_sec = parseRequiredNumber(
+    formData,
+    "kill_recover_healthy_sec",
+  );
+  const kill_alert_min_gap_sec = parseRequiredNumber(formData, "kill_alert_min_gap_sec");
+  const jev_transport_fail_rate_kill_frac =
+    parseRequiredNumber(formData, "jev_transport_fail_rate_kill_pct") / 100;
+  const jev_transport_fail_window_sec = parseRequiredNumber(
+    formData,
+    "jev_transport_fail_window_sec",
+  );
+  const jev_timeout_sec = parseRequiredNumber(formData, "jev_timeout_sec");
+  const jev_max_retries = parseRequiredNumber(formData, "jev_max_retries");
+  const jev_gate_field_raw = String(formData.get("jev_gate_field") ?? "buy_probability");
+  const jev_gate_field =
+    jev_gate_field_raw === "confidence" ? "confidence" : "buy_probability";
+  const jev_model_pin_raw = String(formData.get("jev_model_pin") ?? "").trim();
+  const jev_model_pin = jev_model_pin_raw.length > 0 ? jev_model_pin_raw : null;
+  const jev_samples = parseRequiredNumber(formData, "jev_samples");
+  const jev_spread_veto_enabled =
+    String(formData.get("jev_spread_veto_enabled") ?? "") === "on";
+  const jev_spread_max_stddev = parseRequiredNumber(formData, "jev_spread_max_stddev");
+  const reconcile_interval_sec = parseRequiredNumber(formData, "reconcile_interval_sec");
+  const reconcile_protect_orphans =
+    String(formData.get("reconcile_protect_orphans") ?? "on") === "on";
+  const daily_loss_include_unrealized =
+    String(formData.get("daily_loss_include_unrealized") ?? "") === "on";
+  const daily_loss_include_fees =
+    String(formData.get("daily_loss_include_fees") ?? "") === "on";
+  const daily_loss_action_raw = String(
+    formData.get("daily_loss_action") ?? "block_entries",
+  );
+  const daily_loss_action =
+    daily_loss_action_raw === "flatten_and_block"
+      ? "flatten_and_block"
+      : "block_entries";
+  const drawdown_breaker_enabled =
+    String(formData.get("drawdown_breaker_enabled") ?? "") === "on";
+  const drawdown_max_frac =
+    parseRequiredNumber(formData, "drawdown_max_pct") / 100;
+
+  if (
+    !Number.isInteger(max_quote_age_sec) ||
+    max_quote_age_sec < 2 ||
+    max_quote_age_sec > 30
+  ) {
+    throw new Error("Max quote age must be an integer from 2 to 30 seconds");
+  }
+  if (
+    !Number.isInteger(kill_stale_quote_sec) ||
+    kill_stale_quote_sec < 5 ||
+    kill_stale_quote_sec > 60
+  ) {
+    throw new Error("Kill stale quote age must be an integer from 5 to 60 seconds");
+  }
+  if (kill_stale_quote_sec < max_quote_age_sec) {
+    throw new Error("Kill stale quote age must be >= max quote age");
+  }
+  if (
+    kill_stale_quote_share_frac < 0.1 ||
+    kill_stale_quote_share_frac > 1
+  ) {
+    throw new Error("Kill stale quote share must be between 10% and 100%");
+  }
+  if (
+    !Number.isInteger(confirmation_count) ||
+    confirmation_count < 1 ||
+    confirmation_count > 5
+  ) {
+    throw new Error("Confirmation count must be an integer from 1 to 5");
+  }
+  if (jev_timeout_sec < 0.5 || jev_timeout_sec > 5) {
+    throw new Error("Jev timeout must be between 0.5 and 5 seconds");
+  }
+  if (
+    !Number.isInteger(jev_max_retries) ||
+    jev_max_retries < 0 ||
+    jev_max_retries > 2
+  ) {
+    throw new Error("Jev max retries must be an integer from 0 to 2");
+  }
+  if (!Number.isInteger(jev_samples) || jev_samples < 1 || jev_samples > 5) {
+    throw new Error("Jev samples must be an integer from 1 to 5");
+  }
+  if (jev_spread_max_stddev < 0 || jev_spread_max_stddev > 1) {
+    throw new Error("Jev spread max stddev must be between 0 and 1");
+  }
+  if (
+    !Number.isInteger(reconcile_interval_sec) ||
+    reconcile_interval_sec < 15 ||
+    reconcile_interval_sec > 600
+  ) {
+    throw new Error("Reconcile interval must be an integer from 15 to 600 seconds");
+  }
+  if (drawdown_max_frac < 0.01 || drawdown_max_frac > 0.5) {
+    throw new Error("Drawdown max must be between 1% and 50%");
+  }
+
   return {
     minimum_jev_confidence,
     signal_record_threshold,
@@ -240,6 +515,44 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     min_hold_minutes,
     jev_sell_exit_threshold,
     reentry_cooldown_minutes,
+    prediction_horizon_minutes,
+    last_entry_cutoff_minutes_before_close,
+    eod_closeout_enabled,
+    eod_closeout_minutes_before_close,
+    eod_flat_verify_minutes_before_close,
+    equity_divergence_alert_frac,
+    stale_input_gates_enabled,
+    max_quote_age_sec,
+    kill_stale_quote_sec,
+    kill_stale_quote_share_frac,
+    quote_age_log_only_sec,
+    max_signal_age_sec,
+    max_bar_gap_sec,
+    max_news_pub_age_sec,
+    max_news_receipt_lag_sec,
+    pre_submit_recheck_enabled,
+    max_entry_price_drift_frac,
+    confirmation_mode,
+    confirmation_count,
+    kill_recover_healthy_sec,
+    kill_alert_min_gap_sec,
+    jev_transport_fail_rate_kill_frac,
+    jev_transport_fail_window_sec,
+    jev_timeout_sec,
+    jev_max_retries,
+    jev_gate_field,
+    jev_model_pin,
+    jev_samples,
+    jev_spread_veto_enabled,
+    jev_spread_max_stddev,
+    reconcile_interval_sec,
+    reconcile_protect_orphans,
+    daily_loss_include_unrealized,
+    daily_loss_include_fees,
+    daily_loss_action,
+    drawdown_breaker_enabled,
+    drawdown_max_frac,
+    account_capital,
     min_volume_ratio,
     min_share_price,
     risk_profile: parseRiskProfile(formData),
@@ -248,6 +561,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     watchlist_dynamic_enabled,
     watchlist_dynamic_size,
     watchlist_min_buy,
+    watchlist_eval_pool_size,
     watchlist_refresh_minutes,
     benchmark_symbol,
     demotion_exits_enabled,
@@ -255,5 +569,16 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     demotion_jev_sell_on_loss,
     demotion_jev_sell_max_loss_pct,
     demotion_force_exit,
+    buy_hold_margin_enabled,
+    rsi_veto_enabled,
+    price_floor_enabled,
+    spread_filter_enabled,
+    volume_filter_enabled,
+    ema20_filter_enabled,
+    benchmark_headwind_enabled,
+    news_filters_enabled,
+    correlation_cap_enabled,
+    confirmation_enabled,
+    soft_exit_block_winners_enabled,
   };
 }

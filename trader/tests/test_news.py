@@ -88,6 +88,7 @@ class TestNewsEnrich(unittest.TestCase):
             enriched.news_articles[0]["published_at"],
             "2026-01-01T11:00:00+00:00",
         )
+        self.assertEqual(enriched.news_status, "active")
 
     def test_enrich_without_service_returns_unchanged(self) -> None:
         state = _state()
@@ -161,7 +162,12 @@ class TestParseArticles(unittest.TestCase):
             {"datetime": now_ts - 7200, "headline": "Old headline", "summary": ""},
             {"datetime": now_ts - 60, "headline": "Fresh headline", "summary": ""},
         ]
-        articles = _parse_articles(raw, max_headlines=5, since_ts=now_ts - 3600)
+        articles = _parse_articles(
+            raw,
+            max_headlines=5,
+            since_ts=now_ts - 3600,
+            fetched_at=datetime.now(timezone.utc).isoformat(),
+        )
         self.assertEqual(len(articles), 1)
         self.assertEqual(articles[0].headline, "Fresh headline")
 
@@ -177,7 +183,12 @@ class TestParseArticles(unittest.TestCase):
                 "image": "https://example.com/nvda.jpg",
             }
         ]
-        articles = _parse_articles(raw, max_headlines=5, since_ts=now_ts - 3600)
+        articles = _parse_articles(
+            raw,
+            max_headlines=5,
+            since_ts=now_ts - 3600,
+            fetched_at=datetime.now(timezone.utc).isoformat(),
+        )
         self.assertEqual(len(articles), 1)
         article = articles[0]
         self.assertEqual(article.url, "https://example.com/nvda")
@@ -248,7 +259,10 @@ class TestFinnhubClient(unittest.TestCase):
             outcome = client.fetch_news("NVDA")
 
         self.assertEqual(outcome.status, FetchStatus.EMPTY)
-        self.assertIsNone(outcome.context)
+        self.assertIsNotNone(outcome.context)
+        assert outcome.context is not None
+        self.assertEqual(outcome.context.status, "neutral")
+        self.assertEqual(outcome.context.headline_count, 0)
 
     def test_http_error_message_omits_request_url(self) -> None:
         exc = MagicMock()
@@ -285,7 +299,10 @@ class TestNewsService(unittest.TestCase):
 
     def test_skips_etf_symbols(self) -> None:
         service, client = self._service()
-        self.assertIsNone(service.get_context("SPY"))
+        skipped = service.get_context("SPY")
+        self.assertIsNotNone(skipped)
+        assert skipped is not None
+        self.assertEqual(skipped.status, "missing")
         client.fetch_news.assert_not_called()
 
     def test_caches_successful_fetch(self) -> None:
@@ -296,6 +313,7 @@ class TestNewsService(unittest.TestCase):
             top_headline="NVDA beats estimates",
             tags=["earnings_beat"],
             fetched_at="2026-01-01T12:00:00+00:00",
+            status="active",
             articles=[
                 NewsArticle(
                     headline="NVDA beats estimates",
@@ -315,16 +333,29 @@ class TestNewsService(unittest.TestCase):
         self.assertEqual(second, context)
         client.fetch_news.assert_called_once()
 
-    def test_empty_result_applies_cooldown_without_caching_context(self) -> None:
+    def test_empty_result_caches_neutral_and_applies_cooldown(self) -> None:
         service, client = self._service()
+        empty_ctx = NewsContext(
+            sentiment=0.0,
+            headline_count=0,
+            top_headline="",
+            tags=[],
+            fetched_at="2026-01-01T12:00:00+00:00",
+            articles=[],
+            status="neutral",
+        )
         client.fetch_news.return_value = FetchOutcome(
-            context=None,
+            context=empty_ctx,
             status=FetchStatus.EMPTY,
             retry_after_sec=60.0,
         )
 
-        self.assertIsNone(service.get_context("NVDA"))
-        self.assertIsNone(service.get_context("NVDA"))
+        first = service.get_context("NVDA")
+        second = service.get_context("NVDA")
+        self.assertIsNotNone(first)
+        assert first is not None
+        self.assertEqual(first.status, "neutral")
+        self.assertEqual(second, first)
         client.fetch_news.assert_called_once()
 
     def test_failure_applies_backoff(self) -> None:
@@ -335,8 +366,12 @@ class TestNewsService(unittest.TestCase):
             retry_after_sec=60.0,
         )
 
-        self.assertIsNone(service.get_context("NVDA"))
-        self.assertIsNone(service.get_context("NVDA"))
+        first = service.get_context("NVDA")
+        second = service.get_context("NVDA")
+        self.assertIsNotNone(first)
+        assert first is not None
+        self.assertEqual(first.status, "missing")
+        self.assertEqual(second.status, "missing")
         client.fetch_news.assert_called_once()
 
 

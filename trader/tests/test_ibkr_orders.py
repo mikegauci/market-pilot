@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from broker.ibkr import (
+    IBKRClient,
     _describe_trade_state,
     is_kid_document_rejection,
     is_permanent_ibkr_eligibility_rejection,
 )
+from models.types import Position
 
 
 class TestDescribeTradeState(unittest.TestCase):
@@ -88,6 +91,57 @@ class TestPermanentEligibilityRejection(unittest.TestCase):
                 "IB 201: Order rejected - reason:No Trading Permission"
             )
         )
+
+
+class TestCancelOrphanedSellBrackets(unittest.TestCase):
+    def setUp(self) -> None:
+        self.client = IBKRClient("127.0.0.1", 4002, client_id=1)
+        self.client.ib = MagicMock()
+        self.client.ib.isConnected.return_value = True
+
+    def test_resolves_stock_contract_without_calling_upper_on_it(self) -> None:
+        """Regression: previously passed Stock into from_ibkr_contract → .upper crash."""
+        stock = SimpleNamespace(symbol="BAP", localSymbol="BAP", conId=42)
+        orphan_sell = SimpleNamespace(
+            contract=stock,
+            order=SimpleNamespace(action="SELL"),
+            orderStatus=SimpleNamespace(status="Submitted"),
+        )
+        self.client.ib.openTrades.return_value = [orphan_sell]
+        self.client.get_positions = MagicMock(return_value=[])  # type: ignore[method-assign]
+        self.client._cancel_trade = MagicMock()  # type: ignore[method-assign]
+
+        cancelled = self.client.cancel_orphaned_sell_brackets()
+
+        self.assertEqual(cancelled, 1)
+        self.client._cancel_trade.assert_called_once_with(orphan_sell)
+
+    def test_skips_sell_when_long_position_exists(self) -> None:
+        stock = SimpleNamespace(symbol="BAP", localSymbol="BAP", conId=42)
+        sell = SimpleNamespace(
+            contract=stock,
+            order=SimpleNamespace(action="SELL"),
+            orderStatus=SimpleNamespace(status="Submitted"),
+        )
+        self.client.ib.openTrades.return_value = [sell]
+        self.client.get_positions = MagicMock(  # type: ignore[method-assign]
+            return_value=[
+                Position(
+                    symbol="BAP",
+                    quantity=10.0,
+                    avg_cost=100.0,
+                    market_price=None,
+                    market_value=None,
+                    unrealized_pnl=None,
+                ),
+            ]
+        )
+        self.client._cancel_trade = MagicMock()  # type: ignore[method-assign]
+
+        cancelled = self.client.cancel_orphaned_sell_brackets()
+
+        self.assertEqual(cancelled, 0)
+        self.client._cancel_trade.assert_not_called()
 
 
 if __name__ == "__main__":

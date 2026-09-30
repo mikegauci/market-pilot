@@ -88,6 +88,8 @@ class ManualCloseTests(unittest.TestCase):
         self.db.fail_trade_command.assert_called_once_with("cmd-1", "trade_not_open")
 
     def test_closes_ibkr_trade_with_partial_fill(self) -> None:
+        from models.types import CloseLongResult
+
         ibkr_trade = _trade(
             execution_mode="ibkr",
             quantity=16.0,
@@ -97,7 +99,11 @@ class ManualCloseTests(unittest.TestCase):
         )
         self.risk_manager.open_trades = [ibkr_trade]
         self.ibkr.is_connected.return_value = True
-        self.ibkr.close_long_position.return_value = (101.5, 10.0)
+        self.ibkr.close_long_position_safe.return_value = CloseLongResult(
+            fill_price=101.5,
+            filled_quantity=10.0,
+            already_flat=False,
+        )
         self.db.get_pending_trade_commands.return_value = [
             {"id": "cmd-1", "trade_id": "trade-1"}
         ]
@@ -113,7 +119,7 @@ class ManualCloseTests(unittest.TestCase):
         )
 
         self.assertTrue(dirty)
-        self.ibkr.close_long_position.assert_called_once()
+        self.ibkr.close_long_position_safe.assert_called_once()
         self.db.close_trade.assert_called_once()
         kwargs = self.db.close_trade.call_args.kwargs
         self.assertEqual(kwargs.get("filled_quantity"), 10.0)

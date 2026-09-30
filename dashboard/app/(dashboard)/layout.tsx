@@ -11,6 +11,19 @@ const defaultBotStatus = {
   last_heartbeat: null,
   last_error: null,
   updated_at: "",
+  entry_kill_active: true,
+  entry_kill_reason: "startup",
+  entry_kill_at: null,
+  market_data_type: null,
+  quote_age_p50_sec: null,
+  quote_age_p95_sec: null,
+  last_reconcile_at: null,
+  reconcile_ok: null,
+  reconcile_detail: null,
+  daily_pnl: null,
+  risk_halt_active: null,
+  risk_halt_reason: null,
+  last_risk_eval_at: null,
 };
 
 export default async function DashboardLayout({ children }: LayoutProps<"/">) {

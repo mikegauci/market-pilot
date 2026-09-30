@@ -29,6 +29,10 @@ export type NewsFeedItem = {
 
 export function hasNewsSignal(snapshot?: MarketSnapshot | null): boolean {
   if (!snapshot) return false;
+  if (snapshot.news_status === "missing") return false;
+  if (snapshot.news_status === "neutral" || snapshot.news_status === "active") {
+    return true;
+  }
   return (
     snapshot.news_sentiment != null ||
     Boolean(snapshot.news_top_headline) ||

@@ -29,6 +29,9 @@ def _rsi(prices: list[float], period: int = 14) -> Optional[float]:
         losses.append(abs(min(change, 0)))
     avg_gain = sum(gains[-period:]) / period
     avg_loss = sum(losses[-period:]) / period
+    # Flat series (forward-fills / stalled feed): unknown, not "max overbought".
+    if avg_gain == 0 and avg_loss == 0:
+        return None
     if avg_loss == 0:
         return 100.0
     rs = avg_gain / avg_loss
@@ -59,11 +62,16 @@ def compute_intraday_from_bars(
     aggregator: MinuteBarAggregator,
     live_price: float,
 ) -> IntradayIndicators:
-    closes = aggregator.closes(live_price=live_price)
-    volumes = aggregator.volumes()
+    # Exclude forward-fill (volume=0) placeholders — they flatten RSI/change/volume.
+    closes = aggregator.closes(live_price=live_price, real_volume_only=True)
+    volumes = aggregator.volumes(real_volume_only=True)
     return IntradayIndicators(
-        change_5m=aggregator.change_pct(5, live_price=live_price),
-        change_15m=aggregator.change_pct(15, live_price=live_price),
+        change_5m=aggregator.change_pct(
+            5, live_price=live_price, real_volume_only=True
+        ),
+        change_15m=aggregator.change_pct(
+            15, live_price=live_price, real_volume_only=True
+        ),
         volume_ratio=_volume_ratio_from_bars(volumes),
         rsi=_rsi(closes),
         ema_9=_ema(closes, 9),
@@ -82,11 +90,14 @@ def build_market_state(
     if quote.price is None:
         return None
 
-    if not minute_bars.is_ready(warmup_min_1m_bars):
+    # Require real traded minutes so Jev never sees fill-poisoned RSI=100 / 0% changes.
+    if minute_bars.real_volume_bar_count() < warmup_min_1m_bars:
         return None
 
     intraday = compute_intraday_from_bars(minute_bars, quote.price)
-    benchmark_change_5m = benchmark_minute_bars.change_pct(5)
+    benchmark_change_5m = benchmark_minute_bars.change_pct(
+        5, real_volume_only=True
+    )
     trends = trend_changes or TrendChanges()
     return MarketState(
         symbol=quote.symbol,

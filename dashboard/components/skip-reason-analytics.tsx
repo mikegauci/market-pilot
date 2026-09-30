@@ -86,7 +86,7 @@ function SignalFunnelCard({
     },
     {
       label: "Trade threshold met",
-      description: `Cleared min confidence (${minPct}) and BUY–HOLD margin (≥ ${marginPct}).`,
+      description: `Cleared min BUY probability (${minPct}) and BUY–HOLD margin (≥ ${marginPct}).`,
       count: funnel.tradeEligible,
     },
     {

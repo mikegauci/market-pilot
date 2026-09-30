@@ -72,6 +72,8 @@ class MockMarketProvider:
                     ask=ask,
                     spread=spread,
                     volume=volume,
+                    received_at=datetime.now(timezone.utc),
+                    exchange_at=None,
                 )
             )
         return quotes

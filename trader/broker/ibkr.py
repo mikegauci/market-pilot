@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 TERMINAL_ORDER_STATUSES = frozenset({"Filled", "Cancelled", "Inactive", "ApiCancelled"})
 MARKET_DATA_COMPETING_SESSION_CODE = 10197
+MARKET_DATA_TYPE_LIVE = 1
 MARKET_DATA_TYPE_DELAYED = 3
 MARKET_DATA_MIN_COVERAGE_RATIO = 0.5
 
@@ -134,11 +135,14 @@ class IBKRClient:
         self.port = port
         self.client_id = client_id
         self.account = account
-        self.market_data_type = market_data_type
+        # Preferred type from config; market_data_type may degrade to delayed temporarily.
+        self.preferred_market_data_type = int(market_data_type)
+        self.market_data_type = int(market_data_type)
         self.ib = IB()
         self._lock = threading.RLock()
         self._contracts: Dict[str, Stock] = {}
         self._tickers: Dict[str, object] = {}
+        self._bar_subs: Dict[str, object] = {}
         self._market_data_blocked = False
         self._use_snapshot_quotes = False
         self._error_handler_registered = False
@@ -292,6 +296,7 @@ class IBKRClient:
     @_ibkr_synchronized
     def disconnect(self) -> None:
         if self.is_connected():
+            self.cancel_all_1m_trade_bars()
             self.ib.disconnect()
             logger.info("Disconnected from IBKR")
 
@@ -451,6 +456,62 @@ class IBKRClient:
         return False
 
     @_ibkr_synchronized
+    def try_restore_preferred_market_data(
+        self, symbols: List[str], wait_sec: float = 1.0
+    ) -> bool:
+        """Re-request preferred (usually live) market data after a delayed fallback.
+
+        Returns True when coverage is healthy on the preferred type. On failure,
+        leaves the client on delayed so quotes keep flowing.
+        """
+        preferred = int(self.preferred_market_data_type)
+        if not self.is_connected() or not symbols:
+            return False
+        if self.market_data_type == preferred:
+            return True
+        if preferred == MARKET_DATA_TYPE_DELAYED:
+            return False
+
+        logger.info(
+            "Attempting IBKR market data restore (type %s → preferred %s)",
+            self.market_data_type,
+            preferred,
+        )
+        prior = self.market_data_type
+        self._market_data_blocked = False
+        self._use_snapshot_quotes = False
+        self.market_data_type = preferred
+        self.ib.reqMarketDataType(preferred)
+        self._cancel_all_market_data()
+        self.subscribe_watchlist(symbols)
+        if wait_sec > 0:
+            self.ib.sleep(wait_sec)
+
+        priced, total = self._count_priced_symbols(symbols)
+        if total and priced / total >= MARKET_DATA_MIN_COVERAGE_RATIO:
+            logger.info(
+                "IBKR preferred market data restored — type %s, %s/%s symbols priced",
+                preferred,
+                priced,
+                total,
+            )
+            return True
+
+        logger.warning(
+            "IBKR preferred market data restore failed (%s/%s priced) — staying on type %s",
+            priced,
+            total,
+            prior,
+        )
+        self.market_data_type = prior
+        self.ib.reqMarketDataType(prior)
+        self._cancel_all_market_data()
+        self.subscribe_watchlist(symbols)
+        if wait_sec > 0:
+            self.ib.sleep(min(wait_sec, 0.5))
+        return False
+
+    @_ibkr_synchronized
     def _enable_snapshot_quotes(self) -> None:
         if self._use_snapshot_quotes:
             return
@@ -483,6 +544,7 @@ class IBKRClient:
                 spread = round(ask - bid, 6)
             if self.is_connected():
                 self.ib.cancelMktData(contract)
+            now = datetime.now(timezone.utc)
             quotes.append(
                 Quote(
                     symbol=symbol,
@@ -491,6 +553,8 @@ class IBKRClient:
                     ask=ask,
                     spread=spread,
                     volume=None,
+                    received_at=now,
+                    exchange_at=None,
                 )
             )
         return quotes
@@ -565,10 +629,21 @@ class IBKRClient:
             self.ib.sleep(wait_sec)
 
         quotes: List[Quote] = []
+        now = datetime.now(timezone.utc)
         for symbol in symbols:
             ticker = self._tickers.get(symbol)
             if ticker is None:
-                quotes.append(Quote(symbol=symbol, price=None, bid=None, ask=None, spread=None))
+                quotes.append(
+                    Quote(
+                        symbol=symbol,
+                        price=None,
+                        bid=None,
+                        ask=None,
+                        spread=None,
+                        received_at=now,
+                        exchange_at=None,
+                    )
+                )
                 continue
 
             price = _ticker_price(ticker)
@@ -581,6 +656,7 @@ class IBKRClient:
             volume_raw = ticker.volume
             volume = int(volume_raw) if volume_raw and not math.isnan(float(volume_raw)) else None
 
+            # ticker.time is local arrival time on many IB builds — do not treat as exchange.
             quotes.append(
                 Quote(
                     symbol=symbol,
@@ -589,10 +665,104 @@ class IBKRClient:
                     ask=ask,
                     spread=spread,
                     volume=volume,
+                    received_at=now,
+                    exchange_at=None,
                 )
             )
 
         return quotes
+
+    @_ibkr_synchronized
+    def sync_1m_trade_bar_subscriptions(self, symbols: List[str]) -> None:
+        """keepUpToDate 1-min TRADES bars for watchlist ∪ open ∪ benchmark.
+
+        One historical seed per symbol; subsequent bars arrive via subscription
+        (no per-minute historical polling).
+        """
+        from market.live_1m_bars import BAR_1M_DURATION, BAR_SIZE_1M
+
+        target = {str(s).upper() for s in symbols}
+        for symbol in list(self._bar_subs):
+            if symbol in target:
+                continue
+            bars = self._bar_subs.pop(symbol)
+            if self.is_connected():
+                try:
+                    self.ib.cancelHistoricalData(bars)
+                except Exception as exc:
+                    logger.debug("cancelHistoricalData %s: %s", symbol, exc)
+
+        for symbol in sorted(target):
+            if symbol in self._bar_subs:
+                continue
+            contract = self._try_ensure_contract(symbol)
+            if contract is None:
+                logger.warning("Skipping 1m bars for %s — contract not qualified", symbol)
+                continue
+            try:
+                bars = self.ib.reqHistoricalData(
+                    contract,
+                    endDateTime="",
+                    durationStr=BAR_1M_DURATION,
+                    barSizeSetting=BAR_SIZE_1M,
+                    whatToShow="TRADES",
+                    useRTH=True,
+                    formatDate=2,  # UTC epoch seconds
+                    keepUpToDate=True,
+                )
+                self._bar_subs[symbol] = bars
+                logger.info("Subscribed keepUpToDate 1m TRADES bars for %s", symbol)
+            except Exception as exc:
+                logger.warning("Failed 1m bar subscribe for %s: %s", symbol, exc)
+
+    @_ibkr_synchronized
+    def cancel_all_1m_trade_bars(self) -> None:
+        for symbol in list(self._bar_subs):
+            bars = self._bar_subs.pop(symbol)
+            if self.is_connected():
+                try:
+                    self.ib.cancelHistoricalData(bars)
+                except Exception as exc:
+                    logger.debug("cancelHistoricalData %s: %s", symbol, exc)
+
+    @_ibkr_synchronized
+    def get_1m_trade_bars_raw(self, symbol: str) -> list:
+        """Return current keepUpToDate BarData list for symbol (may include forming)."""
+        bars = self._bar_subs.get(str(symbol).upper())
+        if bars is None:
+            return []
+        return list(bars)
+
+    @_ibkr_synchronized
+    def fetch_1m_trades_snapshot(
+        self,
+        symbol: str,
+        *,
+        duration: str = "1 D",
+    ) -> list:
+        """One-shot historical 1-min TRADES (no keepUpToDate) for EOD audit."""
+        from market.live_1m_bars import BAR_SIZE_1M
+
+        if not self.is_connected():
+            return []
+        contract = self._try_ensure_contract(symbol)
+        if contract is None:
+            return []
+        try:
+            raw = self.ib.reqHistoricalData(
+                contract,
+                endDateTime="",
+                durationStr=duration,
+                barSizeSetting=BAR_SIZE_1M,
+                whatToShow="TRADES",
+                useRTH=True,
+                formatDate=2,
+                keepUpToDate=False,
+            )
+            return list(raw or [])
+        except Exception as exc:
+            logger.warning("EOD 1m history fetch failed for %s: %s", symbol, exc)
+            return []
 
     @_ibkr_synchronized
     def has_pending_entry_order(self, symbol: str) -> bool:
@@ -612,6 +782,37 @@ class IBKRClient:
         return False
 
     @_ibkr_synchronized
+    def find_open_order_by_client_id(self, client_order_id: str) -> Optional[Trade]:
+        """Return an open trade whose orderRef matches client_order_id."""
+        if not client_order_id or not self.is_connected():
+            return None
+        self.ib.reqOpenOrders()
+        self.ib.sleep(0.2)
+        for trade in self.ib.openTrades():
+            if str(getattr(trade.order, "orderRef", "") or "") == client_order_id:
+                return trade
+        for trade in self.ib.trades():
+            if str(getattr(trade.order, "orderRef", "") or "") != client_order_id:
+                continue
+            if trade.orderStatus.status not in TERMINAL_ORDER_STATUSES:
+                return trade
+            if trade.orderStatus.status == "Filled":
+                return trade
+        return None
+
+    def _resize_working_order(self, trade: Trade, new_qty: int) -> bool:
+        """Modify an open child order quantity. Returns True on success."""
+        try:
+            order = trade.order
+            order.totalQuantity = int(new_qty)
+            self.ib.placeOrder(trade.contract, order)
+            self.ib.sleep(0.2)
+            return True
+        except Exception as exc:
+            logger.warning("Failed to resize order %s to %s: %s", trade.order.orderId, new_qty, exc)
+            return False
+
+    @_ibkr_synchronized
     def place_bracket_buy(
         self,
         symbol: str,
@@ -619,14 +820,38 @@ class IBKRClient:
         stop_loss: float,
         take_profit: float,
         fill_timeout_sec: float = 30.0,
+        *,
+        client_order_id: Optional[str] = None,
     ) -> BracketOrderResult:
-        """Place market buy with bracket stop-loss and take-profit child orders."""
+        """Place market buy with OCA bracket SL/TP; idempotent via client_order_id."""
         if quantity < 1:
             raise ValueError(f"Invalid quantity for {symbol}: {quantity}")
 
         account = self._resolve_account()
         contract = self._ensure_contract(symbol)
         qty = int(quantity)
+        coid = (client_order_id or "").strip() or None
+
+        if coid:
+            existing = self.find_open_order_by_client_id(coid)
+            if existing is not None:
+                # Idempotent retry: wait for existing parent fill; do not place anew.
+                fill = self._wait_for_fill(existing, fill_timeout_sec, symbol)
+                if fill is None:
+                    raise RuntimeError(
+                        f"Existing order {coid} for {symbol} did not fill "
+                        f"({_describe_trade_state(existing)})"
+                    )
+                fill_price, filled_qty = fill
+                legs = self.find_open_bracket_legs(symbol)
+                return BracketOrderResult(
+                    parent_order_id=existing.order.orderId,
+                    sl_order_id=legs.sl_order_id if legs else 0,
+                    tp_order_id=legs.tp_order_id if legs else 0,
+                    fill_price=fill_price,
+                    filled_quantity=filled_qty,
+                    client_order_id=coid,
+                )
 
         parent = MarketOrder("BUY", qty)
         parent.account = account
@@ -634,6 +859,10 @@ class IBKRClient:
         parent.transmit = False
         parent.tif = "DAY"
         parent.outsideRth = False
+        if coid:
+            parent.orderRef = coid
+
+        oca_group = f"mp-{parent.orderId}-oca"
 
         take_profit_order = LimitOrder("SELL", qty, round(take_profit, 2))
         take_profit_order.account = account
@@ -642,6 +871,10 @@ class IBKRClient:
         take_profit_order.transmit = False
         take_profit_order.tif = "DAY"
         take_profit_order.outsideRth = False
+        take_profit_order.ocaGroup = oca_group
+        take_profit_order.ocaType = 1  # Cancel remaining with block
+        if coid:
+            take_profit_order.orderRef = f"{coid}-tp"
 
         stop_loss_order = StopOrder("SELL", qty, round(stop_loss, 2))
         stop_loss_order.account = account
@@ -650,6 +883,10 @@ class IBKRClient:
         stop_loss_order.transmit = True
         stop_loss_order.tif = "DAY"
         stop_loss_order.outsideRth = False
+        stop_loss_order.ocaGroup = oca_group
+        stop_loss_order.ocaType = 1
+        if coid:
+            stop_loss_order.orderRef = f"{coid}-sl"
 
         parent_trade = self.ib.placeOrder(contract, parent)
         tp_trade = self.ib.placeOrder(contract, take_profit_order)
@@ -671,14 +908,39 @@ class IBKRClient:
             )
 
         fill_price, filled_qty = fill
+        resized = False
+        resize_failed = False
+        filled_int = int(filled_qty)
+        if filled_int < qty and filled_int >= 1:
+            ok_sl = self._resize_working_order(sl_trade, filled_int)
+            ok_tp = self._resize_working_order(tp_trade, filled_int)
+            resized = ok_sl and ok_tp
+            resize_failed = not resized
+            if resize_failed:
+                logger.error(
+                    "Partial fill child resize failed for %s (filled=%s requested=%s)",
+                    symbol,
+                    filled_int,
+                    qty,
+                )
+            else:
+                logger.info(
+                    "Resized SL/TP for %s to filled qty %s (requested %s)",
+                    symbol,
+                    filled_int,
+                    qty,
+                )
+
         logger.info(
-            "IBKR bracket BUY %s x %s @ $%.2f (parent=%s sl=%s tp=%s)",
+            "IBKR bracket BUY %s x %s @ $%.2f (parent=%s sl=%s tp=%s oca=%s coid=%s)",
             symbol,
             filled_qty,
             fill_price,
             parent_trade.order.orderId,
             sl_trade.order.orderId,
             tp_trade.order.orderId,
+            oca_group,
+            coid,
         )
 
         return BracketOrderResult(
@@ -687,7 +949,82 @@ class IBKRClient:
             tp_order_id=tp_trade.order.orderId,
             fill_price=fill_price,
             filled_quantity=filled_qty,
+            client_order_id=coid,
+            resized_children=resized,
+            resize_failed=resize_failed,
         )
+
+    @_ibkr_synchronized
+    def place_protective_orders(
+        self,
+        symbol: str,
+        quantity: float,
+        stop_loss: float,
+        take_profit: float,
+    ) -> Optional[BracketLegs]:
+        """Place DAY OCA SL/TP for an existing long with no live protection."""
+        if quantity < 1:
+            return None
+        if not self.is_connected():
+            return None
+        account = self._resolve_account()
+        contract = self._ensure_contract(symbol)
+        qty = int(quantity)
+        oca_group = f"mp-prot-{symbol}-{self.ib.client.getReqId()}-oca"
+
+        take_profit_order = LimitOrder("SELL", qty, round(take_profit, 2))
+        take_profit_order.account = account
+        take_profit_order.orderId = self.ib.client.getReqId()
+        take_profit_order.transmit = False
+        take_profit_order.tif = "DAY"
+        take_profit_order.outsideRth = False
+        take_profit_order.ocaGroup = oca_group
+        take_profit_order.ocaType = 1
+
+        stop_loss_order = StopOrder("SELL", qty, round(stop_loss, 2))
+        stop_loss_order.account = account
+        stop_loss_order.orderId = self.ib.client.getReqId()
+        stop_loss_order.transmit = True
+        stop_loss_order.tif = "DAY"
+        stop_loss_order.outsideRth = False
+        stop_loss_order.ocaGroup = oca_group
+        stop_loss_order.ocaType = 1
+
+        tp_trade = self.ib.placeOrder(contract, take_profit_order)
+        sl_trade = self.ib.placeOrder(contract, stop_loss_order)
+        self.ib.sleep(0.3)
+        return BracketLegs(
+            parent_order_id=None,
+            sl_order_id=sl_trade.order.orderId,
+            tp_order_id=tp_trade.order.orderId,
+            stop_loss=float(stop_loss),
+            take_profit=float(take_profit),
+        )
+
+    @_ibkr_synchronized
+    def cancel_orphaned_sell_brackets(self) -> int:
+        """Cancel working SELL SL/TP with no matching long position. Returns count."""
+        if not self.is_connected():
+            return 0
+        positions = {p.symbol: p.quantity for p in self.get_positions()}
+        cancelled = 0
+        self.ib.reqOpenOrders()
+        self.ib.sleep(0.2)
+        for trade in list(self.ib.openTrades()):
+            if str(trade.order.action).upper() != "SELL":
+                continue
+            if trade.orderStatus.status in TERMINAL_ORDER_STATUSES:
+                continue
+            symbol = self._resolve_app_symbol(trade.contract)
+            if not symbol:
+                continue
+            held = positions.get(symbol.upper(), 0)
+            if held >= 1:
+                continue
+            self._cancel_trade(trade)
+            cancelled += 1
+            logger.info("Cancelled orphaned SELL order for %s (no position)", symbol)
+        return cancelled
 
     def _wait_for_fill(
         self,
@@ -835,7 +1172,38 @@ class IBKRClient:
                 self._cancel_trade(trade)
 
     @_ibkr_synchronized
-    def close_long_position(
+    def cancel_working_entry_orders(self) -> int:
+        """Cancel unfilled BUY parent orders (working entries). Returns cancel count."""
+        cancelled = 0
+        for trade in list(self.ib.openTrades()):
+            order = trade.order
+            status = trade.orderStatus.status
+            if status not in {"Submitted", "PreSubmitted", "PendingSubmit", "ApiPending"}:
+                continue
+            if str(order.action).upper() != "BUY":
+                continue
+            # Skip child legs that somehow show as BUY.
+            if getattr(order, "parentId", 0):
+                continue
+            self._cancel_trade(trade)
+            cancelled += 1
+            logger.info(
+                "Cancelled working entry order %s for %s",
+                order.orderId,
+                getattr(trade.contract, "symbol", "?"),
+            )
+        return cancelled
+
+    def _broker_long_qty(self, symbol: str) -> float:
+        key = str(symbol).upper().replace(".", " ")
+        total = 0.0
+        for position in self.get_positions():
+            if position.symbol.upper().replace(".", " ") == key and position.quantity > 0:
+                total += float(position.quantity)
+        return total
+
+    @_ibkr_synchronized
+    def close_long_position_safe(
         self,
         symbol: str,
         quantity: float,
@@ -844,10 +1212,9 @@ class IBKRClient:
         sl_order_id: Optional[int] = None,
         tp_order_id: Optional[int] = None,
         fill_timeout_sec: float = 30.0,
-    ) -> Tuple[float, float]:
-        """Cancel bracket legs (if any) and market-sell to close a long position."""
-        if quantity < 1:
-            raise ValueError(f"Invalid quantity for {symbol}: {quantity}")
+    ) -> "CloseLongResult":
+        """Cancel brackets, re-read broker qty, sell min(local, broker). Never oversell."""
+        from models.types import CloseLongResult
 
         if sl_order_id and tp_order_id:
             self.cancel_open_brackets(
@@ -857,11 +1224,21 @@ class IBKRClient:
             )
             self.ib.sleep(0.3)
 
+        broker_qty = self._broker_long_qty(symbol)
+        sell_qty = int(min(max(0.0, float(quantity)), broker_qty))
+        if sell_qty < 1:
+            logger.info(
+                "IBKR close %s: broker flat (local=%.0f broker=%.0f) — mark closed",
+                symbol,
+                quantity,
+                broker_qty,
+            )
+            return CloseLongResult(fill_price=0.0, filled_quantity=0.0, already_flat=True)
+
         account = self._resolve_account()
         contract = self._ensure_contract(symbol)
-        qty = int(quantity)
 
-        sell = MarketOrder("SELL", qty)
+        sell = MarketOrder("SELL", sell_qty)
         sell.account = account
         sell.orderId = self.ib.client.getReqId()
         sell.tif = "DAY"
@@ -880,12 +1257,42 @@ class IBKRClient:
 
         fill_price, filled_qty = fill
         logger.info(
-            "IBKR market SELL %s x %s @ $%.2f",
+            "IBKR market SELL %s x %s @ $%.2f (requested local=%.0f broker=%.0f)",
             symbol,
             filled_qty,
             fill_price,
+            quantity,
+            broker_qty,
         )
-        return fill_price, filled_qty
+        return CloseLongResult(
+            fill_price=fill_price,
+            filled_quantity=filled_qty,
+            already_flat=False,
+        )
+
+    @_ibkr_synchronized
+    def close_long_position(
+        self,
+        symbol: str,
+        quantity: float,
+        *,
+        parent_order_id: Optional[int] = None,
+        sl_order_id: Optional[int] = None,
+        tp_order_id: Optional[int] = None,
+        fill_timeout_sec: float = 30.0,
+    ) -> Tuple[float, float]:
+        """Cancel bracket legs (if any) and market-sell to close a long position."""
+        result = self.close_long_position_safe(
+            symbol,
+            quantity,
+            parent_order_id=parent_order_id,
+            sl_order_id=sl_order_id,
+            tp_order_id=tp_order_id,
+            fill_timeout_sec=fill_timeout_sec,
+        )
+        if result.already_flat:
+            return 0.0, 0.0
+        return result.fill_price, result.filled_quantity
 
     @_ibkr_synchronized
     def fetch_historical_bars(

@@ -20,14 +20,14 @@ export default async function StrategyPage() {
           the context it reads on every call.
         </p>
         <p className="text-sm leading-relaxed text-zinc-400">
-          On each eval cycle, Jev returns confidence percentages for all three sides. The bot
+          On each eval cycle, Jev returns buy, hold, and sell probabilities. The bot
           only opens a trade when BUY is the top signal, meets your{" "}
-          <span className="text-zinc-300">min threshold</span> (
+          <span className="text-zinc-300">min BUY probability</span> (
           {formatPercent(minConfidence)}), and beats HOLD by a wide enough margin. BUY signals
           between {formatPercent(recordThreshold)} and {formatPercent(minConfidence)} are logged
           on Predictions as near-misses but do not trade. After a qualifying BUY, hard safety
           checks below can still veto the entry; a strong SELL can also help close open
-          positions.
+          positions. These probabilities are not a calibrated chance of a profitable trade.
         </p>
         <p className="text-xs text-zinc-600">
           Change min and record thresholds in{" "}
