@@ -4,12 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SymbolChart } from "@/components/symbol-chart";
 import { fetchSymbolBars } from "@/lib/data-client";
 import {
-  CHART_INTERVALS,
-  CHART_RANGES_BY_INTERVAL,
-  defaultRangeForInterval,
-  filterBarsForChart,
-  isChartInterval,
-  type ChartInterval,
+  CHART_BAR_SIZE,
+  CHART_PRESETS,
+  DEFAULT_CHART_PRESET,
+  isChartPreset,
+  lookbackMsForPreset,
+  sortBarsAscending,
+  type ChartPreset,
 } from "@/lib/chart-options";
 import { CHART_TIMEZONE } from "@/lib/market-hours";
 import type { ChartMarker, ChartOverlayLine, SymbolBar } from "@/lib/types/database";
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   symbol: string;
+  /** Ignored for UI; charts always use 5-minute bars. Kept for call-site compatibility. */
   barSize?: string;
   overlays?: ChartOverlayLine[];
   markers?: ChartMarker[];
@@ -25,7 +27,7 @@ type Props = {
   lazy?: boolean;
   /** Poll for fresh bars while visible; 0 disables polling. */
   refreshIntervalMs?: number;
-  /** Show interval / range / overlay controls (default true). */
+  /** Show lookback / overlay controls (default true). */
   showControls?: boolean;
 };
 
@@ -80,7 +82,7 @@ function SegmentedControl<T extends string>({
 
 export function SymbolChartPanel({
   symbol,
-  barSize = "5 mins",
+  barSize = CHART_BAR_SIZE,
   overlays = [],
   markers = [],
   height = 240,
@@ -88,18 +90,17 @@ export function SymbolChartPanel({
   refreshIntervalMs = 0,
   showControls = true,
 }: Props) {
-  const initialInterval: ChartInterval = isChartInterval(barSize) ? barSize : "5 mins";
   const containerRef = useRef<HTMLDivElement>(null);
   const hasBarsRef = useRef(false);
   const [isVisible, setIsVisible] = useState(!lazy);
   const [bars, setBars] = useState<SymbolBar[]>([]);
   const [loading, setLoading] = useState(!lazy);
   const [error, setError] = useState<string | null>(null);
-  const [barInterval, setBarInterval] = useState<ChartInterval>(initialInterval);
-  const [range, setRange] = useState(defaultRangeForInterval(initialInterval));
+  const [preset, setPreset] = useState<ChartPreset>(DEFAULT_CHART_PRESET);
   const [showOverlays, setShowOverlays] = useState(true);
 
-  const rangeOptions = CHART_RANGES_BY_INTERVAL[barInterval];
+  // Charts always use 5m bars; barSize prop is accepted but not switched in the UI.
+  const resolvedBarSize = barSize === "1 day" ? CHART_BAR_SIZE : barSize;
   const hasOverlayLines = overlays.length > 0;
 
   useEffect(() => {
@@ -124,7 +125,7 @@ export function SymbolChartPanel({
     setBars([]);
     setError(null);
     setLoading(true);
-  }, [symbol, barInterval]);
+  }, [symbol, resolvedBarSize]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -136,7 +137,7 @@ export function SymbolChartPanel({
         setLoading(true);
       }
       try {
-        const data = await fetchSymbolBars(symbol, barInterval);
+        const data = await fetchSymbolBars(symbol, resolvedBarSize);
         if (cancelled) return;
         const next = applyChartFetchResult(null, { ok: true, bars: data });
         hasBarsRef.current = true;
@@ -165,19 +166,18 @@ export function SymbolChartPanel({
       cancelled = true;
       window.clearInterval(pollId);
     };
-  }, [symbol, barInterval, isVisible, refreshIntervalMs]);
+  }, [symbol, resolvedBarSize, isVisible, refreshIntervalMs]);
 
-  function handleIntervalChange(next: ChartInterval) {
-    setBarInterval(next);
-    setRange(defaultRangeForInterval(next));
+  function handlePresetChange(next: string) {
+    if (isChartPreset(next)) {
+      setPreset(next);
+    }
   }
 
-  const displayBars = useMemo(
-    () => filterBarsForChart(bars, barInterval, range),
-    [bars, barInterval, range],
-  );
+  const displayBars = useMemo(() => sortBarsAscending(bars), [bars]);
+  const lookbackMs = lookbackMsForPreset(preset);
+  const viewKey = preset;
 
-  const viewKey = `${barInterval}:${range}`;
   const lastBarTs = displayBars.length > 0 ? displayBars[displayBars.length - 1]?.ts : null;
   const asOfLabel = useMemo(() => {
     if (!lastBarTs) return null;
@@ -212,16 +212,10 @@ export function SymbolChartPanel({
             {showControls ? (
               <div className="flex flex-wrap items-center gap-1.5">
                 <SegmentedControl
-                  ariaLabel="Chart interval"
-                  options={CHART_INTERVALS}
-                  value={barInterval}
-                  onChange={handleIntervalChange}
-                />
-                <SegmentedControl
-                  ariaLabel="Chart range"
-                  options={rangeOptions}
-                  value={range}
-                  onChange={setRange}
+                  ariaLabel="Chart lookback"
+                  options={CHART_PRESETS}
+                  value={preset}
+                  onChange={handlePresetChange}
                 />
                 {hasOverlayLines ? (
                   <button
@@ -251,13 +245,9 @@ export function SymbolChartPanel({
             </div>
           ) : error && bars.length === 0 ? (
             <p className="py-8 text-center text-sm text-red-400">{error}</p>
-          ) : bars.length === 0 ? (
-            <p className="py-8 text-center text-sm text-zinc-500">
-              No chart data yet — bars backfill when the trading engine runs.
-            </p>
           ) : displayBars.length === 0 ? (
             <p className="py-8 text-center text-sm text-zinc-500">
-              No bars in this range — try All or another interval.
+              No chart data yet — bars backfill when the trading engine runs.
             </p>
           ) : (
             <>
@@ -267,10 +257,11 @@ export function SymbolChartPanel({
                 markers={markers}
                 height={height}
                 viewKey={viewKey}
+                visibleLookbackMs={lookbackMs}
               />
               {asOfLabel ? (
                 <p className="mt-1 text-[10px] text-zinc-600">
-                  As of {asOfLabel} Malta · scroll/pinch to zoom, drag to pan
+                  As of {asOfLabel} Malta · drag/swipe for older candles, pinch to zoom
                 </p>
               ) : null}
             </>

@@ -24,8 +24,10 @@ type Props = {
   overlays?: ChartOverlayLine[];
   markers?: ChartMarker[];
   height?: number;
-  /** Changing this resets the visible range (e.g. interval/range control). */
+  /** Changing this resets the visible range (e.g. lookback preset). */
   viewKey?: string;
+  /** Initial visible window from newest bar; null = show all (fit). */
+  visibleLookbackMs?: number | null;
 };
 
 function toChartTime(ts: string): UTCTimestamp {
@@ -115,6 +117,7 @@ export function SymbolChart({
   markers = [],
   height = 240,
   viewKey = "",
+  visibleLookbackMs = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -149,6 +152,8 @@ export function SymbolChart({
         timeVisible: true,
         secondsVisible: false,
         tickMarkFormatter: maltaTickMarkFormatter,
+        rightOffset: 4,
+        shiftVisibleRangeOnNewBar: false,
       },
       localization: {
         timeFormatter: maltaTimeFormatter,
@@ -157,7 +162,7 @@ export function SymbolChart({
         mouseWheel: true,
         pressedMouseMove: true,
         horzTouchDrag: true,
-        vertTouchDrag: true,
+        vertTouchDrag: false,
       },
       handleScale: {
         axisPressedMouseMove: true,
@@ -212,18 +217,18 @@ export function SymbolChart({
     const barsFp = barsFingerprint(bars);
     const overlaysFp = overlaysFingerprint(overlays);
     const markersFp = markersFingerprint(markers);
-    const shouldFit = fittedViewKeyRef.current !== viewKey;
+    const shouldResetView = fittedViewKeyRef.current !== viewKey;
     const barsChanged = barsFp !== lastBarsFpRef.current;
     const overlaysChanged = overlaysFp !== lastOverlaysFpRef.current;
     const markersChanged = markersFp !== lastMarkersFpRef.current;
 
-    if (!shouldFit && !barsChanged && !overlaysChanged && !markersChanged) {
+    if (!shouldResetView && !barsChanged && !overlaysChanged && !markersChanged) {
       return;
     }
 
     const previousRange = chart.timeScale().getVisibleLogicalRange();
 
-    if (barsChanged || shouldFit) {
+    if (barsChanged || shouldResetView) {
       series.setData(
         bars.map((bar) => ({
           time: toChartTime(bar.ts),
@@ -236,7 +241,7 @@ export function SymbolChart({
       lastBarsFpRef.current = barsFp;
     }
 
-    if (overlaysChanged || shouldFit) {
+    if (overlaysChanged || shouldResetView) {
       for (const line of priceLinesRef.current) {
         series.removePriceLine(line);
       }
@@ -253,7 +258,7 @@ export function SymbolChart({
       lastOverlaysFpRef.current = overlaysFp;
     }
 
-    if (markersChanged || shouldFit) {
+    if (markersChanged || shouldResetView) {
       const chartMarkers: SeriesMarker<Time>[] = markers.map((marker) => ({
         time: toChartTime(marker.time),
         position: "aboveBar" as const,
@@ -269,13 +274,13 @@ export function SymbolChart({
       lastMarkersFpRef.current = markersFp;
     }
 
-    if (shouldFit) {
-      chart.timeScale().fitContent();
+    if (shouldResetView) {
+      applyVisibleLookback(chart, bars, visibleLookbackMs);
       fittedViewKeyRef.current = viewKey;
     } else if (barsChanged && previousRange) {
       chart.timeScale().setVisibleLogicalRange(previousRange);
     }
-  }, [bars, overlays, markers, viewKey]);
+  }, [bars, overlays, markers, viewKey, visibleLookbackMs]);
 
   if (bars.length === 0) {
     return (
@@ -288,9 +293,34 @@ export function SymbolChart({
   return (
     <div
       ref={containerRef}
-      className="w-full touch-pan-y"
+      className="w-full touch-none"
       style={{ height }}
       onWheel={(event) => event.stopPropagation()}
     />
   );
+}
+
+function applyVisibleLookback(
+  chart: IChartApi,
+  bars: SymbolBar[],
+  visibleLookbackMs: number | null | undefined,
+): void {
+  if (visibleLookbackMs == null) {
+    chart.timeScale().fitContent();
+    return;
+  }
+
+  const newestMs = new Date(bars[bars.length - 1]!.ts).getTime();
+  const oldestMs = new Date(bars[0]!.ts).getTime();
+  const fromMs = Math.max(oldestMs, newestMs - visibleLookbackMs);
+  const toMs = newestMs;
+
+  try {
+    chart.timeScale().setVisibleRange({
+      from: Math.floor(fromMs / 1000) as UTCTimestamp,
+      to: Math.floor(toMs / 1000) as UTCTimestamp,
+    });
+  } catch {
+    chart.timeScale().fitContent();
+  }
 }
