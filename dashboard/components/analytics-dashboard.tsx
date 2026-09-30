@@ -204,7 +204,10 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
                 <YAxis tick={{ fill: "#a1a1aa", fontSize: 11 }} unit="%" />
                 <Tooltip
                   contentStyle={{ background: "#18181b", border: "1px solid #3f3f46" }}
-                  formatter={(value: number) => [`${value.toFixed(3)}%`, "Avg 15m return"]}
+                  formatter={(value) => [
+                    `${(typeof value === "number" ? value : Number(value ?? 0)).toFixed(3)}%`,
+                    "Avg 15m return",
+                  ]}
                 />
                 <Bar dataKey="avgReturn15m" fill="#34d399" radius={[4, 4, 0, 0]} />
               </BarChart>

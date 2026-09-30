@@ -4,6 +4,7 @@ import type { Settings } from "@/lib/types/database";
 export type SettingsRow = Omit<
   Settings,
   | "min_share_price"
+  | "min_dollar_volume"
   | "min_hold_minutes"
   | "jev_sell_exit_threshold"
   | "reentry_cooldown_minutes"
@@ -18,6 +19,7 @@ export type SettingsRow = Omit<
     Pick<
       Settings,
       | "min_share_price"
+      | "min_dollar_volume"
       | "min_hold_minutes"
       | "jev_sell_exit_threshold"
       | "reentry_cooldown_minutes"
