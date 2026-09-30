@@ -8,8 +8,6 @@ import {
   Cell,
   Line,
   LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -24,15 +22,16 @@ import {
 import { computeJevCalibration } from "@/lib/jev-calibration";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import {
+  buildDailyEquitySeries,
   buildDailyPnlSeries,
-  buildEquitySeries,
+  equityChartDomain,
   filterPortfolioByRange,
-  maxDrawdownPct,
   type PortfolioRange,
 } from "@/lib/portfolio-analytics";
 import {
   computeTradeStats,
   exitReasonBreakdown,
+  filterTradesByRange,
   pnlBySymbol,
 } from "@/lib/trade-analytics";
 import type { PortfolioSnapshot, Prediction, Trade } from "@/lib/types/database";
@@ -51,27 +50,15 @@ const RANGE_OPTIONS: { value: PortfolioRange; label: string }[] = [
   { value: "all", label: "All" },
 ];
 
-const PIE_COLORS = [
-  "#34d399",
-  "#60a5fa",
-  "#fbbf24",
-  "#f87171",
-  "#a78bfa",
-  "#fb923c",
-  "#94a3b8",
-];
-
 function ChartTooltip({
   active,
   payload,
   label,
-  currency,
   valueFormatter,
 }: {
   active?: boolean;
   payload?: { value: number; name: string; color?: string }[];
   label?: string;
-  currency?: string;
   valueFormatter?: (value: number) => string;
 }) {
   if (!active || !payload?.length) return null;
@@ -81,34 +68,41 @@ function ChartTooltip({
       {payload.map((entry) => (
         <p key={entry.name} style={{ color: entry.color ?? "#e4e4e7" }}>
           {entry.name}: {valueFormatter ? valueFormatter(entry.value) : entry.value}
-          {currency && !valueFormatter ? ` ${currency}` : ""}
         </p>
       ))}
     </div>
   );
 }
 
-function StatCard({
+function StatFigure({
   label,
   value,
+  sub,
   valueClassName,
 }: {
   label: string;
   value: string;
+  sub?: string;
   valueClassName?: string;
 }) {
   return (
-    <Card className="p-4">
-      <CardTitle>{label}</CardTitle>
-      <p className={cn("mt-2 text-xl font-semibold tabular-nums text-zinc-100", valueClassName)}>
+    <div className="min-w-0">
+      <p className="text-xs text-zinc-500">{label}</p>
+      <p className={cn("mt-1 text-lg font-semibold tabular-nums text-zinc-100", valueClassName)}>
         {value}
       </p>
-    </Card>
+      {sub && <p className="mt-0.5 text-[11px] text-zinc-600">{sub}</p>}
+    </div>
   );
 }
 
+function formatChartDate(isoDate: string): string {
+  const d = new Date(`${isoDate}T12:00:00`);
+  return d.toLocaleDateString("en-GB", { month: "short", day: "numeric" });
+}
+
 export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }: Props) {
-  const [range, setRange] = useState<PortfolioRange>("1w");
+  const [range, setRange] = useState<PortfolioRange>("1d");
 
   const loadHistory = useCallback(() => fetchPortfolioHistory(), []);
   const loadTrades = useCallback(() => fetchClosedTrades(), []);
@@ -118,32 +112,69 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
   const liveTrades = useLiveQuery(closedTrades, loadTrades, ["trades"]);
   const livePredictions = useLiveQuery([] as Prediction[], loadPredictions, ["predictions"]);
 
-  const filtered = useMemo(
+  const filteredHistory = useMemo(
     () => filterPortfolioByRange(liveHistory, range),
     [liveHistory, range],
   );
-  const equitySeries = useMemo(() => buildEquitySeries(filtered), [filtered]);
-  const dailyPnlSeries = useMemo(() => buildDailyPnlSeries(filtered), [filtered]);
-  const stats = useMemo(() => computeTradeStats(liveTrades), [liveTrades]);
-  const symbolPnl = useMemo(() => pnlBySymbol(liveTrades).slice(0, 8), [liveTrades]);
-  const exitReasons = useMemo(() => exitReasonBreakdown(liveTrades), [liveTrades]);
-  const maxDd = useMemo(() => maxDrawdownPct(filtered), [filtered]);
+  const filteredTrades = useMemo(
+    () => filterTradesByRange(liveTrades, range),
+    [liveTrades, range],
+  );
+
+  const dailyEquitySeries = useMemo(
+    () => buildDailyEquitySeries(filteredHistory),
+    [filteredHistory],
+  );
+  const equityChartData = useMemo(
+    () =>
+      dailyEquitySeries.map((p) => ({
+        date: p.date,
+        label: formatChartDate(p.date),
+        equity: p.equity,
+        changeFromPriorDay: p.changeFromPriorDay,
+      })),
+    [dailyEquitySeries],
+  );
+  const equityYDomain = useMemo(
+    () => equityChartDomain(equityChartData.map((p) => p.equity)),
+    [equityChartData],
+  );
+
+  const dailyPnlSeries = useMemo(() => buildDailyPnlSeries(filteredHistory), [filteredHistory]);
+  const dailyChartData = useMemo(
+    () =>
+      dailyPnlSeries.map((p) => ({
+        date: p.date,
+        label: formatChartDate(p.date),
+        dailyPnl: p.dailyPnl,
+      })),
+    [dailyPnlSeries],
+  );
+
+  const stats = useMemo(() => computeTradeStats(filteredTrades), [filteredTrades]);
+  const symbolPnl = useMemo(() => pnlBySymbol(filteredTrades).slice(0, 12), [filteredTrades]);
+  const exitReasons = useMemo(
+    () =>
+      exitReasonBreakdown(filteredTrades).map((row) => ({
+        ...row,
+        chartLabel: `${row.label} (${row.count})`,
+      })),
+    [filteredTrades],
+  );
   const calibration = useMemo(
     () => computeJevCalibration(livePredictions),
     [livePredictions],
   );
 
-  const equityChartData = equitySeries.map((p) => ({
-    label: new Date(p.timestamp).toLocaleString("en-GB", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }),
-    equity: p.equity,
-    drawdown: p.drawdownPct,
-  }));
+  const profitFactorLabel =
+    stats.profitFactor == null
+      ? stats.closedCount === 0
+        ? "—"
+        : "∞"
+      : stats.profitFactor.toFixed(2);
+
+  const holdLabel =
+    stats.avgHoldMinutes != null ? `${Math.round(stats.avgHoldMinutes)} min avg hold` : undefined;
 
   return (
     <div className="space-y-6">
@@ -165,76 +196,83 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
         ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Win rate" value={formatPercent(stats.winRate)} />
-        <StatCard
-          label="Total P&L (closed)"
-          value={formatCurrency(stats.totalPnl, currency)}
-          valueClassName={stats.totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}
-        />
-        <StatCard
-          label="Profit factor"
-          value={
-            stats.profitFactor == null
-              ? stats.closedCount === 0
-                ? "—"
-                : "∞"
-              : stats.profitFactor.toFixed(2)
-          }
-        />
-        <StatCard label="Max drawdown" value={`${maxDd.toFixed(1)}%`} valueClassName="text-red-400" />
-      </div>
-
       <Card>
-        <CardTitle>Jev calibration (15m forward return)</CardTitle>
-        <p className="mt-1 text-xs text-zinc-500">
-          Mean realized 15-minute return by BUY probability bucket. A flat curve means the signal
-          is not predictive yet.
-        </p>
-        {calibration.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-500">
-            No matured predictions with forward returns yet
-          </p>
-        ) : (
-          <div className="mt-4 h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={calibration}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
-                <XAxis dataKey="label" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
-                <YAxis tick={{ fill: "#a1a1aa", fontSize: 11 }} unit="%" />
-                <Tooltip
-                  contentStyle={{ background: "#18181b", border: "1px solid #3f3f46" }}
-                  formatter={(value) => [
-                    `${(typeof value === "number" ? value : Number(value ?? 0)).toFixed(3)}%`,
-                    "Avg 15m return",
-                  ]}
-                />
-                <Bar dataKey="avgReturn15m" fill="#34d399" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <StatFigure
+            label="Closed P&L"
+            value={formatCurrency(stats.totalPnl, currency)}
+            valueClassName={stats.totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}
+          />
+          <StatFigure label="Win rate" value={formatPercent(stats.winRate)} />
+          <StatFigure label="Profit factor" value={profitFactorLabel} />
+          <StatFigure
+            label="Expectancy"
+            value={formatCurrency(stats.expectancy, currency)}
+            valueClassName={stats.expectancy >= 0 ? "text-emerald-400" : "text-red-400"}
+          />
+          <StatFigure
+            label="Avg win / loss"
+            value={`${formatCurrency(stats.avgWin, currency)} / ${formatCurrency(stats.avgLoss, currency)}`}
+          />
+          <StatFigure
+            label="Closed trades"
+            value={String(stats.closedCount)}
+            sub={
+              holdLabel
+                ? `${stats.winCount}W · ${stats.lossCount}L · ${holdLabel}`
+                : `${stats.winCount}W · ${stats.lossCount}L`
+            }
+          />
+        </div>
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
-          <CardTitle>Equity curve</CardTitle>
-          {equityChartData.length < 2 ? (
-            <p className="mt-4 text-sm text-zinc-500">Not enough portfolio history yet</p>
+          <CardTitle>Equity by day</CardTitle>
+          <p className="mt-1 text-xs text-zinc-500">
+            End-of-day equity (last snapshot each day). Y-axis zoomed to this range; tooltip
+            has exact levels and change vs the prior day.
+          </p>
+          {equityChartData.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-500">No equity history for this range</p>
           ) : (
-            <div className="mt-4 h-64">
+            <div className="mt-4 h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={equityChartData}>
                   <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
-                  <XAxis dataKey="label" tick={{ fill: "#71717a", fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={70} />
+                  <XAxis dataKey="label" tick={{ fill: "#71717a", fontSize: 11 }} />
+                  <YAxis
+                    domain={equityYDomain}
+                    tick={{ fill: "#71717a", fontSize: 11 }}
+                    width={88}
+                    tickFormatter={(v) => formatCurrency(Number(v), currency)}
+                  />
                   <Tooltip
-                    content={
-                      <ChartTooltip
-                        currency={currency}
-                        valueFormatter={(v) => formatCurrency(v, currency)}
-                      />
-                    }
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null;
+                      const point = payload[0]?.payload as {
+                        equity: number;
+                        changeFromPriorDay: number | null;
+                      };
+                      return (
+                        <div className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs shadow-lg">
+                          <p className="mb-1 text-zinc-400">{label}</p>
+                          <p className="text-emerald-400">
+                            Equity: {formatCurrency(point.equity, currency)}
+                          </p>
+                          {point.changeFromPriorDay != null && (
+                            <p
+                              className={
+                                point.changeFromPriorDay >= 0 ? "text-emerald-400" : "text-red-400"
+                              }
+                            >
+                              vs prior day:{" "}
+                              {formatCurrency(point.changeFromPriorDay, currency)}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    }}
                   />
                   <Line
                     type="monotone"
@@ -242,7 +280,8 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
                     name="Equity"
                     stroke="#34d399"
                     strokeWidth={2}
-                    dot={false}
+                    dot={{ r: 3, fill: "#34d399" }}
+                    activeDot={{ r: 5 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -250,45 +289,20 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
           )}
         </Card>
 
-        <Card>
-          <CardTitle>Drawdown</CardTitle>
-          {equityChartData.length < 2 ? (
-            <p className="mt-4 text-sm text-zinc-500">Not enough portfolio history yet</p>
-          ) : (
-            <div className="mt-4 h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={equityChartData}>
-                  <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
-                  <XAxis dataKey="label" tick={{ fill: "#71717a", fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={50} />
-                  <Tooltip content={<ChartTooltip valueFormatter={(v) => `${v.toFixed(2)}%`} />} />
-                  <Line
-                    type="monotone"
-                    dataKey="drawdown"
-                    name="Drawdown"
-                    stroke="#f87171"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Card>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardTitle>Daily P&L</CardTitle>
-          {dailyPnlSeries.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-500">No daily P&L data</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Realized + unrealized P&L for each day (last snapshot reading).
+          </p>
+          {dailyChartData.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-500">No daily P&L data for this range</p>
           ) : (
-            <div className="mt-4 h-56">
+            <div className="mt-4 h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dailyPnlSeries}>
+                <BarChart data={dailyChartData}>
                   <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
-                  <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 10 }} />
-                  <YAxis tick={{ fill: "#71717a", fontSize: 10 }} width={60} />
+                  <XAxis dataKey="label" tick={{ fill: "#71717a", fontSize: 11 }} />
+                  <YAxis tick={{ fill: "#71717a", fontSize: 11 }} width={70} />
                   <Tooltip
                     content={
                       <ChartTooltip
@@ -297,7 +311,7 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
                     }
                   />
                   <Bar dataKey="dailyPnl" name="Daily P&L">
-                    {dailyPnlSeries.map((entry, index) => (
+                    {dailyChartData.map((entry, index) => (
                       <Cell
                         key={`${entry.date}-${index}`}
                         fill={entry.dailyPnl >= 0 ? "#34d399" : "#f87171"}
@@ -309,46 +323,15 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
             </div>
           )}
         </Card>
-
-        <Card>
-          <CardTitle>Exit reasons</CardTitle>
-          {exitReasons.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-500">No closed trades yet</p>
-          ) : (
-            <div className="mt-4 h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={exitReasons}
-                    dataKey="count"
-                    nameKey="label"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    label={({ name, percent }) =>
-                      `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`
-                    }
-                    labelLine={false}
-                  >
-                    {exitReasons.map((_, index) => (
-                      <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Card>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardTitle>P&L by symbol</CardTitle>
           {symbolPnl.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-500">No closed trades yet</p>
+            <p className="mt-4 text-sm text-zinc-500">No closed trades in this range</p>
           ) : (
-            <div className="mt-4 h-56">
+            <div className="mt-4 h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={symbolPnl} layout="vertical">
                   <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
@@ -381,41 +364,73 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
         </Card>
 
         <Card>
-          <CardTitle>Trade stats</CardTitle>
-          <dl className="mt-4 space-y-3 text-sm">
-            <div className="flex justify-between gap-4">
-              <dt className="text-zinc-500">Closed trades</dt>
-              <dd className="tabular-nums text-zinc-200">{stats.closedCount}</dd>
+          <CardTitle>P&L by exit reason</CardTitle>
+          {exitReasons.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-500">No closed trades in this range</p>
+          ) : (
+            <div className="mt-4 h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={exitReasons} layout="vertical">
+                  <CartesianGrid stroke="#27272a" strokeDasharray="3 3" />
+                  <XAxis type="number" tick={{ fill: "#71717a", fontSize: 10 }} />
+                  <YAxis
+                    type="category"
+                    dataKey="chartLabel"
+                    tick={{ fill: "#71717a", fontSize: 10 }}
+                    width={120}
+                  />
+                  <Tooltip
+                    content={
+                      <ChartTooltip
+                        valueFormatter={(v) => formatCurrency(v, currency)}
+                      />
+                    }
+                  />
+                  <Bar dataKey="pnl" name="P&L">
+                    {exitReasons.map((entry, index) => (
+                      <Cell
+                        key={`${entry.reason}-${index}`}
+                        fill={entry.pnl >= 0 ? "#34d399" : "#f87171"}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-zinc-500">Wins / losses</dt>
-              <dd className="tabular-nums text-zinc-200">
-                {stats.winCount} / {stats.lossCount}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-zinc-500">Avg win</dt>
-              <dd className="tabular-nums text-emerald-400">
-                {formatCurrency(stats.avgWin, currency)}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-zinc-500">Avg loss</dt>
-              <dd className="tabular-nums text-red-400">
-                {formatCurrency(stats.avgLoss, currency)}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-zinc-500">Avg hold time</dt>
-              <dd className="tabular-nums text-zinc-200">
-                {stats.avgHoldMinutes != null
-                  ? `${Math.round(stats.avgHoldMinutes)} min`
-                  : "—"}
-              </dd>
-            </div>
-          </dl>
+          )}
         </Card>
       </div>
+
+      <Card>
+        <CardTitle>Jev calibration (15m forward return)</CardTitle>
+        <p className="mt-1 text-xs text-zinc-500">
+          Mean realized 15-minute return by BUY probability bucket. A flat curve means the signal
+          is not predictive yet.
+        </p>
+        {calibration.length === 0 ? (
+          <p className="mt-4 text-sm text-zinc-500">
+            No matured predictions with forward returns yet
+          </p>
+        ) : (
+          <div className="mt-4 h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={calibration}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
+                <XAxis dataKey="label" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
+                <YAxis tick={{ fill: "#a1a1aa", fontSize: 11 }} unit="%" />
+                <Tooltip
+                  contentStyle={{ background: "#18181b", border: "1px solid #3f3f46" }}
+                  formatter={(value) => [
+                    `${(typeof value === "number" ? value : Number(value ?? 0)).toFixed(3)}%`,
+                    "Avg 15m return",
+                  ]}
+                />
+                <Bar dataKey="avgReturn15m" fill="#34d399" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

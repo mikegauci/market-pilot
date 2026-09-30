@@ -1,3 +1,4 @@
+import { portfolioRangeStartMs, type PortfolioRange } from "@/lib/portfolio-analytics";
 import type { Trade } from "@/lib/types/database";
 
 export type TradeStats = {
@@ -10,6 +11,7 @@ export type TradeStats = {
   profitFactor: number | null;
   avgHoldMinutes: number | null;
   totalPnl: number;
+  expectancy: number;
 };
 
 export type SymbolPnl = {
@@ -22,7 +24,17 @@ export type ExitReasonCount = {
   reason: string;
   label: string;
   count: number;
+  pnl: number;
 };
+
+export function filterTradesByRange(trades: Trade[], range: PortfolioRange): Trade[] {
+  const start = portfolioRangeStartMs(range);
+  if (start == null) return trades;
+  return trades.filter((trade) => {
+    if (trade.status !== "closed" || !trade.exit_time) return false;
+    return new Date(trade.exit_time).getTime() >= start;
+  });
+}
 
 const EXIT_REASON_LABELS: Record<string, string> = {
   stop_loss: "Stop loss",
@@ -57,19 +69,25 @@ export function computeTradeStats(trades: Trade[]): TradeStats {
     }
   }
 
+  const winRate = closed.length > 0 ? wins.length / closed.length : 0;
+  const avgWin = wins.length > 0 ? grossWins / wins.length : 0;
+  const avgLoss = losses.length > 0 ? grossLosses / losses.length : 0;
+  const expectancy = winRate * avgWin - (1 - winRate) * avgLoss;
+
   return {
     closedCount: closed.length,
     winCount: wins.length,
     lossCount: losses.length,
-    winRate: closed.length > 0 ? wins.length / closed.length : 0,
-    avgWin: wins.length > 0 ? grossWins / wins.length : 0,
-    avgLoss: losses.length > 0 ? grossLosses / losses.length : 0,
+    winRate,
+    avgWin,
+    avgLoss,
     profitFactor: grossLosses > 0 ? grossWins / grossLosses : grossWins > 0 ? null : 0,
     avgHoldMinutes:
       holdMinutes.length > 0
         ? holdMinutes.reduce((a, b) => a + b, 0) / holdMinutes.length
         : null,
     totalPnl: pnls.reduce((sum, p) => sum + p, 0),
+    expectancy,
   };
 }
 
@@ -87,13 +105,20 @@ export function pnlBySymbol(trades: Trade[]): SymbolPnl[] {
 }
 
 export function exitReasonBreakdown(trades: Trade[]): ExitReasonCount[] {
-  const map = new Map<string, number>();
+  const map = new Map<string, { count: number; pnl: number }>();
   for (const trade of trades) {
     if (trade.status !== "closed") continue;
     const reason = trade.exit_reason ?? "unknown";
-    map.set(reason, (map.get(reason) ?? 0) + 1);
+    const pnl = trade.net_pnl ?? trade.gross_pnl ?? 0;
+    const existing = map.get(reason) ?? { count: 0, pnl: 0 };
+    map.set(reason, { count: existing.count + 1, pnl: existing.pnl + pnl });
   }
   return [...map.entries()]
-    .map(([reason, count]) => ({ reason, label: exitReasonLabel(reason), count }))
-    .sort((a, b) => b.count - a.count);
+    .map(([reason, data]) => ({
+      reason,
+      label: exitReasonLabel(reason),
+      count: data.count,
+      pnl: data.pnl,
+    }))
+    .sort((a, b) => b.pnl - a.pnl);
 }

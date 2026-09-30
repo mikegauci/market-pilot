@@ -19,8 +19,7 @@ export default async function AnalyticsPage() {
       <header className="space-y-1">
         <h2 className="text-xl font-semibold sm:text-2xl">Analytics</h2>
         <p className="text-sm text-zinc-500">
-          Equity history, drawdown, trade performance, and exit attribution from live Supabase
-          data.
+          Daily equity, P&L, trade performance, and exit attribution from live Supabase data.
         </p>
       </header>
       <AnalyticsDashboard
