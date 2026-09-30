@@ -71,6 +71,7 @@ const SKIP_REASON_LABELS: Record<string, string> = {
   max_open_positions: "Max positions reached",
   insufficient_capital: "Insufficient capital",
   max_daily_loss: "Daily loss limit hit",
+  drawdown_halt: "Drawdown breaker tripped",
   position_too_small: "Position too small",
   invalid_price: "Invalid price",
   ibkr_not_connected: "Broker not connected",

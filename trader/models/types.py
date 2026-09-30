@@ -82,6 +82,10 @@ class BotStatusUpdate:
     last_reconcile_at: Optional[datetime] = None
     reconcile_ok: Optional[bool] = None
     reconcile_detail: Optional[str] = None
+    daily_pnl: Optional[float] = None
+    risk_halt_active: Optional[bool] = None
+    risk_halt_reason: Optional[str] = None
+    last_risk_eval_at: Optional[datetime] = None
 
 
 @dataclass
@@ -214,6 +218,12 @@ class RiskSettings:
     jev_max_retries: int = 1
     reconcile_interval_sec: int = 60
     reconcile_protect_orphans: bool = True
+    # Phase 5 daily-loss / drawdown
+    daily_loss_include_unrealized: bool = True
+    daily_loss_include_fees: bool = False
+    daily_loss_action: str = "block_entries"
+    drawdown_breaker_enabled: bool = False
+    drawdown_max_frac: float = 0.10
 
 
 @dataclass

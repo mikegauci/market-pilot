@@ -48,5 +48,10 @@ describe("normalizeSettings", () => {
     expect(normalized?.jev_timeout_sec).toBe(3);
     expect(normalized?.reconcile_interval_sec).toBe(60);
     expect(normalized?.reconcile_protect_orphans).toBe(true);
+    expect(normalized?.daily_loss_include_unrealized).toBe(true);
+    expect(normalized?.daily_loss_include_fees).toBe(false);
+    expect(normalized?.daily_loss_action).toBe("block_entries");
+    expect(normalized?.drawdown_breaker_enabled).toBe(false);
+    expect(normalized?.drawdown_max_frac).toBe(0.1);
   });
 });

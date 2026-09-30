@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -59,6 +59,12 @@ def _ensure_et(when: datetime) -> datetime:
     if when.tzinfo is None:
         return when.replace(tzinfo=ET)
     return when.astimezone(ET)
+
+
+def us_trading_date(now: datetime | None = None) -> date:
+    """America/New_York calendar date for daily-loss / risk-halt persistence."""
+    when = _ensure_et(now if now is not None else datetime.now(tz=ET))
+    return when.date()
 
 
 def get_session_clock(now: datetime | None = None) -> SessionClock:

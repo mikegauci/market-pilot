@@ -4,7 +4,7 @@ import logging
 import re
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from typing import Callable, Dict, List, Optional, TypeVar
 
@@ -229,6 +229,14 @@ class SupabaseRepository:
             payload["reconcile_ok"] = status.reconcile_ok
         if status.reconcile_detail is not None:
             payload["reconcile_detail"] = status.reconcile_detail
+        if status.daily_pnl is not None:
+            payload["daily_pnl"] = status.daily_pnl
+        if status.risk_halt_active is not None:
+            payload["risk_halt_active"] = status.risk_halt_active
+        if status.risk_halt_reason is not None or status.risk_halt_active is not None:
+            payload["risk_halt_reason"] = status.risk_halt_reason
+        if status.last_risk_eval_at is not None:
+            payload["last_risk_eval_at"] = status.last_risk_eval_at.isoformat()
         self.client.table("bot_status").update(payload).eq("id", 1).execute()
 
     @_db_synchronized
@@ -442,6 +450,8 @@ class SupabaseRepository:
                 "kill_alert_min_gap_sec, jev_transport_fail_rate_kill_frac, "
                 "jev_transport_fail_window_sec, jev_timeout_sec, jev_max_retries, "
                 "reconcile_interval_sec, reconcile_protect_orphans, "
+                "daily_loss_include_unrealized, daily_loss_include_fees, "
+                "daily_loss_action, drawdown_breaker_enabled, drawdown_max_frac, "
                 "account_capital, risk_sync_equity, watchlist, watchlist_core, "
                 "watchlist_dynamic_enabled, watchlist_dynamic_size, "
                 "watchlist_min_buy, "
@@ -524,6 +534,13 @@ class SupabaseRepository:
             jev_max_retries=int(data.get("jev_max_retries", 1)),
             reconcile_interval_sec=int(data.get("reconcile_interval_sec", 60)),
             reconcile_protect_orphans=bool(data.get("reconcile_protect_orphans", True)),
+            daily_loss_include_unrealized=bool(
+                data.get("daily_loss_include_unrealized", True)
+            ),
+            daily_loss_include_fees=bool(data.get("daily_loss_include_fees", False)),
+            daily_loss_action=str(data.get("daily_loss_action") or "block_entries"),
+            drawdown_breaker_enabled=bool(data.get("drawdown_breaker_enabled", False)),
+            drawdown_max_frac=float(data.get("drawdown_max_frac", 0.10)),
             account_capital=float(data.get("account_capital", 1000)),
             risk_sync_equity=risk_sync_equity,
             watchlist=[str(s).upper() for s in watchlist],
@@ -805,20 +822,100 @@ class SupabaseRepository:
         return latest
 
     @_db_synchronized
-    def get_daily_realized_pnl(self) -> float:
-        today = datetime.now(timezone.utc).date().isoformat()
+    def get_daily_realized_pnl(
+        self,
+        *,
+        trading_date: Optional[date] = None,
+        include_fees: bool = False,
+    ) -> float:
+        from market.hours import us_trading_date
+        from risk.daily_pnl import et_day_bounds_utc, sum_realized_from_rows
+
+        day = trading_date or us_trading_date()
+        start_utc, end_utc = et_day_bounds_utc(day)
         result = (
             self.client.table("trades")
-            .select("net_pnl")
+            .select("net_pnl, gross_pnl")
             .eq("status", "closed")
-            .gte("exit_time", f"{today}T00:00:00+00:00")
+            .gte("exit_time", start_utc.isoformat())
+            .lt("exit_time", end_utc.isoformat())
             .execute()
         )
-        total = 0.0
+        return sum_realized_from_rows(result.data or [], include_fees=include_fees)
+
+    @_db_synchronized
+    def get_portfolio_equity_high_water(self, *, limit: int = 500) -> Optional[float]:
+        """Max equity from recent portfolio_history rows (NetLiq / equity)."""
+        result = (
+            self.client.table("portfolio_history")
+            .select("equity")
+            .order("timestamp", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        peak: Optional[float] = None
         for row in result.data or []:
-            if row.get("net_pnl") is not None:
-                total += float(row["net_pnl"])
-        return total
+            if row.get("equity") is None:
+                continue
+            val = float(row["equity"])
+            peak = val if peak is None else max(peak, val)
+        return peak
+
+    @_db_synchronized
+    def get_active_risk_halts(
+        self, *, trading_date: date
+    ) -> List[dict]:
+        result = (
+            self.client.table("risk_halts")
+            .select("id, trading_date, halt_type, action_taken, detail, created_at")
+            .eq("trading_date", trading_date.isoformat())
+            .is_("cleared_at", "null")
+            .execute()
+        )
+        return list(result.data or [])
+
+    @_db_synchronized
+    def clear_stale_risk_halts(self, *, before_trading_date: date) -> int:
+        """Mark active halts from prior US trading dates as cleared."""
+        now = datetime.now(timezone.utc).isoformat()
+        result = (
+            self.client.table("risk_halts")
+            .update({"cleared_at": now})
+            .lt("trading_date", before_trading_date.isoformat())
+            .is_("cleared_at", "null")
+            .execute()
+        )
+        return len(result.data or [])
+
+    @_db_synchronized
+    def insert_risk_halt(
+        self,
+        *,
+        trading_date: date,
+        halt_type: str,
+        action_taken: str,
+        detail: Optional[dict] = None,
+    ) -> bool:
+        """Insert active halt. Returns False if one already exists (unique conflict)."""
+        payload = {
+            "trading_date": trading_date.isoformat(),
+            "halt_type": halt_type,
+            "action_taken": action_taken,
+            "detail": detail or {},
+        }
+        try:
+            self.client.table("risk_halts").insert(payload).execute()
+            return True
+        except Exception as exc:
+            # Unique active index — already halted today.
+            logger = __import__("logging").getLogger(__name__)
+            logger.info(
+                "risk_halt already active for %s/%s: %s",
+                trading_date,
+                halt_type,
+                exc,
+            )
+            return False
 
     @_db_synchronized
     def get_total_realized_pnl(self) -> float:

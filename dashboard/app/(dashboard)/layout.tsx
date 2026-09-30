@@ -20,6 +20,10 @@ const defaultBotStatus = {
   last_reconcile_at: null,
   reconcile_ok: null,
   reconcile_detail: null,
+  daily_pnl: null,
+  risk_halt_active: null,
+  risk_halt_reason: null,
+  last_risk_eval_at: null,
 };
 
 export default async function DashboardLayout({ children }: LayoutProps<"/">) {

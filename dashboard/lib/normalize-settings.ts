@@ -27,8 +27,17 @@ const PHASE4_DEFAULTS = {
   reconcile_protect_orphans: true,
 };
 
+const PHASE5_DEFAULTS = {
+  daily_loss_include_unrealized: true,
+  daily_loss_include_fees: false,
+  daily_loss_action: "block_entries" as const,
+  drawdown_breaker_enabled: false,
+  drawdown_max_frac: 0.1,
+};
+
 type Phase3Keys = keyof typeof PHASE3_DEFAULTS;
 type Phase4Keys = keyof typeof PHASE4_DEFAULTS;
+type Phase5Keys = keyof typeof PHASE5_DEFAULTS;
 
 /** Row shape from Supabase before newer columns existed or were selected. */
 export type SettingsRow = Omit<
@@ -51,6 +60,7 @@ export type SettingsRow = Omit<
   | "equity_divergence_alert_frac"
   | Phase3Keys
   | Phase4Keys
+  | Phase5Keys
 > &
   Partial<
     Pick<
@@ -73,6 +83,7 @@ export type SettingsRow = Omit<
       | "equity_divergence_alert_frac"
       | Phase3Keys
       | Phase4Keys
+      | Phase5Keys
     >
   >;
 
@@ -145,5 +156,17 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
       raw.reconcile_interval_sec ?? PHASE4_DEFAULTS.reconcile_interval_sec,
     reconcile_protect_orphans:
       raw.reconcile_protect_orphans ?? PHASE4_DEFAULTS.reconcile_protect_orphans,
+    daily_loss_include_unrealized:
+      raw.daily_loss_include_unrealized ??
+      PHASE5_DEFAULTS.daily_loss_include_unrealized,
+    daily_loss_include_fees:
+      raw.daily_loss_include_fees ?? PHASE5_DEFAULTS.daily_loss_include_fees,
+    daily_loss_action:
+      raw.daily_loss_action === "flatten_and_block"
+        ? "flatten_and_block"
+        : PHASE5_DEFAULTS.daily_loss_action,
+    drawdown_breaker_enabled:
+      raw.drawdown_breaker_enabled ?? PHASE5_DEFAULTS.drawdown_breaker_enabled,
+    drawdown_max_frac: raw.drawdown_max_frac ?? PHASE5_DEFAULTS.drawdown_max_frac,
   };
 }

@@ -162,6 +162,14 @@ function StatusPanel({
             Reconcile: {status.reconcile_detail || "needs attention"}
           </p>
         ) : null}
+        {status.risk_halt_active ? (
+          <p className="mb-2 rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-200">
+            Risk halt: {status.risk_halt_reason || "active"}
+            {status.daily_pnl != null
+              ? ` · daily P&L ${Number(status.daily_pnl).toFixed(0)}`
+              : ""}
+          </p>
+        ) : null}
         <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
           System status
         </p>
@@ -209,6 +217,11 @@ function StatusPanel({
             value={reconcileLabel}
             active={reconcileActive}
           />
+          <SidebarStatusRow
+            label="Risk halt"
+            value={status.risk_halt_active ? status.risk_halt_reason || "On" : "Off"}
+            active={!status.risk_halt_active}
+          />
         </div>
 
         <p className="mt-2 text-[10px] text-zinc-500" suppressHydrationWarning>
@@ -233,6 +246,14 @@ function StatusPanel({
           {mdType != null ? ` · marketDataType=${mdType}` : ""}
           {status.quote_age_p95_sec != null
             ? ` · quote age p95=${Number(status.quote_age_p95_sec).toFixed(1)}s`
+            : ""}
+        </p>
+      ) : null}
+      {status.risk_halt_active ? (
+        <p className="mb-3 rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          Risk halt: {status.risk_halt_reason || "active"}
+          {status.daily_pnl != null
+            ? ` · daily P&L ${Number(status.daily_pnl).toFixed(2)}`
             : ""}
         </p>
       ) : null}
@@ -305,6 +326,18 @@ function StatusPanel({
           }
           active={reconcileActive}
           tone="teal"
+        />
+        <StatusItem
+          label="Risk halt"
+          value={
+            status.risk_halt_active
+              ? status.risk_halt_reason || "Active"
+              : status.daily_pnl != null
+                ? `Off · P&L ${Number(status.daily_pnl).toFixed(0)}`
+                : "Off"
+          }
+          active={!status.risk_halt_active}
+          tone="emerald"
         />
       </div>
 

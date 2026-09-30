@@ -499,6 +499,64 @@ export function SettingsForm({
             profile={selectedProfile}
           />
           <SettingsField
+            id="daily_loss_action"
+            label="Daily loss action"
+            description="What to do when the daily loss limit is hit (US session date)."
+          >
+            <select
+              id="daily_loss_action"
+              name="daily_loss_action"
+              className="flex h-10 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100"
+              defaultValue={settings.daily_loss_action ?? "block_entries"}
+            >
+              <option value="block_entries">Block new entries</option>
+              <option value="flatten_and_block">Flatten open positions + block</option>
+            </select>
+          </SettingsField>
+          <label className="flex items-center gap-2 text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              name="daily_loss_include_unrealized"
+              value="on"
+              defaultChecked={settings.daily_loss_include_unrealized ?? true}
+            />
+            Include unrealized P&amp;L in daily loss
+          </label>
+          <label className="flex items-center gap-2 text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              name="daily_loss_include_fees"
+              value="on"
+              defaultChecked={settings.daily_loss_include_fees ?? false}
+            />
+            Include fees (use net P&amp;L)
+          </label>
+          <label className="flex items-center gap-2 text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              name="drawdown_breaker_enabled"
+              value="on"
+              defaultChecked={settings.drawdown_breaker_enabled ?? false}
+            />
+            Enable drawdown breaker (off until thresholds reviewed)
+          </label>
+          <SettingsField
+            id="drawdown_max_pct"
+            label="Drawdown max (%)"
+            description="Peak-to-trough equity drawdown that trips the breaker when enabled."
+          >
+            <Input
+              id="drawdown_max_pct"
+              name="drawdown_max_pct"
+              type="number"
+              min={1}
+              max={50}
+              step={0.1}
+              defaultValue={Math.round((settings.drawdown_max_frac ?? 0.1) * 1000) / 10}
+              required
+            />
+          </SettingsField>
+          <SettingsField
             id="max_open_positions"
             label="Max open positions"
             description={SETTING_DESCRIPTIONS.max_open_positions}

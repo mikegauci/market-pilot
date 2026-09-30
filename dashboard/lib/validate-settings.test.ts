@@ -49,6 +49,11 @@ const baseFields = {
   jev_max_retries: "1",
   reconcile_interval_sec: "60",
   reconcile_protect_orphans: "on",
+  daily_loss_include_unrealized: "on",
+  daily_loss_include_fees: "",
+  daily_loss_action: "block_entries",
+  drawdown_breaker_enabled: "",
+  drawdown_max_pct: "10",
   account_capital: "10000",
   min_volume_ratio: "0.5",
   min_share_price: "20",
@@ -227,11 +232,30 @@ describe("parseSettingsForm eod closeout", () => {
     const parsed = parseSettingsForm(form(baseFields));
     expect(parsed.reconcile_interval_sec).toBe(60);
     expect(parsed.reconcile_protect_orphans).toBe(true);
+    expect(parsed.daily_loss_include_unrealized).toBe(true);
+    expect(parsed.daily_loss_include_fees).toBe(false);
+    expect(parsed.daily_loss_action).toBe("block_entries");
+    expect(parsed.drawdown_breaker_enabled).toBe(false);
+    expect(parsed.drawdown_max_frac).toBe(0.1);
   });
 
   it("rejects reconcile interval out of range", () => {
     expect(() =>
       parseSettingsForm(form({ ...baseFields, reconcile_interval_sec: "10" })),
     ).toThrow("Reconcile interval must be an integer from 15 to 600 seconds");
+  });
+
+  it("parses flatten daily loss action and drawdown", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        daily_loss_action: "flatten_and_block",
+        drawdown_breaker_enabled: "on",
+        drawdown_max_pct: "15",
+      }),
+    );
+    expect(parsed.daily_loss_action).toBe("flatten_and_block");
+    expect(parsed.drawdown_breaker_enabled).toBe(true);
+    expect(parsed.drawdown_max_frac).toBe(0.15);
   });
 });

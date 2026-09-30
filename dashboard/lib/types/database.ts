@@ -26,6 +26,10 @@ export type BotStatus = {
   last_reconcile_at?: string | null;
   reconcile_ok?: boolean | null;
   reconcile_detail?: string | null;
+  daily_pnl?: number | null;
+  risk_halt_active?: boolean | null;
+  risk_halt_reason?: string | null;
+  last_risk_eval_at?: string | null;
 };
 
 export type Settings = {
@@ -80,6 +84,14 @@ export type Settings = {
   reconcile_interval_sec: number;
   /** Place protective brackets on unprotected orphans (else flatten). */
   reconcile_protect_orphans: boolean;
+  /** Phase 5: include unrealized MTM in daily-loss. */
+  daily_loss_include_unrealized: boolean;
+  /** Include fees (use net_pnl) in daily-loss. */
+  daily_loss_include_fees: boolean;
+  /** block_entries | flatten_and_block */
+  daily_loss_action: "block_entries" | "flatten_and_block";
+  drawdown_breaker_enabled: boolean;
+  drawdown_max_frac: number;
   /** 0 = off; block entries when 1m volume ratio is below this vs 10-bar average */
   min_volume_ratio: number;
   /** 0 = off; block entries / EM scan picks below this USD share price */

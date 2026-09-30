@@ -35,10 +35,14 @@ def pre_submit_recheck(
     entry_block: Optional[str],
     prediction_ts: Optional[datetime] = None,
     now: Optional[datetime] = None,
+    open_quotes: Optional[dict] = None,
+    risk_halt_reason: Optional[str] = None,
 ) -> PreSubmitResult:
     """Re-validate gates with a fresh snapshot before transmitting a bracket.
 
     Signal age is measured here (submit time), not at prediction receipt.
+    Pass ``open_quotes`` with all open-position symbols so daily-loss unrealized
+    is not understated.
     """
     now_u = now or datetime.now(timezone.utc)
     if not bot_enabled:
@@ -47,6 +51,8 @@ def pre_submit_recheck(
         return PreSubmitResult(False, "entry_kill_active")
     if entry_block:
         return PreSubmitResult(False, entry_block)
+    if risk_halt_reason:
+        return PreSubmitResult(False, risk_halt_reason)
 
     if risk_settings.stale_input_gates_enabled:
         from strategy.data_gates import check_signal_age
@@ -85,7 +91,8 @@ def pre_submit_recheck(
         if not drift.passed:
             return PreSubmitResult(False, drift.reason)
 
-    quotes_by_symbol = {fresh_quote.symbol: fresh_quote}
+    quotes_by_symbol = dict(open_quotes or {})
+    quotes_by_symbol[fresh_quote.symbol] = fresh_quote
     if risk_manager._daily_pnl(quotes_by_symbol) <= -risk_settings.max_daily_loss:
         return PreSubmitResult(False, "max_daily_loss")
 

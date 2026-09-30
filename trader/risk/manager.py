@@ -127,16 +127,19 @@ class RiskManager:
         return self.effective_capital + self.total_realized_pnl - deployed
 
     def _unrealized_pnl(self, quotes: Dict[str, Quote]) -> float:
-        total = 0.0
-        for trade in self.open_trades:
-            quote = quotes.get(trade.symbol)
-            if quote is None or quote.price is None:
-                continue
-            total += (quote.price - trade.entry_price) * trade.quantity
-        return total
+        from risk.daily_pnl import unrealized_pnl
+
+        return unrealized_pnl(self.open_trades, quotes)
 
     def _daily_pnl(self, quotes: Dict[str, Quote]) -> float:
-        return self.daily_realized_pnl + self._unrealized_pnl(quotes)
+        from risk.daily_pnl import compute_daily_loss_pnl
+
+        return compute_daily_loss_pnl(
+            realized_pnl=self.daily_realized_pnl,
+            open_trades=self.open_trades,
+            quotes=quotes,
+            risk_settings=self.settings,
+        )
 
     def compute_position_size(self, price: float):
         """Return (quantity, position_value) or None if size is too small."""
@@ -205,6 +208,9 @@ class RiskManager:
 
         if self._daily_pnl(quotes_by_symbol) <= -self.settings.max_daily_loss:
             return TradeDecision(False, "max_daily_loss")
+
+        # Sticky risk halt (hydrated / set by RiskHaltCoordinator) checked by caller
+        # via entry_block; keep evaluate_entry PnL gate for live breach.
 
         logger.info(
             "Sizing %s: qty=%s value=%.2f requested_risk=%.2f planned_risk=%.2f binding=%s",

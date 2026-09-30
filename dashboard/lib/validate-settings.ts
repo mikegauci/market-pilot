@@ -83,6 +83,11 @@ export type ParsedSettings = {
   jev_max_retries: number;
   reconcile_interval_sec: number;
   reconcile_protect_orphans: boolean;
+  daily_loss_include_unrealized: boolean;
+  daily_loss_include_fees: boolean;
+  daily_loss_action: "block_entries" | "flatten_and_block";
+  drawdown_breaker_enabled: boolean;
+  drawdown_max_frac: number;
   account_capital: number;
   min_volume_ratio: number;
   min_share_price: number;
@@ -369,6 +374,21 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   const reconcile_interval_sec = parseRequiredNumber(formData, "reconcile_interval_sec");
   const reconcile_protect_orphans =
     String(formData.get("reconcile_protect_orphans") ?? "on") === "on";
+  const daily_loss_include_unrealized =
+    String(formData.get("daily_loss_include_unrealized") ?? "") === "on";
+  const daily_loss_include_fees =
+    String(formData.get("daily_loss_include_fees") ?? "") === "on";
+  const daily_loss_action_raw = String(
+    formData.get("daily_loss_action") ?? "block_entries",
+  );
+  const daily_loss_action =
+    daily_loss_action_raw === "flatten_and_block"
+      ? "flatten_and_block"
+      : "block_entries";
+  const drawdown_breaker_enabled =
+    String(formData.get("drawdown_breaker_enabled") ?? "") === "on";
+  const drawdown_max_frac =
+    parseRequiredNumber(formData, "drawdown_max_pct") / 100;
 
   if (
     !Number.isInteger(max_quote_age_sec) ||
@@ -417,6 +437,9 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   ) {
     throw new Error("Reconcile interval must be an integer from 15 to 600 seconds");
   }
+  if (drawdown_max_frac < 0.01 || drawdown_max_frac > 0.5) {
+    throw new Error("Drawdown max must be between 1% and 50%");
+  }
 
   return {
     minimum_jev_confidence,
@@ -458,6 +481,11 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     jev_max_retries,
     reconcile_interval_sec,
     reconcile_protect_orphans,
+    daily_loss_include_unrealized,
+    daily_loss_include_fees,
+    daily_loss_action,
+    drawdown_breaker_enabled,
+    drawdown_max_frac,
     account_capital,
     min_volume_ratio,
     min_share_price,

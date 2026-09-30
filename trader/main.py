@@ -33,6 +33,7 @@ from broker.ibkr import (
 from broker.reconcile import reconcile_cycle
 from broker.symbol_locks import EXIT_LOCKS
 from config import Settings, load_settings
+from risk.halts import RiskHaltCoordinator
 from execution_mode import effective_execution_mode
 from instance_lock import acquire_trader_lock
 from database.supabase import GENERAL_NEWS_FAILURE_BACKOFF_SEC, SupabaseRepository
@@ -396,7 +397,11 @@ def _init_risk_manager(
         trading_mode=trading_mode,
         effective_capital=capital,
         open_trades=db.get_open_trades(),
-        daily_realized_pnl=db.get_daily_realized_pnl(),
+        daily_realized_pnl=db.get_daily_realized_pnl(
+            include_fees=bool(
+                getattr(risk_settings, "daily_loss_include_fees", False)
+            )
+        ),
         total_realized_pnl=db.get_total_realized_pnl(),
         currency=currency,
     )
@@ -786,6 +791,10 @@ def run() -> int:
             ):
                 _sync_portfolio_state(db, ibkr, risk_manager, execution_mode, [])
 
+    risk_halt = RiskHaltCoordinator()
+    if db and risk_manager:
+        risk_halt.hydrate(db)
+
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)
 
@@ -1172,6 +1181,54 @@ def run() -> int:
                 last_reconcile = now_mono_rec
                 portfolio_dirty = True
 
+            # Phase 5: daily-loss / drawdown risk halt evaluation.
+            if risk_manager and db:
+                equity_now: Optional[float] = None
+                try:
+                    if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
+                        equity_now = ibkr.get_account_summary().net_liquidation
+                    else:
+                        equity_now = risk_manager.get_portfolio_snapshot(
+                            quotes_by_symbol
+                        ).equity
+                except Exception as exc:
+                    logger.debug("Equity for risk halt unavailable: %s", exc)
+                history_hw = None
+                try:
+                    history_hw = db.get_portfolio_equity_high_water()
+                except Exception as exc:
+                    logger.debug("portfolio high-water unavailable: %s", exc)
+                halt_result = risk_halt.evaluate(
+                    risk_manager=risk_manager,
+                    risk_settings=risk_settings,
+                    db=db,
+                    quotes_by_symbol=quotes_by_symbol,
+                    equity=equity_now,
+                    history_high_water=history_hw,
+                    notifier=lambda msg: notifier.send(msg),
+                )
+                if halt_result.flatten_requested:
+                    if flatten_open_positions_eod(
+                        ibkr=ibkr if execution_mode == ExecutionMode.IBKR else None,
+                        risk_manager=risk_manager,
+                        db=db,
+                        quotes_by_symbol=quotes_by_symbol,
+                        execution_mode_ibkr=execution_mode == ExecutionMode.IBKR,
+                        fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                    ):
+                        portfolio_dirty = True
+                        logger.warning(
+                            "Risk halt flatten applied (%s)",
+                            halt_result.state.halt_type,
+                        )
+                if halt_result.newly_tripped:
+                    logger.warning(
+                        "Risk halt tripped type=%s daily_pnl=%.2f drawdown_frac=%.3f",
+                        halt_result.state.halt_type,
+                        halt_result.state.daily_pnl,
+                        halt_result.state.drawdown_frac,
+                    )
+
             for quote in quotes:
                 # Universe scan still uses tick-built bars; entry symbols use keepUpToDate.
                 if quote.symbol.upper() not in trade_bar_symbols:
@@ -1521,6 +1578,10 @@ def run() -> int:
             if settings.data_source != DataSource.IBKR:
                 entry_block = None
 
+            halt_reason = risk_halt.entry_blocked()
+            if halt_reason and entry_block is None:
+                entry_block = halt_reason
+
             # Session closed / clock error: skip Jev entirely. Last-entry cutoff:
             # still eval open positions for exits, but block new entries later.
             session_allows_jev = True
@@ -1807,6 +1868,8 @@ def run() -> int:
                                 entry_kill_active=entry_kill.active,
                                 entry_block=entry_block,
                                 prediction_ts=prediction.timestamp,
+                                open_quotes=quotes_by_symbol,
+                                risk_halt_reason=risk_halt.entry_blocked(),
                             )
                             if not pre.ok:
                                 trade_skip_reason = f"pre_submit_{pre.reason}"
@@ -2099,6 +2162,10 @@ def run() -> int:
                     ),
                     quote_age_p50_sec=entry_kill.age_percentiles()[0],
                     quote_age_p95_sec=entry_kill.age_percentiles()[1],
+                    daily_pnl=risk_halt.state.daily_pnl,
+                    risk_halt_active=risk_halt.state.active,
+                    risk_halt_reason=risk_halt.state.reason or None,
+                    last_risk_eval_at=risk_halt.state.last_eval_at,
                 )
                 account = None
                 ibkr_positions = None
@@ -2135,6 +2202,20 @@ def run() -> int:
                 )
                 if include_portfolio_history:
                     last_portfolio_history = now
+
+                logger.info(
+                    "Risk summary daily_pnl=%.2f unrealized=%.2f halt=%s "
+                    "reason=%s drawdown_frac=%.3f",
+                    risk_halt.state.daily_pnl,
+                    (
+                        risk_manager._unrealized_pnl(quotes_by_symbol)
+                        if risk_manager
+                        else 0.0
+                    ),
+                    risk_halt.state.active,
+                    risk_halt.state.reason or "-",
+                    risk_halt.state.drawdown_frac,
+                )
 
                 heartbeat_equity = None
                 if account is not None:
