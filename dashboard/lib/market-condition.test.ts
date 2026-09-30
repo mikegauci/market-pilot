@@ -93,6 +93,7 @@ describe("assessMarketCondition", () => {
     });
     expect(result.level).toBe("closed");
     expect(result.label).toBe("Closed");
+    expect(result.hint).toMatch(/will not open new trades/i);
   });
 
   it("marks favorable when benchmark and news are supportive", () => {
@@ -102,7 +103,15 @@ describe("assessMarketCondition", () => {
       newsSentiment: 0.2,
     });
     expect(result.level).toBe("favorable");
-    expect(result.hint).toMatch(/Favorable/i);
+    expect(result.label).toBe("Favorable");
+    expect(result.hint).toMatch(/allow new buys/i);
+    expect(result.hint).toMatch(/other filters may still skip/i);
+    expect(result.factors.find((f) => f.key === "benchmark")?.label).toMatch(
+      /Broad market \(EEM, 5 min\)/,
+    );
+    expect(result.factors.find((f) => f.key === "news")?.detail).toMatch(
+      /blocks at -0\.3 or below/,
+    );
   });
 
   it("marks caution when soft but above floors", () => {
@@ -112,6 +121,8 @@ describe("assessMarketCondition", () => {
       newsSentiment: 0,
     });
     expect(result.level).toBe("caution");
+    expect(result.hint).toMatch(/still allow new buys/i);
+    expect(result.hint).toMatch(/other filters may skip/i);
   });
 
   it("marks headwind when benchmark breaches the floor", () => {
@@ -121,7 +132,11 @@ describe("assessMarketCondition", () => {
       newsSentiment: 0.1,
     });
     expect(result.level).toBe("headwind");
-    expect(result.summary).toMatch(/headwind/i);
+    expect(result.summary).toMatch(/EEM too weak/i);
+    expect(result.hint).toMatch(/blocks most new buys/i);
+    expect(result.factors.find((f) => f.key === "benchmark")?.detail).toMatch(
+      /cutoff -0\.3%/,
+    );
   });
 
   it("marks headwind when news is bearish enough to block", () => {
@@ -141,6 +156,7 @@ describe("assessMarketCondition", () => {
       newsSentiment: null,
     });
     expect(result.level).toBe("unknown");
+    expect(result.hint).toMatch(/No recommendation yet/i);
   });
 });
 

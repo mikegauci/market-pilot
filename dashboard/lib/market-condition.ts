@@ -118,20 +118,20 @@ export function assessMarketCondition(options: {
     },
     {
       key: "benchmark",
-      label: `${benchmarkSymbol} 5m`,
+      label: `Broad market (${benchmarkSymbol}, 5 min)`,
       detail:
         change == null
           ? "No recent reading"
-          : `${formatSignedPct(change)} · floor ${floor}%`,
+          : `${formatSignedPct(change)} (cutoff ${floor}%)`,
       tone: benchmarkTone(change, floor),
     },
     {
       key: "news",
-      label: "News tone",
+      label: "Recent news mood",
       detail:
         sentiment == null
           ? "No recent headlines"
-          : `${formatSentiment(sentiment)} · block ≤ ${minNews}`,
+          : `${formatSentiment(sentiment)} (blocks at ${minNews} or below)`,
       tone: newsTone(sentiment, minNews),
     },
   ];
@@ -140,8 +140,8 @@ export function assessMarketCondition(options: {
     return {
       level: "closed",
       label: "Closed",
-      summary: "Session closed — last readings shown for context.",
-      hint: "New entries pause when the market is closed. Check again during US RTH.",
+      summary: "US market is closed. Figures below are the last readings for context.",
+      hint: "The bot will not open new trades until the US session reopens. Open positions are still managed.",
       factors,
       benchmarkSymbol,
       benchmarkChange5m: change,
@@ -154,8 +154,8 @@ export function assessMarketCondition(options: {
     return {
       level: "unknown",
       label: "Unknown",
-      summary: "Waiting for benchmark and news readings from the trader.",
-      hint: "Once the engine evaluates symbols, this widget shows whether the tape is helping or hurting.",
+      summary: "Waiting for market and news data from the trader.",
+      hint: "No recommendation yet — check again once readings appear.",
       factors,
       benchmarkSymbol,
       benchmarkChange5m: change,
@@ -171,13 +171,13 @@ export function assessMarketCondition(options: {
 
   if (benchmarkBlocks || newsBlocks) {
     const drivers: string[] = [];
-    if (benchmarkBlocks) drivers.push(`${benchmarkSymbol} headwind`);
+    if (benchmarkBlocks) drivers.push(`${benchmarkSymbol} too weak`);
     if (newsBlocks) drivers.push("bearish news");
     return {
       level: "headwind",
       label: "Headwind",
-      summary: `Broad conditions are poor (${drivers.join(" · ")}). The bot blocks most new entries.`,
-      hint: "Losing trades in this regime often reflect the market, not a broken bot. Prefer fewer new risk.",
+      summary: `The broad market or recent news looks weak enough that new buys are risky (${drivers.join(" · ")}).`,
+      hint: "The bot blocks most new buys. Prefer waiting; losses here often come from the market, not a broken bot.",
       factors,
       benchmarkSymbol,
       benchmarkChange5m: change,
@@ -190,8 +190,8 @@ export function assessMarketCondition(options: {
     return {
       level: "caution",
       label: "Caution",
-      summary: "Tape is soft but still above hard-filter floors.",
-      hint: "Mixed tape — review skip reasons and sizing. Losses here can be either bot or market.",
+      summary: "Conditions are a bit soft, but not weak enough to hard-block new buys.",
+      hint: "These checks still allow new buys, but other filters may skip symbols. Be selective and keep sizing modest.",
       factors,
       benchmarkSymbol,
       benchmarkChange5m: change,
@@ -203,8 +203,8 @@ export function assessMarketCondition(options: {
   return {
     level: "favorable",
     label: "Favorable",
-    summary: "Benchmark and news are not blocking — conditions look tradeable.",
-    hint: "If P&L is still weak while this is Favorable, dig into entries, exits, and risk settings.",
+    summary: "Broad market and news look OK for new trades on these checks.",
+    hint: "These checks allow new buys; other filters may still skip symbols. If results are still weak, look at entries, exits, and risk settings — not this tape readout.",
     factors,
     benchmarkSymbol,
     benchmarkChange5m: change,
