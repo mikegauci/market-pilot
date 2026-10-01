@@ -344,6 +344,10 @@ def run() -> int:
         settings.settings_refresh_interval_sec,
         settings.portfolio_history_interval_sec,
     )
+    if not settings.forward_return_backfill_enabled:
+        logger.info(
+            "15m forward-return backfill disabled (calibration analytics only)"
+        )
 
     db: Optional[SupabaseRepository] = None
     try:
@@ -1119,7 +1123,7 @@ def run() -> int:
                 db.insert_predictions_batch(prediction_rows)
                 logger.info("Stored %s prediction(s)", len(prediction_rows))
 
-            if db:
+            if db and settings.forward_return_backfill_enabled:
                 backfill_now = time.monotonic()
                 if (
                     backfill_now - runtime.last_prediction_backfill_mono

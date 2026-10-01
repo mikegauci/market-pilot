@@ -98,6 +98,7 @@ class Settings(BaseSettings):
     bar_daily_duration: str = "1 W"
     bar_intraday_duration: str = "3 D"
     em_backfill_on_startup: bool = True
+    forward_return_backfill_enabled: bool = True
 
     @field_validator("trading_mode", mode="before")
     @classmethod
@@ -162,6 +163,13 @@ class Settings(BaseSettings):
     @field_validator("em_backfill_on_startup", mode="before")
     @classmethod
     def parse_em_backfill_on_startup(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+    @field_validator("forward_return_backfill_enabled", mode="before")
+    @classmethod
+    def parse_forward_return_backfill_enabled(cls, value: object) -> bool:
         if isinstance(value, bool):
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
