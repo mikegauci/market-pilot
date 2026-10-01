@@ -62,6 +62,13 @@ export function formatDateTime(value: string | null | undefined) {
   return `${parts.day} ${parts.month} ${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
+/** Local time only — fixed format for compact UI and SSR hydration. */
+export function formatTimeHms(value: string | null | undefined) {
+  const parts = value ? localDateTimeParts(value) : null;
+  if (!parts) return "—";
+  return `${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
 /** Full local timestamp with fixed separators — safe for SSR hydration. */
 export function formatDateTimeFull(value: string | null | undefined) {
   const parts = value ? localDateTimeParts(value) : null;
