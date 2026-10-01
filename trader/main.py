@@ -1102,14 +1102,18 @@ def run() -> int:
             if db and prediction_rows:
                 db.insert_predictions_batch(prediction_rows)
                 logger.info("Stored %s prediction(s)", len(prediction_rows))
+
+            if db:
                 backfill_now = time.monotonic()
                 if (
                     backfill_now - runtime.last_prediction_backfill_mono
                 ) >= _PREDICTION_BACKFILL_INTERVAL_SEC:
                     runtime.last_prediction_backfill_mono = backfill_now
-                    db.backfill_prediction_forward_returns(
-                        limit=len(prediction_rows) * 4
-                    )
+                    filled = db.backfill_prediction_forward_returns(limit=400)
+                    if filled:
+                        logger.info(
+                            "Backfilled forward returns on %s prediction(s)", filled
+                        )
 
             if (
                 jev_sell_symbols

@@ -17,7 +17,7 @@ import { Card, CardTitle } from "@/components/ui/card";
 import {
   fetchClosedTrades,
   fetchPortfolioHistory,
-  fetchPredictions,
+  fetchPredictionsForCalibration,
 } from "@/lib/data-client";
 import { computeJevCalibration } from "@/lib/jev-calibration";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
@@ -106,14 +106,19 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
 
   const loadHistory = useCallback(() => fetchPortfolioHistory(), []);
   const loadTrades = useCallback(() => fetchClosedTrades(), []);
-  const loadPredictions = useCallback(() => fetchPredictions(2000), []);
+  const loadCalibrationPredictions = useCallback(
+    () => fetchPredictionsForCalibration(),
+    [],
+  );
 
   const liveHistory = useLiveQuery(portfolioHistory, loadHistory, [
     "portfolio_history",
     "bot_status",
   ]);
   const liveTrades = useLiveQuery(closedTrades, loadTrades, ["trades"]);
-  const livePredictions = useLiveQuery([] as Prediction[], loadPredictions, ["predictions"]);
+  const livePredictions = useLiveQuery([] as Prediction[], loadCalibrationPredictions, [
+    "predictions",
+  ]);
 
   const filteredHistory = useMemo(
     () => filterPortfolioByRange(liveHistory, range),

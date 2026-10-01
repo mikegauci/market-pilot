@@ -41,6 +41,10 @@ logger = logging.getLogger(__name__)
 
 MAX_EM_UNIVERSE_SIZE = 80
 
+_INTRADAY_BAR_DURATION = timedelta(minutes=5)
+# When the target falls in a gap (halt/overnight), allow the next bar if it opens soon after.
+_FORWARD_RETURN_BAR_SLOP = _INTRADAY_BAR_DURATION
+
 # Failure backoff so a bad Finnhub/DB cycle does not wait the full refresh interval.
 GENERAL_NEWS_FAILURE_BACKOFF_SEC = 60.0
 
@@ -1143,6 +1147,7 @@ class SupabaseRepository:
                 self.client.table("predictions")
                 .select("id, symbol, timestamp, price, return_15m_pct")
                 .is_("return_15m_pct", "null")
+                .is_("forward_returns_checked_at", "null")
                 .lte("timestamp", mature_cutoff)
                 .order("timestamp")
                 .limit(limit)
@@ -1183,19 +1188,26 @@ class SupabaseRepository:
 
             bars = bars_by_symbol.get(symbol) or []
             if not bars:
+                self.client.table("predictions").update(
+                    {"forward_returns_checked_at": now.isoformat()}
+                ).eq("id", row["id"]).execute()
+                updated += 1
                 continue
 
             def price_at(minutes_ahead: int) -> Optional[float]:
                 target = entry_ts + timedelta(minutes=minutes_ahead)
-                candidate = None
                 for bar in bars:
                     bar_ts = bar.ts
                     if bar_ts.tzinfo is None:
                         bar_ts = bar_ts.replace(tzinfo=timezone.utc)
-                    if bar_ts >= target:
-                        candidate = bar.close
-                        break
-                return candidate
+                    bar_end = bar_ts + _INTRADAY_BAR_DURATION
+                    if bar_ts <= target < bar_end:
+                        return bar.close
+                    if bar_ts > target:
+                        if bar_ts - target <= _FORWARD_RETURN_BAR_SLOP:
+                            return bar.close
+                        return None
+                return None
 
             def pct(minutes_ahead: int) -> Optional[float]:
                 future = price_at(minutes_ahead)
@@ -1207,8 +1219,16 @@ class SupabaseRepository:
                 "return_5m_pct": pct(5),
                 "return_15m_pct": pct(15),
                 "return_30m_pct": pct(30),
+                "forward_returns_checked_at": now.isoformat(),
             }
-            if all(value is None for value in payload.values()):
+            if all(
+                payload[key] is None
+                for key in ("return_5m_pct", "return_15m_pct", "return_30m_pct")
+            ):
+                self.client.table("predictions").update(
+                    {"forward_returns_checked_at": payload["forward_returns_checked_at"]}
+                ).eq("id", row["id"]).execute()
+                updated += 1
                 continue
             self.client.table("predictions").update(payload).eq("id", row["id"]).execute()
             updated += 1

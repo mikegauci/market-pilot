@@ -47,6 +47,24 @@ export async function fetchPredictions(limit = 50, symbol?: string): Promise<Pre
   return (data ?? []) as Prediction[];
 }
 
+/** Matured rows for Jev calibration — not the same as latest predictions feed. */
+export async function fetchPredictionsForCalibration(
+  limit = 5000,
+): Promise<Prediction[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("predictions")
+    .select("*")
+    .not("return_15m_pct", "is", null)
+    .order("timestamp", { ascending: false })
+    .limit(limit);
+  if (error) {
+    logFetchError("predictions_calibration", error.message);
+    return [];
+  }
+  return (data ?? []) as Prediction[];
+}
+
 export async function fetchMarketNews(limit = 100): Promise<MarketNewsRow[]> {
   const supabase = createClient();
   const { data, error } = await supabase

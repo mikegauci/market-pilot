@@ -4,7 +4,7 @@
 | --- | --- |
 | Baseline revision | `f0d1349` |
 | Scope | `trader/` |
-| Latest pytest | 202 passed (`.venv` Python 3.9.6) |
+| Latest pytest | 203 passed (`.venv` Python 3.9.6) |
 | Updated | 2026-10-01 |
 
 ## Phase A — Defect fixes (complete)
@@ -15,7 +15,9 @@
 | A2 Trade row hydration | done | `_trade_from_row` maps `commission` → `entry_commission`, `ibkr_account_id` |
 | A3 Account-scoped daily PnL | done | `daily_pnl_account_id` threaded through main, execution, manual close |
 
-**Pending runtime:** Restart trader (`python main.py` in `trader/`) so backfill and scoped PnL run in production.
+**Post-deploy sanity (2026-10-01):** Supabase had **38,941** mature predictions with `return_15m_pct` still null — root cause was backfill only running when new predictions were inserted (never during closed market). Fixes: (1) 60s timer backfill in the main loop whenever `db` is set; (2) bar-interval matching on 5m bars; (3) `forward_returns_checked_at` column so pre-market / no-bar rows do not block the queue. One-off backfill verified **202** rows with `return_15m_pct` populated.
+
+**Pending runtime:** Restart trader after pull so the loop runs timer backfill continuously (~400 rows/min).
 
 ## Phase B — Refactor stages (complete)
 
