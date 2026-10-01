@@ -46,11 +46,14 @@ export function WatchlistCurationPanel({ settings, compact = false }: Props) {
     [settings, explicitPins, dismissed],
   );
 
-  const effectivePreview = useMemo(
-    () =>
-      resolveEffectiveWatchlistFromCuration(settings, watchlistPinsToJson(explicitPins), dismissed),
-    [settings, explicitPins, dismissed],
-  );
+  const effectivePreview = useMemo(() => {
+    const symbols = resolveEffectiveWatchlistFromCuration(
+      settings,
+      watchlistPinsToJson(explicitPins),
+      dismissed,
+    );
+    return [...symbols].sort();
+  }, [settings, explicitPins, dismissed]);
 
   function upsertExplicitPin(symbol: string, patch: Partial<WatchlistPin>) {
     const key = normalizeSymbol(symbol);

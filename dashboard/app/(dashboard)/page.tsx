@@ -2,12 +2,10 @@ import { MarketConditionCard } from "@/components/market-condition-card";
 import { OverviewWatchlistCard } from "@/components/overview-watchlist-card";
 import { OverviewStats } from "@/components/overview-stats";
 import { PositionsGrid } from "@/components/positions-grid";
-import { SettingsSummary } from "@/components/settings-summary";
 import { TradesTable } from "@/components/trades-table";
 import {
   getActiveTradeCommands,
   getBotStatus,
-  getIbkrAccountProfile,
   getLatestPortfolio,
   getLatestPredictionsBySymbol,
   getMarketNews,
@@ -16,7 +14,7 @@ import {
   getRecentTrades,
   getSettings,
 } from "@/lib/queries";
-import { resolveBaselineEquity } from "@/lib/risk-recommendations";
+
 export default async function OverviewPage() {
   const [
     botStatus,
@@ -40,30 +38,7 @@ export default async function OverviewPage() {
     getMarketNews(80),
   ]);
 
-  const ibkrProfile = botStatus?.ibkr_account_id
-    ? await getIbkrAccountProfile(botStatus.ibkr_account_id)
-    : null;
-
   const currency = portfolio?.currency ?? "USD";
-  const currentEquity =
-    portfolio?.equity ??
-    ibkrProfile?.account_capital ??
-    settings?.account_capital ??
-    0;
-  const baselineEquity =
-    ibkrProfile != null
-      ? resolveBaselineEquity(
-          ibkrProfile.risk_sync_equity,
-          currentEquity,
-          ibkrProfile.account_capital,
-        )
-      : settings
-        ? resolveBaselineEquity(
-            settings.risk_sync_equity,
-            currentEquity,
-            settings.account_capital,
-          )
-        : 0;
 
   return (
     <div className="space-y-6">
@@ -76,17 +51,8 @@ export default async function OverviewPage() {
           news={news}
           settings={settings}
         />
-        {settings && (
-          <SettingsSummary
-            settings={settings}
-            currentEquity={currentEquity}
-            baselineEquity={baselineEquity}
-            currency={currency}
-          />
-        )}
+        {settings ? <OverviewWatchlistCard settings={settings} /> : null}
       </div>
-
-      {settings ? <OverviewWatchlistCard settings={settings} /> : null}
 
       <PositionsGrid
         positions={positions}

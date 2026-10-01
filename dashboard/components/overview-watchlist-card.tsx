@@ -9,12 +9,8 @@ type Props = {
 };
 
 export function OverviewWatchlistCard({ settings }: Props) {
-  if (!settings.watchlist_dynamic_enabled) {
-    return null;
-  }
-
   return (
-    <Card className="col-span-1 sm:col-span-2 xl:col-span-3">
+    <Card className="h-full">
       <CardTitle>Your watchlist</CardTitle>
       <div className="mt-3">
         <WatchlistCurationPanel key={settings.updated_at} settings={settings} compact />
