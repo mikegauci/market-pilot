@@ -138,9 +138,14 @@ export function WatchlistCurationPanel({ settings, compact = false }: Props) {
 
       {error ? <p className="text-xs text-red-400">{error}</p> : null}
 
-      <div className="overflow-x-auto rounded border border-zinc-800">
+      <div
+        className={cn(
+          "overflow-y-auto overflow-x-auto rounded border border-zinc-800",
+          compact ? "max-h-52" : "max-h-72",
+        )}
+      >
         <table className="w-full text-xs">
-          <thead className="bg-zinc-950 text-zinc-500">
+          <thead className="sticky top-0 z-10 bg-zinc-950 text-zinc-500">
             <tr>
               <th className="px-2 py-1.5 text-left">Symbol</th>
               <th className="px-2 py-1.5 text-left">Lock</th>
