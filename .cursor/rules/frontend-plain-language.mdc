@@ -1,0 +1,45 @@
+---
+description: Plain-language explanations for users and dashboard UI copy
+globs: dashboard/**/*.{tsx,ts,md}
+alwaysApply: false
+---
+
+# Plain language for market-pilot dashboard
+
+## Audience
+
+Assume the reader is new to trading bots and Jev. Avoid jargon unless you define it once in simple words.
+
+## When explaining features (chat or docs)
+
+- Lead with **what it does for them**, not implementation (no PostgREST, backfill timers, etc. unless they ask).
+- Separate **live behavior** (“what the bot uses now”) from **analytics** (“what happened later”).
+- Use short paragraphs and tables for compare/contrast (e.g. calibration vs min confidence).
+- Say what the feature does **not** do (e.g. calibration does not retrain Jev or change trades by itself).
+
+## When writing frontend descriptions
+
+Match existing patterns in `dashboard/components/settings-form.tsx`:
+
+- **`SETTING_DESCRIPTIONS`**: one line, ~8–15 words, scannable under the label.
+- **`SETTING_DESCRIPTIONS_FULL`**: 1–2 sentences, “you” voice, concrete consequence (fewer trades, pickier, etc.).
+
+Rules for new copy:
+
+- Prefer **“the bot”** / **“Jev”** over internal names (`return_15m_pct`, `forward_returns_checked_at`).
+- Use **percent** for probabilities users see in UI (85%), not decimals (0.85), unless the input is explicitly a decimal field.
+- Chart/helper text under titles: `text-xs text-zinc-500`, one idea per sentence, optional second sentence for “what to do if empty/wrong.”
+- Empty states: say **why** (e.g. “waiting for older predictions to mature”) and **what will appear**, not “no data.”
+- Do not promise profit; use “tended to,” “on average,” “sanity check,” “near-miss.”
+
+## Trading terms (use consistently)
+
+- **Min Jev confidence** — lowest BUY % required before the bot may open a trade.
+- **Calibration** — after the fact: did higher BUY scores match better 15m price moves?
+- **Watchlist** — symbols Jev monitors; different threshold than trade entry (`watchlist_min_buy`).
+
+## Do not
+
+- Wall of acronyms without definition.
+- Duplicate long paragraphs in both short and full description unless the full one adds real detail.
+- Imply backfilled returns feed back into live Jev API calls (they do not in this codebase).

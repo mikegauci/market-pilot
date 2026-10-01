@@ -41,6 +41,8 @@ type Props = {
   portfolioHistory: PortfolioSnapshot[];
   closedTrades: Trade[];
   currency: string;
+  /** Settings → Min Jev confidence, for calibration helper copy */
+  minJevConfidencePct: number;
 };
 
 const RANGE_OPTIONS: { value: PortfolioRange; label: string }[] = [
@@ -101,7 +103,12 @@ function formatChartDate(isoDate: string): string {
   return d.toLocaleDateString("en-GB", { month: "short", day: "numeric" });
 }
 
-export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }: Props) {
+export function AnalyticsDashboard({
+  portfolioHistory,
+  closedTrades,
+  currency,
+  minJevConfidencePct,
+}: Props) {
   const [range, setRange] = useState<PortfolioRange>("1d");
 
   const loadHistory = useCallback(() => fetchPortfolioHistory(), []);
@@ -416,15 +423,19 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
       <Card>
         <CardTitle>Jev calibration (15m forward return)</CardTitle>
         <p className="mt-1 text-xs text-zinc-500">
-          Mean realized 15-minute return by BUY probability bucket
+          After the fact: when Jev gave a BUY score, how much did price move 15 minutes later?
+          Each bar groups past predictions by BUY %; taller bars mean that bucket tended to rise
+          on average.
           {calibrationSampleCount > 0
-            ? ` (${calibrationSampleCount.toLocaleString()} matured rows).`
-            : "."}{" "}
-          A flat curve means the signal is not predictive yet.
+            ? ` Based on ${calibrationSampleCount.toLocaleString()} matured predictions.`
+            : ""}{" "}
+          Compare buckets at or above your trade cutoff ({minJevConfidencePct}% in Settings) to
+          see if your min confidence is aligned. This chart does not change live trades.
         </p>
         {calibration.length === 0 ? (
           <p className="mt-4 text-sm text-zinc-500">
-            No matured predictions with forward returns yet
+            Waiting for older predictions to finish their 15-minute window and backfill forward
+            returns. Bars will appear here as that backlog clears.
           </p>
         ) : (
           <div className="mt-4 h-72">

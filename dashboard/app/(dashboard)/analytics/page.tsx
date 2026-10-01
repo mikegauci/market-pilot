@@ -3,13 +3,15 @@ import {
   getClosedTrades,
   getLatestPortfolio,
   getPortfolioHistory,
+  getSettings,
 } from "@/lib/queries";
 
 export default async function AnalyticsPage() {
-  const [portfolioHistory, closedTrades, portfolio] = await Promise.all([
+  const [portfolioHistory, closedTrades, portfolio, settings] = await Promise.all([
     getPortfolioHistory(),
     getClosedTrades(),
     getLatestPortfolio(),
+    getSettings(),
   ]);
 
   const currency = portfolio?.currency ?? "USD";
@@ -26,6 +28,7 @@ export default async function AnalyticsPage() {
         portfolioHistory={portfolioHistory}
         closedTrades={closedTrades}
         currency={currency}
+        minJevConfidencePct={Math.round((settings?.minimum_jev_confidence ?? 0.85) * 100)}
       />
     </div>
   );
