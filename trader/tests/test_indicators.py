@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from market.bar_aggregator import MinuteBarAggregator
+from market.bars import Bar
 from market.indicators import _ema, _rsi, build_market_state, compute_intraday_from_bars
 from models.types import Quote
 
@@ -68,6 +69,35 @@ class IndicatorTests(unittest.TestCase):
         self.assertEqual(state.symbol, "VALE")
         self.assertIsNotNone(state.rsi)
         self.assertIsNotNone(state.benchmark_change_5m)
+
+    def test_build_market_state_uses_cached_five_min_without_live_tape(self) -> None:
+        base = datetime(2026, 1, 10, 14, 0, tzinfo=timezone.utc)
+        cached = [
+            Bar(
+                ts=base + timedelta(minutes=5 * index),
+                open=100.0 + index,
+                high=101.0 + index,
+                low=99.0 + index,
+                close=100.5 + index,
+                volume=10_000,
+            )
+            for index in range(16)
+        ]
+        symbol_agg = MinuteBarAggregator()
+        benchmark_agg = MinuteBarAggregator()
+        quote = Quote(symbol="AAPL", price=110.0, bid=109.9, ask=110.1, spread=0.2, volume=1000)
+        state = build_market_state(
+            quote,
+            symbol_agg,
+            benchmark_agg,
+            warmup_min_1m_bars=15,
+            allow_five_min_fallback=True,
+            symbol_intraday_bars=cached,
+            benchmark_intraday_bars=cached,
+        )
+        self.assertIsNotNone(state)
+        assert state is not None
+        self.assertEqual(state.symbol, "AAPL")
 
 
 if __name__ == "__main__":

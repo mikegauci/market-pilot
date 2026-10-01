@@ -60,7 +60,11 @@ from watchlist.jev_screener import (
     screener_due,
     strip_benchmark_symbol,
 )
-from watchlist.screener_scheduler import EMWatchlistScheduler, ScreenerJobContext
+from watchlist.screener_scheduler import (
+    EMWatchlistScheduler,
+    ScreenerJobContext,
+    backfill_watchlist_symbols,
+)
 from watchlist.universe import load_em_universe
 from runtime.capital import resolve_effective_capital, sync_risk_manager_capital
 from runtime.entry_eval import process_ready_states
@@ -78,6 +82,24 @@ _PREDICTION_BACKFILL_INTERVAL_SEC = 60.0
 _CLOSED_MARKET_LOG_INTERVAL_SEC = 300.0
 _MARKET_DATA_WARN_INTERVAL_SEC = 300.0
 _SHUTDOWN_SLEEP_CHUNK_SEC = 0.5
+
+
+def eval_allow_five_min_fallback(
+    is_open_position: bool,
+    symbol_intraday_bars: Optional[Sequence[object]],
+    warmup_min_1m_bars: int,
+) -> bool:
+    """Use cached 5m bars for Jev when live 1m tape is still warming up.
+
+    Open positions already had this path; extend it to any symbol with enough
+    intraday history (e.g. US mega-caps backfilled at startup or after a pin).
+    """
+    if is_open_position:
+        return True
+    return (
+        symbol_intraday_bars is not None
+        and len(symbol_intraday_bars) >= warmup_min_1m_bars
+    )
 
 
 def build_eval_symbols(
@@ -177,7 +199,7 @@ def _sync_watchlist_symbols(
     bar_store: BarStore,
     data_source: DataSource,
     runtime: TraderRuntimeState,
-) -> None:
+) -> List[str]:
     """Pick up watchlist changes at runtime without restarting the trader."""
     mock.ensure_symbols(all_symbols)
     new_symbols = [
@@ -196,6 +218,7 @@ def _sync_watchlist_symbols(
             "Watchlist expanded — seeded 1-min bars for: %s",
             ", ".join(new_symbols),
         )
+    return new_symbols
 
 
 def _pulse_bot_status(
@@ -814,7 +837,7 @@ def run() -> int:
                         ibkr,
                         settings,
                     )
-                _sync_watchlist_symbols(
+                new_watchlist_symbols = _sync_watchlist_symbols(
                     all_symbols,
                     mock,
                     minute_bars,
@@ -822,6 +845,18 @@ def run() -> int:
                     settings.data_source,
                     runtime,
                 )
+                if (
+                    new_watchlist_symbols
+                    and settings.data_source == DataSource.IBKR
+                    and ibkr.is_connected()
+                ):
+                    backfill_watchlist_symbols(
+                        settings,
+                        bar_store,
+                        ibkr,
+                        new_watchlist_symbols,
+                        open_symbols=open_symbols,
+                    )
                 if (
                     settings.data_source == DataSource.IBKR
                     and ibkr.is_connected()
@@ -1045,6 +1080,7 @@ def run() -> int:
 
                 sym_upper = symbol.upper()
                 is_open_position = sym_upper in open_symbol_set
+                symbol_intraday = bar_store.get_intraday_bars(sym_upper)
                 state = build_market_state(
                     quote,
                     minute_bars.get(symbol),
@@ -1056,8 +1092,12 @@ def run() -> int:
                         if is_open_position
                         else strategy_config.warmup_min_1m_bars
                     ),
-                    allow_five_min_fallback=is_open_position,
-                    symbol_intraday_bars=bar_store.get_intraday_bars(sym_upper),
+                    allow_five_min_fallback=eval_allow_five_min_fallback(
+                        is_open_position,
+                        symbol_intraday,
+                        strategy_config.warmup_min_1m_bars,
+                    ),
+                    symbol_intraday_bars=symbol_intraday,
                     benchmark_intraday_bars=benchmark_intraday_bars,
                 )
                 if state is None:

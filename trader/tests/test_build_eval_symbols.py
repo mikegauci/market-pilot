@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from main import build_eval_symbols
+from main import build_eval_symbols, eval_allow_five_min_fallback
 from models.types import RiskSettings
 
 
@@ -50,6 +50,12 @@ class TestBuildEvalSymbols(unittest.TestCase):
     def test_without_risk_settings_keeps_all(self) -> None:
         symbols = build_eval_symbols(["BABA", "EEM"], ["VALE"], None)
         self.assertEqual(symbols, ["BABA", "EEM", "VALE"])
+
+    def test_eval_allow_five_min_fallback_for_cached_intraday(self) -> None:
+        bars = [object()] * 15
+        self.assertTrue(eval_allow_five_min_fallback(False, bars, 15))
+        self.assertFalse(eval_allow_five_min_fallback(False, bars[:14], 15))
+        self.assertTrue(eval_allow_five_min_fallback(True, None, 15))
 
 
 if __name__ == "__main__":
