@@ -132,6 +132,13 @@ class JevRankedSymbol:
 
 
 @dataclass
+class WatchlistPin:
+    symbol: str
+    locked: bool = False
+    protect_demotion: bool = False
+
+
+@dataclass
 class RiskSettings:
     minimum_jev_confidence: float
     signal_record_threshold: float
@@ -153,6 +160,8 @@ class RiskSettings:
     benchmark_symbol: str = "EEM"
     watchlist_jev_rankings: List[JevRankedSymbol] = field(default_factory=list)
     watchlist_screener_ran_at: Optional[datetime] = None
+    watchlist_pins: List[WatchlistPin] = field(default_factory=list)
+    watchlist_dismissed: List[str] = field(default_factory=list)
     min_volume_ratio: float = 0.5
     min_share_price: float = 20.0
     min_dollar_volume: float = 250_000.0

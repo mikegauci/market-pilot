@@ -1,4 +1,5 @@
-import type { Settings } from "@/lib/types/database";
+import type { Settings, WatchlistPin } from "@/lib/types/database";
+import { parseWatchlistDismissed, parseWatchlistPins } from "@/lib/watchlist-curation";
 
 function resolveWatchlistCore(settings: Settings): string[] {
   const core = settings.watchlist_core?.length
@@ -52,6 +53,59 @@ function stripBenchmark(settings: Settings, symbols: string[]): string[] {
   return symbols.filter((symbol) => !blocked.has(symbol.toUpperCase()));
 }
 
+function buyBySymbol(settings: Settings): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const row of settings.watchlist_jev_rankings ?? []) {
+    map.set(row.symbol.toUpperCase(), row.buy);
+  }
+  return map;
+}
+
+function symbolMeetsMinBuy(settings: Settings, symbol: string): boolean {
+  const minBuy = settings.watchlist_min_buy ?? 0.6;
+  const score = buyBySymbol(settings).get(symbol.toUpperCase());
+  if (score == null) return false;
+  return score >= minBuy;
+}
+
+function lockedPinIncludedInMerge(settings: Settings, symbol: string): boolean {
+  const minBuy = settings.watchlist_min_buy ?? 0.6;
+  const score = buyBySymbol(settings).get(symbol.toUpperCase());
+  if (score == null) return true;
+  return score >= minBuy;
+}
+
+function applyDismissedFilter(settings: Settings, symbols: string[]): string[] {
+  const dismissed = new Set(parseWatchlistDismissed(settings.watchlist_dismissed));
+  return symbols.filter((symbol) => !dismissed.has(symbol.toUpperCase()));
+}
+
+function mergeSymbolLists(...groups: string[][]): string[] {
+  const merged: string[] = [];
+  for (const group of groups) {
+    for (const raw of group) {
+      const symbol = raw.toUpperCase();
+      if (symbol && !merged.includes(symbol)) merged.push(symbol);
+    }
+  }
+  return merged;
+}
+
+function mergeCuratedBaseWatchlist(
+  settings: Settings,
+  dynamicSymbols: string[],
+): string[] {
+  const pins = parseWatchlistPins(settings.watchlist_pins);
+  const dynamicBase = applyDismissedFilter(settings, dynamicSymbols);
+  const unlocked = pins
+    .filter((pin) => !pin.locked)
+    .map((pin) => pin.symbol);
+  const locked = pins
+    .filter((pin) => pin.locked && lockedPinIncludedInMerge(settings, pin.symbol))
+    .map((pin) => pin.symbol);
+  return stripBenchmark(settings, mergeSymbolLists(dynamicBase, unlocked, locked));
+}
+
 export type WatchlistScanStatus =
   | { mode: "always_on" }
   | { mode: "waiting_first_scan" }
@@ -99,12 +153,56 @@ export function resolveEffectiveWatchlist(settings: Settings): string[] {
   if (!settings.watchlist_screener_ran_at) {
     return stripBenchmark(settings, resolveWatchlistCore(settings));
   }
-  // After a successful scan, empty list is intentional (weak day / min-buy floor).
   const saved = (settings.watchlist ?? [])
     .map((symbol) => symbol.toUpperCase())
     .filter(Boolean);
-  if (!saved.length) {
-    return [];
+  const dynamicBase = saved.length
+    ? filterStaleCoreFromSaved(settings, saved)
+    : [];
+  return mergeCuratedBaseWatchlist(settings, dynamicBase);
+}
+
+/** Preview effective list from explicit curation state (UI before save). */
+export function resolveEffectiveWatchlistFromCuration(
+  settings: Settings,
+  pins: WatchlistPin[],
+  dismissed: string[],
+): string[] {
+  const draft: Settings = {
+    ...settings,
+    watchlist_pins: pins,
+    watchlist_dismissed: dismissed,
+  };
+  return resolveEffectiveWatchlist(draft);
+}
+
+/** Table rows: effective list + explicit pins (scan-only rows are not persisted). */
+export function buildWatchlistDisplayRows(
+  settings: Settings,
+  explicitPins: WatchlistPin[],
+  dismissed: string[],
+): WatchlistPin[] {
+  const dismissedSet = new Set(parseWatchlistDismissed(dismissed));
+  const pinBySymbol = new Map(
+    parseWatchlistPins(explicitPins).map((pin) => [pin.symbol, pin]),
+  );
+  const draft: Settings = {
+    ...settings,
+    watchlist_pins: explicitPins,
+    watchlist_dismissed: dismissed,
+  };
+  const symbols = new Set<string>();
+  for (const symbol of resolveEffectiveWatchlist(draft)) {
+    if (!dismissedSet.has(symbol)) symbols.add(symbol);
   }
-  return filterStaleCoreFromSaved(settings, saved);
+  for (const pin of explicitPins) {
+    if (!dismissedSet.has(pin.symbol)) symbols.add(pin.symbol);
+  }
+  return [...symbols].sort().map((symbol) =>
+    pinBySymbol.get(symbol) ?? {
+      symbol,
+      locked: false,
+      protect_demotion: false,
+    },
+  );
 }

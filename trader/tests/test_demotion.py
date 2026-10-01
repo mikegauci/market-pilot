@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from models.types import Quote, RiskSettings, TradeRecord
+from models.types import JevRankedSymbol, Quote, RiskSettings, TradeRecord, WatchlistPin
 from watchlist.demotion import (
     demoted_jev_sell_loss_allowed,
     effective_max_hold_minutes,
@@ -49,6 +49,20 @@ class TestDemotion(unittest.TestCase):
 
     def test_not_demoted_when_dynamic_off(self) -> None:
         settings = _settings(watchlist_dynamic_enabled=False)
+        self.assertFalse(is_demoted_symbol("NU", settings))
+
+    def test_protect_demotion_skips_demotion_exits(self) -> None:
+        settings = _settings(
+            watchlist=["VALE"],
+            watchlist_jev_rankings=[
+                JevRankedSymbol("VALE", 0.85, 0.1, 0.05, 1),
+            ],
+            watchlist_pins=[
+                WatchlistPin("NU", locked=False, protect_demotion=True),
+            ],
+            watchlist_dismissed=["NU"],
+        )
+        self.assertTrue(is_off_effective_watchlist("NU", settings))
         self.assertFalse(is_demoted_symbol("NU", settings))
 
     def test_not_demoted_when_dynamic_list_empty(self) -> None:

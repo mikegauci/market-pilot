@@ -49,6 +49,8 @@ export type Settings = {
   benchmark_symbol: string;
   watchlist_jev_rankings: JevRanking[];
   watchlist_screener_ran_at: string | null;
+  watchlist_pins: WatchlistPin[];
+  watchlist_dismissed: string[];
   demotion_exits_enabled: boolean;
   demotion_max_hold_ratio: number;
   demotion_jev_sell_on_loss: boolean;
@@ -76,6 +78,12 @@ export type JevRanking = {
   hold: number;
   sell: number;
   rank: number;
+};
+
+export type WatchlistPin = {
+  symbol: string;
+  locked: boolean;
+  protect_demotion: boolean;
 };
 
 export type WatchlistScreenerHistory = {

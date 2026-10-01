@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { resolveCurrentEquity } from "@/lib/resolve-current-equity";
 import { createClient } from "@/lib/supabase/server";
 import { parseSettingsForm } from "@/lib/validate-settings";
+import {
+  parseWatchlistCurationPayload,
+  type WatchlistCurationPayload,
+} from "@/lib/watchlist-curation";
 
 export async function updateSettings(formData: FormData) {
   const supabase = await createClient();
@@ -27,6 +31,26 @@ export async function updateSettings(formData: FormData) {
   if (error) throw new Error(error.message);
   revalidatePath("/settings");
   revalidatePath("/");
+  revalidatePath("/strategy");
+}
+
+export async function updateWatchlistCuration(payload: WatchlistCurationPayload) {
+  const supabase = await createClient();
+  const parsed = parseWatchlistCurationPayload(payload);
+
+  const { error } = await supabase
+    .from("settings")
+    .update({
+      watchlist_pins: parsed.watchlist_pins,
+      watchlist_dismissed: parsed.watchlist_dismissed,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", 1);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+  revalidatePath("/");
+  revalidatePath("/strategy");
 }
 
 export async function requestClosePosition(tradeId: string) {

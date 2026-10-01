@@ -4,7 +4,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from jev.client import JevClient
 from market.bar_aggregator import MinuteBarStore
@@ -14,6 +14,12 @@ from market.indicators import (
     build_universe_scan_market_state,
 )
 from models.types import JevPrediction, JevRankedSymbol, MarketState, Quote, RiskSettings
+from watchlist.curation import (
+    apply_dismissed_filter,
+    merge_curated_base_watchlist,
+    pin_symbols_for_scan,
+    resolve_watchlist_dismissed,
+)
 from news.enrich import enrich_market_state_with_news
 from news.client import NewsService
 from strategy.config import StrategyConfig
@@ -123,12 +129,14 @@ def resolve_base_watchlist(risk_settings: RiskSettings) -> List[str]:
         return strip_benchmark_symbol(resolve_watchlist_core(risk_settings), risk_settings)
     if risk_settings.watchlist_screener_ran_at is None:
         return strip_benchmark_symbol(resolve_watchlist_core(risk_settings), risk_settings)
-    # After a successful scan, empty list is intentional (weak day / min-buy floor).
+    # After a successful scan, empty saved list is intentional (weak day / min-buy floor).
     saved = [str(symbol).upper() for symbol in risk_settings.watchlist if str(symbol).strip()]
+    rankings = risk_settings.watchlist_jev_rankings or []
     if not saved:
-        return []
-    filtered = _filter_stale_core_from_saved(risk_settings, saved)
-    return filtered
+        dynamic_base: List[str] = []
+    else:
+        dynamic_base = _filter_stale_core_from_saved(risk_settings, saved)
+    return merge_curated_base_watchlist(risk_settings, dynamic_base, rankings)
 
 
 def resolve_trading_watchlist(
@@ -219,13 +227,19 @@ def top_dynamic_symbols(
     benchmark: str,
     dynamic_size: int,
     min_buy: float = 0.0,
+    *,
+    excluded: Optional[Set[str]] = None,
 ) -> List[str]:
     """Take up to dynamic_size names with BUY >= min_buy (max, not a fill quota)."""
     symbols: List[str] = []
     benchmark_key = benchmark.upper()
     floor = max(0.0, float(min_buy))
+    skip = {str(s).upper() for s in (excluded or set()) if str(s).strip()}
     for item in rankings:
-        if item.symbol.upper() == benchmark_key:
+        symbol = item.symbol.upper()
+        if symbol == benchmark_key:
+            continue
+        if symbol in skip:
             continue
         if item.buy < floor:
             continue
@@ -371,7 +385,9 @@ def run_jev_universe_scan(
     """Rank EM universe with Jev and return effective watchlist + full rankings."""
     universe = universe_loader()
     benchmark = effective_benchmark(risk_settings)
-    scan_symbols = list(dict.fromkeys(universe + [benchmark]))
+    scan_symbols = list(
+        dict.fromkeys(universe + [benchmark] + pin_symbols_for_scan(risk_settings))
+    )
 
     for symbol in scan_symbols:
         bar_store.seed_minute_aggregator(minute_bars.get(symbol), symbol)
@@ -401,10 +417,21 @@ def run_jev_universe_scan(
 
     dynamic_size = max(0, int(risk_settings.watchlist_dynamic_size))
     min_buy = float(getattr(risk_settings, "watchlist_min_buy", 0.6) or 0.0)
+    dismissed = resolve_watchlist_dismissed(risk_settings)
     dynamic_symbols = top_dynamic_symbols(
-        rankings, benchmark, dynamic_size, min_buy=min_buy
+        rankings,
+        benchmark,
+        dynamic_size,
+        min_buy=min_buy,
+        excluded=dismissed,
     )
-    effective = merge_dynamic_watchlist(risk_settings, dynamic_symbols, open_symbols)
+    curated_base = merge_curated_base_watchlist(
+        risk_settings, dynamic_symbols, rankings
+    )
+    effective = strip_benchmark_symbol(
+        _merge_symbol_lists(curated_base, open_symbols),
+        risk_settings,
+    )
 
     logger.info(
         "Jev universe scan complete — %s/%s scored (%s), top dynamic: %s (min_buy=%.0f%%)",

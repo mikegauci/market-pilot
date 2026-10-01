@@ -6,7 +6,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-from typing import Callable, Dict, List, Optional, TypeVar
+from typing import Callable, Dict, List, Optional, Sequence, TypeVar
 
 import httpx
 from supabase import Client, ClientOptions, create_client
@@ -15,6 +15,7 @@ from risk.recommendations import should_advance_baseline
 
 from market.bars import BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, Bar
 from models.types import (
+    WatchlistPin,
     AccountSummary,
     BotControl,
     BotStatusUpdate,
@@ -427,6 +428,36 @@ class SupabaseRepository:
             watchlist=risk.watchlist,
         )
 
+    def _parse_watchlist_pins(self, raw: object) -> List[WatchlistPin]:
+        if not isinstance(raw, list):
+            return []
+        pins: List[WatchlistPin] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            symbol = str(item.get("symbol", "")).upper()
+            if not symbol:
+                continue
+            pins.append(
+                WatchlistPin(
+                    symbol=symbol,
+                    locked=bool(item.get("locked", False)),
+                    protect_demotion=bool(item.get("protect_demotion", False)),
+                )
+            )
+        return pins
+
+    def _watchlist_pins_payload(self, pins: Sequence[WatchlistPin]) -> List[dict]:
+        return [
+            {
+                "symbol": pin.symbol.upper(),
+                "locked": bool(pin.locked),
+                "protect_demotion": bool(pin.protect_demotion),
+            }
+            for pin in pins
+            if str(pin.symbol).strip()
+        ]
+
     def _parse_jev_rankings(self, raw: object) -> List[JevRankedSymbol]:
         if not isinstance(raw, list):
             return []
@@ -458,6 +489,7 @@ class SupabaseRepository:
         "watchlist_dynamic_enabled, watchlist_dynamic_size, "
         "watchlist_min_buy, "
         "watchlist_refresh_minutes, benchmark_symbol, watchlist_jev_rankings, "
+        "watchlist_pins, watchlist_dismissed, "
         "watchlist_screener_ran_at, demotion_exits_enabled, demotion_max_hold_ratio, "
         "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit"
     )
@@ -534,6 +566,12 @@ class SupabaseRepository:
             watchlist_screener_ran_at=(
                 _parse_timestamp(screener_ran_at) if screener_ran_at else None
             ),
+            watchlist_pins=self._parse_watchlist_pins(data.get("watchlist_pins")),
+            watchlist_dismissed=[
+                str(s).upper()
+                for s in (data.get("watchlist_dismissed") or [])
+                if str(s).strip()
+            ],
             demotion_exits_enabled=bool(data.get("demotion_exits_enabled", True)),
             demotion_max_hold_ratio=float(data.get("demotion_max_hold_ratio", 0.5)),
             demotion_jev_sell_on_loss=bool(data.get("demotion_jev_sell_on_loss", True)),
@@ -548,6 +586,8 @@ class SupabaseRepository:
         self,
         watchlist: List[str],
         rankings: List[JevRankedSymbol],
+        *,
+        watchlist_pins: Optional[List[WatchlistPin]] = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         rankings_payload = [
@@ -560,12 +600,14 @@ class SupabaseRepository:
             }
             for item in rankings
         ]
-        payload = {
+        payload: Dict[str, object] = {
             "watchlist": watchlist,
             "watchlist_jev_rankings": rankings_payload,
             "watchlist_screener_ran_at": now,
             "updated_at": now,
         }
+        if watchlist_pins is not None:
+            payload["watchlist_pins"] = self._watchlist_pins_payload(watchlist_pins)
         self.client.table("settings").update(payload).eq("id", 1).execute()
         try:
             self.client.table("watchlist_screener_history").insert(

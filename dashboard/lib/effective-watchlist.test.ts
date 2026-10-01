@@ -28,6 +28,29 @@ describe("resolveEffectiveWatchlist", () => {
     expect(resolveEffectiveWatchlist(settings)).toEqual(["BABA", "VALE"]);
   });
 
+  it("includes locked pin before first ranking score", () => {
+    const settings = settingsFixture({
+      watchlist: ["BABA"],
+      watchlist_jev_rankings: [{ symbol: "BABA", buy: 0.9, hold: 0.05, sell: 0.05, rank: 1 }],
+      watchlist_pins: [{ symbol: "INFY", locked: true, protect_demotion: false }],
+    });
+    expect(resolveEffectiveWatchlist(settings)).toEqual(["BABA", "INFY"]);
+  });
+
+  it("adds locked pins and removes dismissed symbols", () => {
+    const settings = settingsFixture({
+      watchlist: ["BABA", "VALE"],
+      watchlist_jev_rankings: [
+        { symbol: "BABA", buy: 0.9, hold: 0.05, sell: 0.05, rank: 1 },
+        { symbol: "VALE", buy: 0.85, hold: 0.1, sell: 0.05, rank: 2 },
+        { symbol: "TSM", buy: 0.7, hold: 0.2, sell: 0.1, rank: 3 },
+      ],
+      watchlist_pins: [{ symbol: "TSM", locked: true, protect_demotion: false }],
+      watchlist_dismissed: ["VALE"],
+    });
+    expect(resolveEffectiveWatchlist(settings)).toEqual(["BABA", "TSM"]);
+  });
+
   it("keeps empty list after a successful weak scan", () => {
     const settings = settingsFixture({
       watchlist: [],

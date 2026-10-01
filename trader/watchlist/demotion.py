@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from models.types import Quote, RiskSettings, TradeRecord
+from watchlist.curation import protect_demotion_symbols
 from watchlist.jev_screener import effective_benchmark, resolve_base_watchlist
 
 # Immediate time exit on next eval cycle when demoted max-hold ratio is 0.
@@ -33,6 +34,9 @@ def is_off_effective_watchlist(symbol: str, risk_settings: RiskSettings) -> bool
 def is_demoted_symbol(symbol: str, risk_settings: RiskSettings) -> bool:
     """True when demotion exit rules apply to this symbol."""
     if not risk_settings.demotion_exits_enabled:
+        return False
+    sym = str(symbol).upper()
+    if sym in protect_demotion_symbols(risk_settings):
         return False
     return is_off_effective_watchlist(symbol, risk_settings)
 

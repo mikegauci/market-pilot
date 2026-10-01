@@ -1,4 +1,5 @@
 import { MarketConditionCard } from "@/components/market-condition-card";
+import { OverviewWatchlistCard } from "@/components/overview-watchlist-card";
 import { OverviewStats } from "@/components/overview-stats";
 import { PositionsGrid } from "@/components/positions-grid";
 import { SettingsSummary } from "@/components/settings-summary";
@@ -84,6 +85,8 @@ export default async function OverviewPage() {
           />
         )}
       </div>
+
+      {settings ? <OverviewWatchlistCard settings={settings} /> : null}
 
       <PositionsGrid
         positions={positions}

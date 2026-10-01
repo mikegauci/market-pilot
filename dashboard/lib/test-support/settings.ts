@@ -30,6 +30,8 @@ export function settingsFixture(overrides: Partial<Settings> = {}): Settings {
     benchmark_symbol: "EEM",
     watchlist_jev_rankings: [],
     watchlist_screener_ran_at: "2026-01-10T15:00:00Z",
+    watchlist_pins: [],
+    watchlist_dismissed: [],
     demotion_exits_enabled: true,
     demotion_max_hold_ratio: 0.5,
     demotion_jev_sell_on_loss: true,

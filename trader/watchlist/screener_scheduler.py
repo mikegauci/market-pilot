@@ -20,6 +20,7 @@ from market.mock import MockMarketProvider
 from models.types import DataSource, JevRankedSymbol, Quote, RiskSettings
 from news.client import NewsService
 from strategy.config import StrategyConfig
+from watchlist.curation import prune_watchlist_pins_below_min_buy, resolve_watchlist_dismissed
 from watchlist.jev_screener import (
     apply_screener_result_to_risk_settings,
     effective_benchmark,
@@ -453,12 +454,25 @@ class EMWatchlistScheduler:
 
             dynamic_size = max(0, int(job.risk_settings.watchlist_dynamic_size))
             min_buy = float(getattr(job.risk_settings, "watchlist_min_buy", 0.6) or 0.0)
+            dismissed = resolve_watchlist_dismissed(job.risk_settings)
             dynamic_symbols = top_dynamic_symbols(
-                rankings, benchmark, dynamic_size, min_buy=min_buy
+                rankings,
+                benchmark,
+                dynamic_size,
+                min_buy=min_buy,
+                excluded=dismissed,
             )
             persisted = merge_dynamic_watchlist(job.risk_settings, dynamic_symbols, [])
+            pruned_pins = prune_watchlist_pins_below_min_buy(
+                job.risk_settings, rankings
+            )
             ran_at = datetime.now(timezone.utc)
-            job.db.update_effective_watchlist(persisted, rankings)
+            job.db.update_effective_watchlist(
+                persisted,
+                rankings,
+                watchlist_pins=pruned_pins,
+            )
+            job.risk_settings.watchlist_pins = pruned_pins
             result = ScreenerResult(
                 watchlist=effective,
                 rankings=rankings,

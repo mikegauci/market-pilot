@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from config import Settings
-from models.types import DataSource, Quote, RiskSettings
+from models.types import DataSource, JevRankedSymbol, Quote, RiskSettings, WatchlistPin
 from watchlist.jev_screener import UniverseScanSkips
 from watchlist.screener_scheduler import (
     EMWatchlistScheduler,
@@ -203,6 +203,35 @@ class TestScreenerScheduler(unittest.TestCase):
                 ):
                     scheduler._run_screener(job)
         job.db.update_effective_watchlist_fallback.assert_called_once()
+
+    def test_successful_scan_persists_pruned_watchlist_pins(self) -> None:
+        scheduler = EMWatchlistScheduler()
+        job = _job(had_scan=True)
+        job.risk_settings.watchlist_pins = [
+            WatchlistPin("TSM", locked=True, protect_demotion=False),
+            WatchlistPin("OLD", locked=True, protect_demotion=False),
+        ]
+        rankings = [
+            JevRankedSymbol("BABA", 0.9, 0.05, 0.05, 1),
+            JevRankedSymbol("TSM", 0.7, 0.2, 0.1, 2),
+            JevRankedSymbol("VALE", 0.65, 0.25, 0.1, 3),
+        ]
+        with patch(
+            "watchlist.screener_scheduler.load_em_universe",
+            return_value=["BABA", "VALE"],
+        ):
+            with patch.object(scheduler, "_cache_ready", return_value=True):
+                with patch(
+                    "watchlist.screener_scheduler.run_jev_universe_scan",
+                    return_value=(["BABA", "TSM", "NU"], rankings, UniverseScanSkips()),
+                ):
+                    scheduler._run_screener(job)
+        job.db.update_effective_watchlist.assert_called_once()
+        kwargs = job.db.update_effective_watchlist.call_args.kwargs
+        pruned = kwargs.get("watchlist_pins") or []
+        symbols = [pin.symbol for pin in pruned]
+        self.assertIn("TSM", symbols)
+        self.assertNotIn("OLD", symbols)
 
     def test_low_score_keeps_last_dynamic_list_after_success(self) -> None:
         scheduler = EMWatchlistScheduler()

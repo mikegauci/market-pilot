@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { ClientDateTime } from "@/components/client-date-time";
 import { Input } from "@/components/ui/input";
 import { WatchlistCharts } from "@/components/watchlist-charts";
+import { WatchlistCurationPanel } from "@/components/watchlist-curation-panel";
 import { WatchlistPicker } from "@/components/watchlist-picker";
 import {
   FieldDescription,
@@ -145,9 +146,16 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
           )}
         </div>
         <FieldDescription title="Symbols Jev evaluates for entries right now (plus open positions). EEM is benchmark-only and is not traded.">
-          This is the live predicting watchlist — not the fallback editor below.
+          This is the live predicting watchlist — curate it below (add, remove, lock, demotion).
         </FieldDescription>
       </div>
+
+      {dynamicEnabled && (
+        <div className="rounded-lg border border-zinc-800/60 bg-zinc-950/30 p-3">
+          <p className="text-sm font-medium text-zinc-200">Curate watchlist</p>
+          <WatchlistCurationPanel key={settings.updated_at} settings={settings} />
+        </div>
+      )}
 
       <SettingsFieldGroup className={cn(!dynamicEnabled && "opacity-60")}>
         <SettingsField
