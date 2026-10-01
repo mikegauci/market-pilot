@@ -25,12 +25,14 @@ def _resolve_trade(
     db: SupabaseRepository,
     risk_manager: RiskManager,
     trade_id: str,
+    *,
+    ibkr_account_id: Optional[str] = None,
 ) -> Optional[TradeRecord]:
     trade = _find_open_trade(risk_manager, trade_id)
     if trade is not None:
         return trade
 
-    open_trades = db.get_open_trades()
+    open_trades = db.get_open_trades(ibkr_account_id)
     trade = next((t for t in open_trades if t.id == trade_id), None)
     if trade is not None:
         risk_manager.register_open_trade(trade)
@@ -157,6 +159,7 @@ def process_manual_close_commands(
     *,
     fill_timeout_sec: float = 30.0,
     stale_processing_sec: float = STALE_PROCESSING_SEC,
+    ibkr_account_id: Optional[str] = None,
 ) -> bool:
     """Execute pending dashboard close requests. Returns True if portfolio sync needed."""
     reclaimed = db.reclaim_stale_trade_commands(stale_processing_sec)
@@ -177,7 +180,9 @@ def process_manual_close_commands(
         if not db.claim_trade_command(command_id):
             continue
 
-        trade = _resolve_trade(db, risk_manager, trade_id)
+        trade = _resolve_trade(
+            db, risk_manager, trade_id, ibkr_account_id=ibkr_account_id
+        )
         if trade is None or trade.status != "open":
             db.fail_trade_command(command_id, "trade_not_open")
             logger.warning("Manual close skipped — trade %s not open", trade_id)
@@ -208,6 +213,8 @@ def process_manual_close_commands(
             logger.error("Manual close failed for %s: %s", trade.symbol, exc)
 
     if closed_any:
-        risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
+        risk_manager.set_daily_realized_pnl(
+            db.get_daily_realized_pnl(ibkr_account_id)
+        )
 
     return closed_any

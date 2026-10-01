@@ -18,12 +18,7 @@ from broker.execution import (
     sync_ibkr_exits,
 )
 from broker.manual_close import process_manual_close_commands
-from broker.ibkr import (
-    IBKRClient,
-    MARKET_DATA_COMPETING_SESSION_MSG,
-    is_kid_document_rejection,
-    is_permanent_ibkr_eligibility_rejection,
-)
+from broker.ibkr import IBKRClient, MARKET_DATA_COMPETING_SESSION_MSG
 from broker.reconcile import nonzero_positions, reconcile_orphan_ibkr_positions
 from config import Settings, load_settings
 from execution_mode import effective_execution_mode
@@ -37,11 +32,10 @@ from news.client import FetchStatus, FinnhubNewsClient, NewsService
 from news.enrich import enrich_market_state_with_news
 from news.sentiment import NewsContext
 from market.hours import (
-    is_entry_window_open,
     is_us_regular_session_open,
     should_force_eod_flatten,
 )
-from market.indicators import build_market_state, compute_atr_pct
+from market.indicators import build_market_state
 from market.mock import MockMarketProvider
 from models.types import (
     BotStatusUpdate,
@@ -56,13 +50,6 @@ from models.types import (
 from risk.manager import RiskManager
 from strategy.confirmation import ConfirmationTracker
 from strategy.config import strategy_config_with_risk_overrides
-from strategy.filters import check_correlation_cap, check_entry_filters
-from strategy.signals import (
-    is_sell_exit_eligible,
-    is_trade_eligible,
-    signal_tier,
-    trade_skip_reason_from_tier,
-)
 from watchlist.demotion import effective_max_hold_minutes
 from watchlist.jev_screener import (
     apply_screener_result_to_risk_settings,
@@ -73,46 +60,23 @@ from watchlist.jev_screener import (
     screener_due,
     strip_benchmark_symbol,
 )
-from watchlist.screener_scheduler import (
-    EMWatchlistScheduler,
-    ScreenerJobContext,
-    backfill_watchlist_symbols,
-)
+from watchlist.screener_scheduler import EMWatchlistScheduler, ScreenerJobContext
 from watchlist.universe import load_em_universe
+from runtime.capital import resolve_effective_capital
+from runtime.entry_eval import process_ready_states
+from runtime.heartbeat import run_heartbeat_cycle
+from runtime.sim_close import persist_simulated_closes
+from runtime.startup import connect_ibkr_with_retries, run_ibkr_startup_backfill
+from runtime.state import TraderRuntimeState
+from runtime.timing import compute_loop_sleep_sec, should_refresh
 
 logger = logging.getLogger(__name__)
 
-_shutdown_requested = False
-_warmup_logged: Set[str] = set()
-_last_closed_market_log = 0.0
-_last_market_data_warn = 0.0
-_ibkr_market_data_mode = "stream"
-_ibkr_entry_cooldown_until: Dict[str, float] = {}
-_ibkr_entry_blocked: Set[str] = set()
-_eod_sim_last_attempt_mono = 0.0
-_last_prediction_backfill_mono = 0.0
+_loop_runtime: Optional[TraderRuntimeState] = None
 _PREDICTION_BACKFILL_INTERVAL_SEC = 60.0
 _CLOSED_MARKET_LOG_INTERVAL_SEC = 300.0
 _MARKET_DATA_WARN_INTERVAL_SEC = 300.0
 _SHUTDOWN_SLEEP_CHUNK_SEC = 0.5
-
-
-def compute_loop_sleep_sec(
-    interval: float,
-    elapsed: float,
-    last_heartbeat_mono: float,
-    now_mono: float,
-    heartbeat_interval_sec: float,
-    track_heartbeat: bool,
-) -> float:
-    """Sleep duration before the next loop; cap so overdue heartbeats run immediately."""
-    sleep_for = max(0.0, interval - elapsed)
-    if not track_heartbeat:
-        return sleep_for
-    next_heartbeat_in = heartbeat_interval_sec - (now_mono - last_heartbeat_mono)
-    if next_heartbeat_in <= 0:
-        return 0.0
-    return min(sleep_for, next_heartbeat_in)
 
 
 def build_eval_symbols(
@@ -137,20 +101,16 @@ def build_eval_symbols(
     return merged
 
 
-def should_refresh(now_mono: float, last_sync_mono: float, interval_sec: float) -> bool:
-    """True when a cached Supabase read should be refreshed."""
-    return (now_mono - last_sync_mono) >= interval_sec
-
-
 def _handle_shutdown(signum: int, _frame: object) -> None:
-    global _shutdown_requested
+    global _loop_runtime
     logger.info("Received signal %s, shutting down...", signum)
-    _shutdown_requested = True
+    if _loop_runtime is not None:
+        _loop_runtime.shutdown_requested = True
 
 
-def _interruptible_sleep(seconds: float) -> None:
+def _interruptible_sleep(seconds: float, runtime: TraderRuntimeState) -> None:
     deadline = time.monotonic() + seconds
-    while not _shutdown_requested:
+    while not runtime.shutdown_requested:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return
@@ -165,18 +125,6 @@ def _configure_logging(level: str) -> None:
     )
     # ib_insync logs every orderStatus tick at INFO — far too noisy for normal use.
     logging.getLogger("ib_insync").setLevel(logging.WARNING)
-
-
-def _connect_ibkr(client: IBKRClient, max_attempts: int = 1, delay_sec: float = 2.0) -> bool:
-    for attempt in range(1, max_attempts + 1):
-        try:
-            client.connect()
-            return True
-        except Exception as exc:
-            logger.warning("IBKR connection attempt %s/%s failed: %s", attempt, max_attempts, exc)
-            if attempt < max_attempts:
-                time.sleep(delay_sec)
-    return False
 
 
 def _all_symbols(watchlist: list[str], benchmark: str = "SPY") -> list[str]:
@@ -227,6 +175,7 @@ def _sync_watchlist_symbols(
     minute_bars: MinuteBarStore,
     bar_store: BarStore,
     data_source: DataSource,
+    runtime: TraderRuntimeState,
 ) -> None:
     """Pick up watchlist changes at runtime without restarting the trader."""
     mock.ensure_symbols(all_symbols)
@@ -240,7 +189,7 @@ def _sync_watchlist_symbols(
             mock.seed_symbol_minute_bars(minute_bars, symbol)
         else:
             bar_store.seed_minute_aggregator(minute_bars.get(symbol), symbol)
-        _warmup_logged.discard(symbol)
+        runtime.warmup_logged.discard(symbol)
     if new_symbols:
         logger.info(
             "Watchlist expanded — seeded 1-min bars for: %s",
@@ -283,19 +232,6 @@ def _get_quotes(
     if settings.data_source == DataSource.IBKR and ibkr.is_connected():
         return ibkr.get_quotes(symbols, wait_sec=0.5)
     return mock.get_quotes(symbols)
-
-
-def _resolve_effective_capital(
-    ibkr: IBKRClient,
-    fallback: float,
-) -> tuple[float, str]:
-    if ibkr.is_connected():
-        try:
-            account = ibkr.get_account_summary()
-            return account.net_liquidation, account.currency
-        except Exception as exc:
-            logger.warning("Could not read IBKR capital: %s", exc)
-    return fallback, "USD"
 
 
 def _sync_portfolio_state(
@@ -343,7 +279,7 @@ def _init_risk_manager(
 ) -> RiskManager:
     if risk_settings is None:
         risk_settings = db.get_risk_settings()
-    capital, currency = _resolve_effective_capital(ibkr, risk_settings.account_capital)
+    capital, currency = resolve_effective_capital(ibkr, risk_settings.account_capital)
     manager = RiskManager(
         settings=risk_settings,
         trading_mode=trading_mode,
@@ -383,22 +319,11 @@ def _fetch_jev_predictions(
     return predictions
 
 
-def _log_jev_prediction(prediction, tier: str) -> None:
-    logger.info(
-        "%s market update",
-        prediction.symbol,
-    )
-    logger.info(
-        "Jev  BUY: %.0f%%  HOLD: %.0f%%  SELL: %.0f%%",
-        prediction.buy * 100,
-        prediction.hold * 100,
-        prediction.sell * 100,
-    )
-    logger.info("Signal: %s", tier)
-
-
 def run() -> int:
+    global _loop_runtime
     acquire_trader_lock()
+    runtime = TraderRuntimeState()
+    _loop_runtime = runtime
     settings = load_settings()
     _configure_logging(settings.log_level)
 
@@ -537,14 +462,13 @@ def run() -> int:
     )
 
     if settings.data_source == DataSource.IBKR:
-        if _connect_ibkr(ibkr, max_attempts=3):
-            global _ibkr_market_data_mode
-            _ibkr_market_data_mode = ibkr.ensure_market_data_ready(all_symbols)
+        if connect_ibkr_with_retries(ibkr, max_attempts=3):
+            runtime.ibkr_market_data_mode = ibkr.ensure_market_data_ready(all_symbols)
             logger.info(
                 "Connected to IBKR (%s:%s) — market data mode: %s",
                 settings.ibkr_host,
                 settings.ibkr_port,
-                _ibkr_market_data_mode,
+                runtime.ibkr_market_data_mode,
             )
             _pulse_bot_status(
                 db,
@@ -553,15 +477,6 @@ def run() -> int:
                 execution_mode=configured_execution_mode,
                 ibkr_connected=True,
                 jev_connected=False,
-            )
-            # Core + open positions + dynamic picks — otherwise symbols like JPM
-            # (on screener list / held but not always-on core) never get bars.
-            open_symbols = [trade.symbol for trade in db.get_open_trades()]
-            priority_symbols = list(
-                dict.fromkeys(
-                    merge_core_watchlist(risk_settings, open_symbols)
-                    + resolve_trading_watchlist(risk_settings, open_symbols)
-                )
             )
 
             def _on_backfill_progress(result: object, index: int, total: int) -> None:
@@ -577,34 +492,27 @@ def run() -> int:
                         jev_connected=False,
                     )
 
-            backfill_watchlist_symbols(
-                settings,
-                bar_store,
-                ibkr,
-                priority_symbols,
-                open_symbols=open_symbols,
+            open_symbols = [trade.symbol for trade in db.get_open_trades()]
+            priority_symbols = list(
+                dict.fromkeys(
+                    merge_core_watchlist(risk_settings, open_symbols)
+                    + resolve_trading_watchlist(risk_settings, open_symbols)
+                )
+            )
+            run_ibkr_startup_backfill(
+                settings=settings,
+                db=db,
+                bar_store=bar_store,
+                ibkr=ibkr,
+                risk_settings=risk_settings,
+                em_scheduler=em_scheduler,
+                load_em_universe_fn=lambda: _load_em_universe(settings, db),
                 on_progress=_on_backfill_progress,
             )
             for symbol in priority_symbols:
                 bar_store.seed_minute_aggregator(
                     minute_bars.get(symbol), symbol
                 )
-            em_universe: List[str] = []
-            if risk_settings.watchlist_dynamic_enabled:
-                try:
-                    em_universe = _load_em_universe(settings, db)
-                    em_scheduler.start_em_backfill(
-                        settings,
-                        bar_store,
-                        ibkr,
-                        em_universe,
-                        exclude_symbols=priority_symbols,
-                    )
-                except (FileNotFoundError, ValueError) as exc:
-                    logger.warning("EM backfill skipped: %s", exc)
-                    em_scheduler.mark_backfill_unavailable()
-            else:
-                em_scheduler.mark_backfill_unavailable()
             _pulse_bot_status(
                 db,
                 enabled=bot_control.enabled,
@@ -756,7 +664,7 @@ def run() -> int:
             daemon=True,
         ).start()
 
-    while not _shutdown_requested:
+    while not runtime.shutdown_requested:
         loop_start = time.monotonic()
         jev_connected_this_cycle = False
         market_open = True
@@ -892,6 +800,7 @@ def run() -> int:
                     minute_bars,
                     bar_store,
                     settings.data_source,
+                    runtime,
                 )
                 if (
                     settings.data_source == DataSource.IBKR
@@ -900,11 +809,17 @@ def run() -> int:
                     ibkr.sync_watchlist_subscriptions(all_symbols)
                 if risk_manager:
                     risk_manager.update_settings(risk_settings)
-                    capital, currency = _resolve_effective_capital(
+                    capital, currency = resolve_effective_capital(
                         ibkr,
                         risk_settings.account_capital,
                     )
                     risk_manager.update_capital(capital, currency)
+
+            daily_pnl_account_id = (
+                active_ibkr_account_id
+                if execution_mode == ExecutionMode.IBKR
+                else None
+            )
 
             quotes = _get_quotes(settings, ibkr, mock, all_symbols)
             quotes_by_symbol: Dict[str, Quote] = {q.symbol: q for q in quotes}
@@ -912,11 +827,10 @@ def run() -> int:
             if (
                 settings.data_source == DataSource.IBKR
                 and ibkr.is_connected()
-                and _ibkr_market_data_mode == "unavailable"
+                and runtime.ibkr_market_data_mode == "unavailable"
             ):
-                global _last_market_data_warn
                 now_mono = time.monotonic()
-                if (now_mono - _last_market_data_warn) >= _MARKET_DATA_WARN_INTERVAL_SEC:
+                if (now_mono - runtime.last_market_data_warn) >= _MARKET_DATA_WARN_INTERVAL_SEC:
                     priced = sum(
                         1 for quote in quotes if quote.price is not None and quote.price > 0
                     )
@@ -926,10 +840,10 @@ def run() -> int:
                         len(quotes),
                         MARKET_DATA_COMPETING_SESSION_MSG,
                     )
-                    _last_market_data_warn = now_mono
+                    runtime.last_market_data_warn = now_mono
                     recovered = ibkr.ensure_market_data_ready(all_symbols, wait_sec=1.0)
                     if recovered != "unavailable":
-                        _ibkr_market_data_mode = recovered
+                        runtime.ibkr_market_data_mode = recovered
                         logger.info("IBKR market data mode restored: %s", recovered)
                         quotes = _get_quotes(settings, ibkr, mock, all_symbols)
                         quotes_by_symbol = {q.symbol: q for q in quotes}
@@ -942,6 +856,7 @@ def run() -> int:
                     execution_mode,
                     quotes_by_symbol,
                     fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                    ibkr_account_id=daily_pnl_account_id,
                 ):
                     portfolio_dirty = True
 
@@ -981,68 +896,43 @@ def run() -> int:
                     quotes_by_symbol,
                     max_hold_for_symbol=_max_hold_for_symbol,
                 )
-                for closed_trade in closed:
-                    db.close_trade(
-                        closed_trade.trade_id,
-                        closed_trade.exit_price,
-                        closed_trade.exit_time,
-                        closed_trade.gross_pnl,
-                        closed_trade.net_pnl,
-                        exit_reason=closed_trade.reason,
-                    )
-                    risk_manager.note_symbol_exit(
-                        closed_trade.symbol, closed_trade.exit_time
-                    )
+                if persist_simulated_closes(
+                    db,
+                    risk_manager,
+                    closed,
+                    daily_pnl_account_id=daily_pnl_account_id,
+                ):
                     portfolio_dirty = True
-                if closed:
-                    risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
 
                 closed_demotion = risk_manager.check_demotion_exits(quotes_by_symbol)
-                for closed_trade in closed_demotion:
-                    db.close_trade(
-                        closed_trade.trade_id,
-                        closed_trade.exit_price,
-                        closed_trade.exit_time,
-                        closed_trade.gross_pnl,
-                        closed_trade.net_pnl,
-                        exit_reason=closed_trade.reason,
-                    )
-                    risk_manager.note_symbol_exit(
-                        closed_trade.symbol, closed_trade.exit_time
-                    )
+                if persist_simulated_closes(
+                    db,
+                    risk_manager,
+                    closed_demotion,
+                    daily_pnl_account_id=daily_pnl_account_id,
+                ):
                     portfolio_dirty = True
-                if closed_demotion:
-                    risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
 
                 if is_us_regular_session_open() and should_force_eod_flatten(
                     flatten_minutes_before_close=strategy_config.eod_flatten_minutes_before_close
                 ):
-                    global _eod_sim_last_attempt_mono
                     eod_closed: list = []
                     now_eod_mono = time.monotonic()
                     if (
-                        now_eod_mono - _eod_sim_last_attempt_mono
+                        now_eod_mono - runtime.eod_sim_last_attempt_mono
                     ) >= EOD_RETRY_SEC:
-                        _eod_sim_last_attempt_mono = now_eod_mono
+                        runtime.eod_sim_last_attempt_mono = now_eod_mono
                         eod_closed = risk_manager.force_close_all_simulated(
                             quotes_by_symbol,
                             reason="eod_flatten",
                         )
-                    for closed_trade in eod_closed:
-                        db.close_trade(
-                            closed_trade.trade_id,
-                            closed_trade.exit_price,
-                            closed_trade.exit_time,
-                            closed_trade.gross_pnl,
-                            closed_trade.net_pnl,
-                            exit_reason=closed_trade.reason,
-                        )
-                        risk_manager.note_symbol_exit(
-                            closed_trade.symbol, closed_trade.exit_time
-                        )
-                    if eod_closed:
+                    if persist_simulated_closes(
+                        db,
+                        risk_manager,
+                        eod_closed,
+                        daily_pnl_account_id=daily_pnl_account_id,
+                    ):
                         portfolio_dirty = True
-                        risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
                     if (
                         execution_mode == ExecutionMode.IBKR
                         and ibkr.is_connected()
@@ -1051,12 +941,19 @@ def run() -> int:
                             risk_manager,
                             db,
                             fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                            ibkr_account_id=daily_pnl_account_id,
+                            eod_last_attempt_mono=runtime.eod_ibkr_last_attempt_mono,
                         )
                     ):
                         portfolio_dirty = True
 
                 if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
-                    if sync_ibkr_exits(ibkr, risk_manager, db):
+                    if sync_ibkr_exits(
+                        ibkr,
+                        risk_manager,
+                        db,
+                        ibkr_account_id=daily_pnl_account_id,
+                    ):
                         portfolio_dirty = True
                     demotion_exit_symbols = collect_demotion_exit_symbols(
                         risk_manager.open_trades,
@@ -1069,6 +966,7 @@ def run() -> int:
                         max_hold_for_symbol=_max_hold_for_symbol,
                         demotion_exit_symbols=demotion_exit_symbols,
                         fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                        ibkr_account_id=daily_pnl_account_id,
                     ):
                         portfolio_dirty = True
 
@@ -1086,29 +984,18 @@ def run() -> int:
             benchmark_intraday_bars = (
                 bar_store.get_intraday_bars(benchmark_key) if bar_store else None
             )
-            runtime_entry_strategy = (
-                strategy_config_with_risk_overrides(
-                    settings.strategy_config,
-                    min_volume_ratio=risk_settings.min_volume_ratio,
-                    min_share_price=risk_settings.min_share_price,
-                    min_dollar_volume=risk_settings.min_dollar_volume,
-                    jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
-                )
-                if db and risk_settings
-                else strategy_config
-            )
-
             market_open = (
                 settings.data_source != DataSource.IBKR or is_us_regular_session_open()
             )
             if not market_open:
-                global _last_closed_market_log
                 now_mono = time.monotonic()
-                if (now_mono - _last_closed_market_log) >= _CLOSED_MARKET_LOG_INTERVAL_SEC:
+                if (
+                    now_mono - runtime.last_closed_market_log
+                ) >= _CLOSED_MARKET_LOG_INTERVAL_SEC:
                     logger.info(
                         "US market closed — skipping Jev (exits/heartbeat continue)"
                     )
-                    _last_closed_market_log = now_mono
+                    runtime.last_closed_market_log = now_mono
 
             eval_symbols: list[str] = []
             if market_open:
@@ -1154,13 +1041,13 @@ def run() -> int:
                     benchmark_intraday_bars=benchmark_intraday_bars,
                 )
                 if state is None:
-                    if symbol not in _warmup_logged:
+                    if symbol not in runtime.warmup_logged:
                         logger.debug(
                             "%s warming up — need %s one-minute bars",
                             symbol,
                             strategy_config.warmup_min_1m_bars,
                         )
-                        _warmup_logged.add(symbol)
+                        runtime.warmup_logged.add(symbol)
                     continue
 
                 logger.info(
@@ -1188,309 +1075,38 @@ def run() -> int:
             elif ready_states and jev is not None:
                 jev_connected = False
 
-            for symbol, state in ready_states:
-                prediction = predictions_by_symbol.get(symbol)
-                if prediction is None:
-                    continue
-
-                try:
-                    tier = signal_tier(
-                        prediction,
-                        risk_settings.signal_record_threshold,
-                        risk_settings.minimum_jev_confidence,
-                        strategy_config.min_buy_hold_margin,
-                        strategy_config.min_buy_sell_margin,
-                    )
-                    _log_jev_prediction(prediction, tier)
-
-                    if (
-                        risk_manager
-                        and is_sell_exit_eligible(
-                            prediction, strategy_config.jev_sell_exit_threshold
-                        )
-                        and risk_manager.can_jev_sell_exit(
-                            symbol, quotes_by_symbol, log_skip=True
-                        )
-                    ):
-                        jev_sell_symbols.add(symbol)
-                        closed = risk_manager.check_jev_exit(symbol, quotes_by_symbol)
-                        if closed and db:
-                            db.close_trade(
-                                closed.trade_id,
-                                closed.exit_price,
-                                closed.exit_time,
-                                closed.gross_pnl,
-                                closed.net_pnl,
-                                exit_reason=closed.reason,
-                            )
-                            risk_manager.note_symbol_exit(closed.symbol, closed.exit_time)
-                            portfolio_dirty = True
-                            risk_manager.set_daily_realized_pnl(
-                                db.get_daily_realized_pnl()
-                            )
-
-                    trade_created = False
-                    trade_skip_reason: Optional[str] = None
-                    eligible = is_trade_eligible(tier)
-                    if not eligible:
-                        confirmation_tracker.record(symbol, False)
-                        trade_skip_reason = trade_skip_reason_from_tier(tier)
-                    elif not confirmation_tracker.record(symbol, True):
-                        current, required = confirmation_tracker.progress(symbol)
-                        seconds_left = confirmation_tracker.seconds_remaining(symbol)
-                        if seconds_left is not None and seconds_left > 0:
-                            trade_skip_reason = (
-                                f"awaiting_confirmation ({current}/{required}, "
-                                f"{seconds_left:.0f}s left)"
-                            )
-                        else:
-                            trade_skip_reason = (
-                                f"awaiting_confirmation ({current}/{required})"
-                            )
-                        logger.info(
-                            "Filter: awaiting confirmation for %s (%s)",
-                            symbol,
-                            trade_skip_reason,
-                        )
-                        eligible = False
-
-                    if eligible and not is_entry_window_open(
-                        cutoff_minutes_before_close=(
-                            strategy_config.entry_cutoff_minutes_before_close
-                        )
-                    ):
-                        trade_skip_reason = "entry_window_closed"
-                        logger.info("Filter: rejected %s — entry window closed", symbol)
-                        confirmation_tracker.reset(symbol)
-                        eligible = False
-
-                    if eligible and risk_manager and db:
-                        entry_filter = check_entry_filters(state, runtime_entry_strategy)
-                        if not entry_filter.passed:
-                            trade_skip_reason = entry_filter.reason
-                            logger.info(
-                                "Filter: rejected %s — %s",
-                                symbol,
-                                entry_filter.reason,
-                            )
-                            confirmation_tracker.reset(symbol)
-                            eligible = False
-
-                        corr_filter = check_correlation_cap(
-                            risk_manager.open_trades, symbol, runtime_entry_strategy
-                        )
-                        if eligible and not corr_filter.passed:
-                            trade_skip_reason = corr_filter.reason
-                            logger.info(
-                                "Filter: rejected %s — %s",
-                                symbol,
-                                corr_filter.reason,
-                            )
-                            confirmation_tracker.reset(symbol)
-                            eligible = False
-
-                    if eligible and risk_manager and db:
-                        atr_pct = compute_atr_pct(bar_store.get_intraday_bars(symbol))
-                        decision = risk_manager.evaluate_entry(
-                            state,
-                            prediction,
-                            bot_enabled,
-                            quotes_by_symbol,
-                            strategy_config=runtime_entry_strategy,
-                            atr_pct=atr_pct,
-                        )
-                        if decision.approved and decision.trade:
-                            trade = decision.trade
-                            if (
-                                execution_mode == ExecutionMode.IBKR
-                                and ibkr.is_connected()
-                            ):
-                                try:
-                                    ibkr_skip_reason: Optional[str] = None
-                                    now_mono = time.monotonic()
-                                    if trade.symbol.upper() in _ibkr_entry_blocked:
-                                        ibkr_skip_reason = (
-                                            "ibkr_ineligible "
-                                            "(no trading permission / KID)"
-                                        )
-                                    else:
-                                        cooldown_until = _ibkr_entry_cooldown_until.get(
-                                            trade.symbol, 0.0
-                                        )
-                                        if now_mono < cooldown_until:
-                                            remaining = cooldown_until - now_mono
-                                            ibkr_skip_reason = (
-                                                f"ibkr_cooldown ({remaining:.0f}s left)"
-                                            )
-                                        elif ibkr.has_pending_entry_order(trade.symbol):
-                                            ibkr_skip_reason = "ibkr_pending_entry_order"
-                                        else:
-                                            try:
-                                                account = ibkr.get_account_summary()
-                                                if (
-                                                    trade.position_value
-                                                    > account.buying_power
-                                                ):
-                                                    ibkr_skip_reason = (
-                                                        "ibkr_insufficient_buying_power "
-                                                        f"(need ${trade.position_value:.0f}, "
-                                                        f"have ${account.buying_power:.0f})"
-                                                    )
-                                            except Exception as exc:
-                                                logger.warning(
-                                                    "Could not verify IBKR buying power "
-                                                    "for %s: %s",
-                                                    trade.symbol,
-                                                    exc,
-                                                )
-
-                                    if ibkr_skip_reason:
-                                        trade_skip_reason = ibkr_skip_reason
-                                        logger.info(
-                                            "Skipping %s IBKR entry — %s",
-                                            trade.symbol,
-                                            ibkr_skip_reason,
-                                        )
-                                    else:
-                                        bracket = ibkr.place_bracket_buy(
-                                            trade.symbol,
-                                            trade.quantity,
-                                            trade.stop_loss,
-                                            trade.take_profit,
-                                            fill_timeout_sec=settings.ibkr_fill_timeout_sec,
-                                        )
-                                        trade.execution_mode = "ibkr"
-                                        trade.entry_price = bracket.fill_price
-                                        trade.quantity = bracket.filled_quantity
-                                        trade.position_value = (
-                                            bracket.fill_price
-                                            * bracket.filled_quantity
-                                        )
-                                        trade.ibkr_parent_order_id = (
-                                            bracket.parent_order_id
-                                        )
-                                        trade.ibkr_sl_order_id = bracket.sl_order_id
-                                        trade.ibkr_tp_order_id = bracket.tp_order_id
-                                        trade.entry_commission = bracket.entry_commission
-                                        trade.ibkr_account_id = active_ibkr_account_id
-                                        db.insert_trade(trade)
-                                        risk_manager.register_open_trade(trade)
-                                        confirmation_tracker.reset(trade.symbol)
-                                        trade_created = True
-                                        portfolio_dirty = True
-                                        logger.info(
-                                            "IBKR BUY %s x %.0f @ $%.2f "
-                                            "(SL $%.2f / TP $%.2f)",
-                                            trade.symbol,
-                                            trade.quantity,
-                                            trade.entry_price,
-                                            trade.stop_loss,
-                                            trade.take_profit,
-                                        )
-                                except Exception as exc:
-                                    if is_permanent_ibkr_eligibility_rejection(exc):
-                                        blocked = trade.symbol.upper()
-                                        _ibkr_entry_blocked.add(blocked)
-                                        trade_skip_reason = (
-                                            "ibkr_ineligible "
-                                            f"(no trading permission / KID: {exc})"
-                                        )
-                                        logger.error(
-                                            "IBKR eligibility block for %s — "
-                                            "skipping further entries this session: %s",
-                                            blocked,
-                                            exc,
-                                        )
-                                        if is_kid_document_rejection(exc):
-                                            try:
-                                                updated = db.set_em_universe_tradable(
-                                                    blocked, False
-                                                )
-                                                if updated:
-                                                    logger.info(
-                                                        "Marked %s untradable in "
-                                                        "em_universe (KID rejection)",
-                                                        blocked,
-                                                    )
-                                                else:
-                                                    logger.debug(
-                                                        "%s not in em_universe — "
-                                                        "session block only",
-                                                        blocked,
-                                                    )
-                                            except Exception as db_exc:
-                                                logger.warning(
-                                                    "Could not mark %s untradable in "
-                                                    "em_universe: %s",
-                                                    blocked,
-                                                    db_exc,
-                                                )
-                                    else:
-                                        trade_skip_reason = f"ibkr_order_failed ({exc})"
-                                        _ibkr_entry_cooldown_until[symbol] = (
-                                            time.monotonic()
-                                            + settings.ibkr_entry_cooldown_sec
-                                        )
-                                        logger.error(
-                                            "IBKR order failed for %s: %s", symbol, exc
-                                        )
-                                        if "PendingSubmit" in str(exc) or "whyHeld" in str(
-                                            exc
-                                        ):
-                                            logger.error(
-                                                "Hint: if orders stay PendingSubmit, disable "
-                                                "order confirmations in TWS/Gateway "
-                                                "(Global Config → Presets → Confirmations)."
-                                            )
-                            elif execution_mode == ExecutionMode.IBKR:
-                                trade_skip_reason = "ibkr_not_connected"
-                                logger.warning(
-                                    "Execution mode ibkr but IBKR not connected — skipping %s",
-                                    symbol,
-                                )
-                            else:
-                                trade.execution_mode = "simulated"
-                                trade.ibkr_account_id = active_ibkr_account_id
-                                db.insert_trade(trade)
-                                risk_manager.register_open_trade(trade)
-                                confirmation_tracker.reset(trade.symbol)
-                                trade_created = True
-                                portfolio_dirty = True
-                                logger.info(
-                                    "Simulated BUY %s x %.0f @ $%.2f (SL $%.2f / TP $%.2f)",
-                                    trade.symbol,
-                                    trade.quantity,
-                                    trade.entry_price,
-                                    trade.stop_loss,
-                                    trade.take_profit,
-                                )
-                        elif not decision.approved:
-                            trade_skip_reason = decision.reason
-                            logger.info("Risk: rejected %s — %s", symbol, decision.reason)
-
-                    if db:
-                        prediction_rows.append(
-                            db.build_prediction_payload(
-                                state,
-                                prediction,
-                                trade_created=trade_created,
-                                trade_skip_reason=trade_skip_reason,
-                            )
-                        )
-                        logger.info("Prediction queued")
-
-                except Exception as exc:
-                    logger.error("Post-Jev processing failed for %s: %s", symbol, exc)
+            eval_outcome = process_ready_states(
+                ready_states=ready_states,
+                predictions_by_symbol=predictions_by_symbol,
+                db=db,
+                risk_manager=risk_manager,
+                risk_settings=risk_settings,
+                strategy_config=strategy_config,
+                runtime_entry_strategy=strategy_config,
+                bar_store=bar_store,
+                quotes_by_symbol=quotes_by_symbol,
+                confirmation_tracker=confirmation_tracker,
+                bot_enabled=bot_enabled,
+                execution_mode=execution_mode,
+                ibkr=ibkr,
+                settings=settings,
+                active_ibkr_account_id=active_ibkr_account_id,
+                daily_pnl_account_id=daily_pnl_account_id,
+                runtime=runtime,
+            )
+            prediction_rows = eval_outcome.prediction_rows
+            if eval_outcome.portfolio_dirty:
+                portfolio_dirty = True
+            jev_sell_symbols.update(eval_outcome.jev_sell_symbols)
 
             if db and prediction_rows:
                 db.insert_predictions_batch(prediction_rows)
                 logger.info("Stored %s prediction(s)", len(prediction_rows))
-                global _last_prediction_backfill_mono
                 backfill_now = time.monotonic()
                 if (
-                    backfill_now - _last_prediction_backfill_mono
+                    backfill_now - runtime.last_prediction_backfill_mono
                 ) >= _PREDICTION_BACKFILL_INTERVAL_SEC:
-                    _last_prediction_backfill_mono = backfill_now
+                    runtime.last_prediction_backfill_mono = backfill_now
                     db.backfill_prediction_forward_returns(
                         limit=len(prediction_rows) * 4
                     )
@@ -1509,6 +1125,7 @@ def run() -> int:
                     max_hold_minutes=0,
                     jev_sell_symbols=jev_sell_symbols,
                     fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                    ibkr_account_id=daily_pnl_account_id,
                 ):
                     portfolio_dirty = True
 
@@ -1519,93 +1136,28 @@ def run() -> int:
                 portfolio_dirty = False
 
             now = time.monotonic()
-            if db and (now - last_heartbeat) >= settings.heartbeat_interval_sec:
-                heartbeat_status = BotStatusUpdate(
-                    enabled=bot_enabled,
-                    trading_mode=trading_mode,
-                    ibkr_connected=ibkr.is_connected(),
-                    jev_connected=jev_connected_this_cycle or jev_connected,
-                    execution_mode=configured_execution_mode,
-                    last_error=None,
-                    ibkr_account_id=None,
-                )
-                account = None
-                ibkr_positions = None
-                simulated_portfolio = None
-                open_trades = None
-
-                if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
-                    try:
-                        account = ibkr.get_account_summary()
-                        heartbeat_status.ibkr_account_id = account.account_id
-                        if account.account_id != active_ibkr_account_id:
-                            prev = active_ibkr_account_id
-                            active_ibkr_account_id = account.account_id
-                            logger.info(
-                                "Active IBKR account: %s -> %s",
-                                prev or "(none)",
-                                active_ibkr_account_id,
-                            )
-                            if risk_manager:
-                                capital, currency = _resolve_effective_capital(
-                                    ibkr,
-                                    risk_settings.account_capital,
-                                )
-                                risk_manager.update_capital(capital, currency)
-                                risk_manager.reload_open_trades(
-                                    db.get_open_trades(active_ibkr_account_id)
-                                )
-                                risk_manager.set_daily_realized_pnl(
-                                    db.get_daily_realized_pnl(active_ibkr_account_id)
-                                )
-                        ibkr_positions = nonzero_positions(ibkr.get_positions())
-                    except Exception as exc:
-                        logger.warning("IBKR heartbeat failed: %s", exc)
-                        heartbeat_status.ibkr_account_id = None
-                elif risk_manager:
-                    simulated_portfolio = risk_manager.get_portfolio_snapshot(
-                        quotes_by_symbol
+            if db:
+                last_heartbeat, last_portfolio_history, active_ibkr_account_id = (
+                    run_heartbeat_cycle(
+                        db=db,
+                        settings=settings,
+                        ibkr=ibkr,
+                        risk_manager=risk_manager,
+                        risk_settings=risk_settings,
+                        quotes=quotes,
+                        quotes_by_symbol=quotes_by_symbol,
+                        bot_enabled=bot_enabled,
+                        trading_mode=trading_mode,
+                        configured_execution_mode=configured_execution_mode,
+                        execution_mode=execution_mode,
+                        jev_connected_this_cycle=jev_connected_this_cycle,
+                        jev_connected=jev_connected,
+                        active_ibkr_account_id=active_ibkr_account_id,
+                        last_heartbeat=last_heartbeat,
+                        last_portfolio_history=last_portfolio_history,
+                        now_mono=now,
                     )
-                    open_trades = risk_manager.open_trades
-
-                include_portfolio_history = should_refresh(
-                    now,
-                    last_portfolio_history,
-                    settings.portfolio_history_interval_sec,
                 )
-
-                db.write_heartbeat(
-                    heartbeat_status,
-                    quotes,
-                    account=account,
-                    ibkr_positions=ibkr_positions,
-                    simulated_portfolio=simulated_portfolio,
-                    open_trades=open_trades,
-                    include_portfolio_history=include_portfolio_history,
-                    include_market_snapshots=settings.market_snapshots_enabled,
-                )
-                if include_portfolio_history:
-                    last_portfolio_history = now
-
-                heartbeat_equity = None
-                if account is not None:
-                    heartbeat_equity = account.net_liquidation
-                if heartbeat_equity is None and risk_manager is not None:
-                    snapshot = simulated_portfolio or risk_manager.get_portfolio_snapshot(
-                        quotes_by_symbol
-                    )
-                    heartbeat_equity = snapshot.equity
-                if heartbeat_equity is not None and heartbeat_equity > 0:
-                    db.maybe_advance_risk_baseline(
-                        heartbeat_equity,
-                        threshold=settings.risk_sync_threshold_pct,
-                        ibkr_account_id=(
-                            account.account_id if account is not None else None
-                        ),
-                    )
-
-                logger.info("Heartbeat written to Supabase")
-                last_heartbeat = now
 
         except Exception as exc:
             logger.exception("Eval cycle failed: %s", exc)
@@ -1631,8 +1183,8 @@ def run() -> int:
             settings.heartbeat_interval_sec,
             track_heartbeat=db is not None,
         )
-        if sleep_for > 0 and not _shutdown_requested:
-            _interruptible_sleep(sleep_for)
+        if sleep_for > 0 and not runtime.shutdown_requested:
+            _interruptible_sleep(sleep_for, runtime)
 
     if db:
         try:

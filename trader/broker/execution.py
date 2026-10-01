@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_eod_last_attempt_mono: Dict[str, float] = {}
 EOD_RETRY_SEC = 30.0
 
 
@@ -59,6 +58,8 @@ def sync_ibkr_exits(
     ibkr: IBKRClient,
     risk_manager: RiskManager,
     db: SupabaseRepository,
+    *,
+    ibkr_account_id: Optional[str] = None,
 ) -> bool:
     """Close DB trades when IBKR bracket SL or TP legs fill."""
     closed_any = False
@@ -102,7 +103,9 @@ def sync_ibkr_exits(
         )
 
     if closed_any:
-        risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
+        risk_manager.set_daily_realized_pnl(
+            db.get_daily_realized_pnl(ibkr_account_id)
+        )
 
     return closed_any
 
@@ -113,6 +116,8 @@ def force_eod_ibkr_exits(
     db: SupabaseRepository,
     *,
     fill_timeout_sec: float = 30.0,
+    ibkr_account_id: Optional[str] = None,
+    eod_last_attempt_mono: Optional[Dict[str, float]] = None,
 ) -> bool:
     """Flatten all IBKR longs before the regular session close.
 
@@ -121,14 +126,15 @@ def force_eod_ibkr_exits(
     """
     closed_any = False
     now_mono = time.monotonic()
+    attempt_map = eod_last_attempt_mono if eod_last_attempt_mono is not None else {}
     for trade in list(risk_manager.open_trades):
         if trade.execution_mode != "ibkr":
             continue
         symbol_key = trade.symbol.upper()
-        last_attempt = _eod_last_attempt_mono.get(symbol_key, 0.0)
+        last_attempt = attempt_map.get(symbol_key, 0.0)
         if now_mono - last_attempt < EOD_RETRY_SEC:
             continue
-        _eod_last_attempt_mono[symbol_key] = now_mono
+        attempt_map[symbol_key] = now_mono
         try:
             fill = ibkr.close_long_position(
                 trade.symbol,
@@ -151,7 +157,9 @@ def force_eod_ibkr_exits(
         )
 
     if closed_any:
-        risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
+        risk_manager.set_daily_realized_pnl(
+            db.get_daily_realized_pnl(ibkr_account_id)
+        )
     return closed_any
 
 
@@ -172,6 +180,7 @@ def close_ibkr_signal_exits(
     jev_sell_symbols: Optional[set[str]] = None,
     demotion_exit_symbols: Optional[set[str]] = None,
     fill_timeout_sec: float = 30.0,
+    ibkr_account_id: Optional[str] = None,
 ) -> bool:
     """Close IBKR positions on time limit, demotion, or high-confidence Jev SELL."""
     closed_any = False
@@ -222,7 +231,9 @@ def close_ibkr_signal_exits(
         )
 
     if closed_any:
-        risk_manager.set_daily_realized_pnl(db.get_daily_realized_pnl())
+        risk_manager.set_daily_realized_pnl(
+            db.get_daily_realized_pnl(ibkr_account_id)
+        )
 
     return closed_any
 

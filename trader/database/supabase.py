@@ -13,7 +13,7 @@ from supabase import Client, ClientOptions, create_client
 
 from risk.recommendations import should_advance_baseline
 
-from market.bars import Bar, BAR_SIZE_DAILY, BAR_SIZE_INTRADAY
+from market.bars import BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, Bar
 from models.types import (
     AccountSummary,
     BotControl,
@@ -30,6 +30,7 @@ from models.types import (
     TradeRecord,
     TradingMode,
 )
+from database.prediction_payload import build_prediction_payload as _build_prediction_payload
 from database.trade_account_scope import (
     apply_trade_account_filter,
     include_legacy_untagged_trades,
@@ -159,6 +160,16 @@ def _trade_from_row(row: dict) -> TradeRecord:
         ibkr_parent_order_id=int(row["ibkr_parent_order_id"]) if row.get("ibkr_parent_order_id") is not None else None,
         ibkr_sl_order_id=int(row["ibkr_sl_order_id"]) if row.get("ibkr_sl_order_id") is not None else None,
         ibkr_tp_order_id=int(row["ibkr_tp_order_id"]) if row.get("ibkr_tp_order_id") is not None else None,
+        entry_commission=(
+            float(row["commission"])
+            if row.get("commission") is not None
+            else None
+        ),
+        ibkr_account_id=(
+            str(row["ibkr_account_id"])
+            if row.get("ibkr_account_id")
+            else None
+        ),
     )
 
 
@@ -1076,7 +1087,6 @@ class SupabaseRepository:
         }
         self.client.table("portfolio_history").insert(payload).execute()
 
-    @_db_synchronized
     def build_prediction_payload(
         self,
         state: MarketState,
@@ -1085,17 +1095,12 @@ class SupabaseRepository:
         trade_created: bool = False,
         trade_skip_reason: Optional[str] = None,
     ) -> dict:
-        return {
-            "symbol": prediction.symbol,
-            "timestamp": prediction.timestamp.isoformat(),
-            "price": state.price,
-            "buy_probability": prediction.buy,
-            "hold_probability": prediction.hold,
-            "sell_probability": prediction.sell,
-            "market_snapshot": state.to_dict(),
-            "trade_created": trade_created,
-            "trade_skip_reason": None if trade_created else trade_skip_reason,
-        }
+        return _build_prediction_payload(
+            state,
+            prediction,
+            trade_created=trade_created,
+            trade_skip_reason=trade_skip_reason,
+        )
 
     @_db_synchronized
     def insert_prediction(
@@ -1131,12 +1136,15 @@ class SupabaseRepository:
         """Fill forward returns on mature predictions using cached 5-minute bars."""
         from market.bars import BAR_SIZE_INTRADAY
 
+        now = datetime.now(timezone.utc)
+        mature_cutoff = (now - timedelta(minutes=15)).isoformat()
         try:
             pending = (
                 self.client.table("predictions")
                 .select("id, symbol, timestamp, price, return_15m_pct")
                 .is_("return_15m_pct", "null")
-                .order("timestamp", desc=True)
+                .lte("timestamp", mature_cutoff)
+                .order("timestamp")
                 .limit(limit)
                 .execute()
             )
@@ -1144,9 +1152,26 @@ class SupabaseRepository:
             logger.debug("Forward-return backfill skipped: %s", exc)
             return 0
 
+        rows = pending.data or []
+        if not rows:
+            return 0
+
+        symbols = list(
+            dict.fromkeys(
+                str(row.get("symbol", "")).upper()
+                for row in rows
+                if str(row.get("symbol", "")).strip()
+            )
+        )
+        bars_by_symbol: Dict[str, List[Bar]] = {}
+        for symbol in symbols:
+            bars_by_symbol[symbol] = sorted(
+                self.get_bars(symbol, BAR_SIZE_INTRADAY),
+                key=lambda bar: bar.ts,
+            )
+
         updated = 0
-        now = datetime.now(timezone.utc)
-        for row in pending.data or []:
+        for row in rows:
             ts_raw = row.get("timestamp")
             symbol = str(row.get("symbol", "")).upper()
             entry_price = float(row.get("price") or 0)
@@ -1155,14 +1180,8 @@ class SupabaseRepository:
             entry_ts = _parse_timestamp(ts_raw)
             if entry_ts.tzinfo is None:
                 entry_ts = entry_ts.replace(tzinfo=timezone.utc)
-            age_min = (now - entry_ts).total_seconds() / 60.0
-            if age_min < 15:
-                continue
 
-            bars = sorted(
-                self.get_bars(symbol, BAR_SIZE_INTRADAY),
-                key=lambda bar: bar.ts,
-            )
+            bars = bars_by_symbol.get(symbol) or []
             if not bars:
                 continue
 
