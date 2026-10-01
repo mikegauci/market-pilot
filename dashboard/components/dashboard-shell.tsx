@@ -8,6 +8,7 @@ import {
   DashboardNavContent,
   getDashboardPageTitle,
 } from "@/components/dashboard-nav";
+import { DashboardRightSidebar } from "@/components/dashboard-right-sidebar";
 import { IbkrAccountBadge } from "@/components/ibkr-account-badge";
 import { Logo } from "@/components/logo";
 import { OpenPositionsCountProvider } from "@/components/open-positions-count-provider";
@@ -99,6 +100,8 @@ export function DashboardShell({ children, botStatus }: DashboardShellProps) {
 
             <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-8">{children}</main>
           </div>
+
+          <DashboardRightSidebar />
         </div>
       </OpenPositionsCountProvider>
     </BotStatusProvider>

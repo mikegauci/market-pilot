@@ -12,9 +12,8 @@ import {
   Settings,
   TrendingUp,
 } from "lucide-react";
-import { LiveStatus } from "@/components/live-status";
+import { DashboardAccountPanel } from "@/components/dashboard-account-panel";
 import { Logo } from "@/components/logo";
-import { NavEquity } from "@/components/nav-equity";
 import { useOpenPositionsCount } from "@/components/open-positions-count-provider";
 import { signOut } from "@/lib/actions";
 import { cn } from "@/lib/utils";
@@ -79,8 +78,6 @@ export function DashboardNavContent({
       </div>
 
       <nav className="flex flex-col gap-1">
-        <NavEquity />
-
         {primaryLinks.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
@@ -105,10 +102,11 @@ export function DashboardNavContent({
           {settingsLink.label}
         </Link>
 
-        <div className="mt-3">
-          <LiveStatus variant="sidebar" />
-        </div>
       </nav>
+
+      <div className="mt-4 lg:hidden">
+        <DashboardAccountPanel />
+      </div>
 
       <button
         type="button"

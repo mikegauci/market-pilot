@@ -9,7 +9,11 @@ import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import type { PortfolioSnapshot } from "@/lib/types/database";
 import { cn, formatCurrency } from "@/lib/utils";
 
-export function NavEquity() {
+type NavEquityProps = {
+  className?: string;
+};
+
+export function NavEquity({ className }: NavEquityProps) {
   const botStatus = useLiveBotStatus();
   const tradingMode = botStatus.trading_mode === "live" ? "live" : "paper";
 
@@ -30,7 +34,7 @@ export function NavEquity() {
   const { flashKey, flashClassName } = useEquityFlash(equity);
 
   return (
-    <div className="mb-3 space-y-3 px-3 py-2">
+    <div className={cn("mb-3 space-y-3 px-3 py-2", className)}>
       <IbkrAccountBadge />
       <div>
       <p className="flex items-baseline gap-1.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
