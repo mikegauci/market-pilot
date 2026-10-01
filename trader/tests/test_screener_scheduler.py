@@ -214,7 +214,8 @@ class TestScreenerScheduler(unittest.TestCase):
         rankings = [
             JevRankedSymbol("BABA", 0.9, 0.05, 0.05, 1),
             JevRankedSymbol("TSM", 0.7, 0.2, 0.1, 2),
-            JevRankedSymbol("VALE", 0.65, 0.25, 0.1, 3),
+            JevRankedSymbol("OLD", 0.4, 0.5, 0.1, 3),
+            JevRankedSymbol("VALE", 0.65, 0.25, 0.1, 4),
         ]
         with patch(
             "watchlist.screener_scheduler.load_em_universe",

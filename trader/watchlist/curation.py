@@ -122,7 +122,7 @@ def prune_watchlist_pins_below_min_buy(
     risk_settings: RiskSettings,
     rankings: Sequence[JevRankedSymbol],
 ) -> List[WatchlistPin]:
-    """Drop locked pins not scored on this scan or below the watchlist min BUY floor."""
+    """Drop locked pins only when this scan scored them below the watchlist min BUY floor."""
     min_buy = float(getattr(risk_settings, "watchlist_min_buy", 0.6) or 0.0)
     scores = buy_by_symbol(rankings)
     pruned: List[WatchlistPin] = []
@@ -132,7 +132,7 @@ def prune_watchlist_pins_below_min_buy(
             continue
         if pin.locked:
             score = scores.get(symbol)
-            if score is None or score < min_buy:
+            if score is not None and score < min_buy:
                 continue
         pruned.append(
             WatchlistPin(

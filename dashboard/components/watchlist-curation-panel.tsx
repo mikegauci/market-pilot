@@ -124,8 +124,8 @@ export function WatchlistCurationPanel({ settings, compact = false }: Props) {
       <p className="text-xs text-zinc-500">
         Add or remove symbols, lock names so EM scans cannot drop them (extra slots beyond max
         dynamic), and choose demotion protection per symbol. Only rows you change here are saved —
-        scan picks rotate unless locked. Locked names auto-unpin if Jev BUY falls below watchlist
-        min BUY after a scan.
+        scan picks rotate unless locked. Locked names stay until you remove them, or until an EM
+        scan scores them below watchlist min BUY.
       </p>
 
       <div className="flex flex-wrap gap-2">

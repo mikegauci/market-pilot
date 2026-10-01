@@ -90,7 +90,8 @@ class TestWatchlistCuration(unittest.TestCase):
         pruned = prune_watchlist_pins_below_min_buy(
             settings, settings.watchlist_jev_rankings
         )
-        self.assertEqual(pruned, [])
+        self.assertEqual(len(pruned), 1)
+        self.assertEqual(pruned[0].symbol, "INFY")
 
     def test_locked_pin_without_score_still_merges(self) -> None:
         settings = _settings(
