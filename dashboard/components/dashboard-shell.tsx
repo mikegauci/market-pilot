@@ -8,6 +8,7 @@ import {
   DashboardNavContent,
   getDashboardPageTitle,
 } from "@/components/dashboard-nav";
+import { IbkrAccountBadge } from "@/components/ibkr-account-badge";
 import { Logo } from "@/components/logo";
 import { OpenPositionsCountProvider } from "@/components/open-positions-count-provider";
 import type { BotStatus } from "@/lib/types/database";
@@ -87,6 +88,7 @@ export function DashboardShell({ children, botStatus }: DashboardShellProps) {
               </button>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-zinc-100">{pageTitle}</p>
+                <IbkrAccountBadge compact />
               </div>
               <Logo size="sm" />
             </header>

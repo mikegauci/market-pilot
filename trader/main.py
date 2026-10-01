@@ -339,6 +339,7 @@ def _init_risk_manager(
     ibkr: IBKRClient,
     trading_mode: TradingMode,
     risk_settings: RiskSettings | None = None,
+    ibkr_account_id: str | None = None,
 ) -> RiskManager:
     if risk_settings is None:
         risk_settings = db.get_risk_settings()
@@ -347,9 +348,9 @@ def _init_risk_manager(
         settings=risk_settings,
         trading_mode=trading_mode,
         effective_capital=capital,
-        open_trades=db.get_open_trades(),
-        daily_realized_pnl=db.get_daily_realized_pnl(),
-        total_realized_pnl=db.get_total_realized_pnl(),
+        open_trades=db.get_open_trades(ibkr_account_id),
+        daily_realized_pnl=db.get_daily_realized_pnl(ibkr_account_id),
+        total_realized_pnl=db.get_total_realized_pnl(ibkr_account_id),
         currency=currency,
     )
     manager.hydrate_reentry_cooldowns(
@@ -629,9 +630,21 @@ def run() -> int:
     execution_mode = effective_execution_mode(
         settings.data_source, configured_execution_mode
     )
+    startup_ibkr_account_id: str | None = None
+    if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
+        try:
+            startup_ibkr_account_id = ibkr.get_account_summary().account_id
+        except Exception as exc:
+            logger.warning("Could not read IBKR account at startup: %s", exc)
     risk_manager: Optional[RiskManager] = None
     if db:
-        risk_manager = _init_risk_manager(db, ibkr, trading_mode, risk_settings)
+        risk_manager = _init_risk_manager(
+            db,
+            ibkr,
+            trading_mode,
+            risk_settings,
+            ibkr_account_id=startup_ibkr_account_id,
+        )
         if configured_execution_mode != settings.execution_mode:
             logger.info(
                 "Execution mode from dashboard: %s (env default: %s)",
@@ -683,6 +696,7 @@ def run() -> int:
     last_bot_control_sync = startup_mono
     last_settings_sync = startup_mono
     last_portfolio_history = 0.0
+    active_ibkr_account_id: str | None = startup_ibkr_account_id
     last_live_bar_flush = 0.0
     last_general_news_refresh = 0.0
     general_news_running = False
@@ -1358,6 +1372,7 @@ def run() -> int:
                                         trade.ibkr_sl_order_id = bracket.sl_order_id
                                         trade.ibkr_tp_order_id = bracket.tp_order_id
                                         trade.entry_commission = bracket.entry_commission
+                                        trade.ibkr_account_id = active_ibkr_account_id
                                         db.insert_trade(trade)
                                         risk_manager.register_open_trade(trade)
                                         confirmation_tracker.reset(trade.symbol)
@@ -1435,6 +1450,7 @@ def run() -> int:
                                 )
                             else:
                                 trade.execution_mode = "simulated"
+                                trade.ibkr_account_id = active_ibkr_account_id
                                 db.insert_trade(trade)
                                 risk_manager.register_open_trade(trade)
                                 confirmation_tracker.reset(trade.symbol)
@@ -1511,6 +1527,7 @@ def run() -> int:
                     jev_connected=jev_connected_this_cycle or jev_connected,
                     execution_mode=configured_execution_mode,
                     last_error=None,
+                    ibkr_account_id=None,
                 )
                 account = None
                 ibkr_positions = None
@@ -1520,9 +1537,31 @@ def run() -> int:
                 if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
                     try:
                         account = ibkr.get_account_summary()
+                        heartbeat_status.ibkr_account_id = account.account_id
+                        if account.account_id != active_ibkr_account_id:
+                            prev = active_ibkr_account_id
+                            active_ibkr_account_id = account.account_id
+                            logger.info(
+                                "Active IBKR account: %s -> %s",
+                                prev or "(none)",
+                                active_ibkr_account_id,
+                            )
+                            if risk_manager:
+                                capital, currency = _resolve_effective_capital(
+                                    ibkr,
+                                    risk_settings.account_capital,
+                                )
+                                risk_manager.update_capital(capital, currency)
+                                risk_manager.reload_open_trades(
+                                    db.get_open_trades(active_ibkr_account_id)
+                                )
+                                risk_manager.set_daily_realized_pnl(
+                                    db.get_daily_realized_pnl(active_ibkr_account_id)
+                                )
                         ibkr_positions = nonzero_positions(ibkr.get_positions())
                     except Exception as exc:
                         logger.warning("IBKR heartbeat failed: %s", exc)
+                        heartbeat_status.ibkr_account_id = None
                 elif risk_manager:
                     simulated_portfolio = risk_manager.get_portfolio_snapshot(
                         quotes_by_symbol
@@ -1560,6 +1599,9 @@ def run() -> int:
                     db.maybe_advance_risk_baseline(
                         heartbeat_equity,
                         threshold=settings.risk_sync_threshold_pct,
+                        ibkr_account_id=(
+                            account.account_id if account is not None else None
+                        ),
                     )
 
                 logger.info("Heartbeat written to Supabase")

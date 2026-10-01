@@ -30,6 +30,10 @@ from models.types import (
     TradeRecord,
     TradingMode,
 )
+from database.trade_account_scope import (
+    apply_trade_account_filter,
+    include_legacy_untagged_trades,
+)
 from news.market_news import dedupe_market_news_rows
 
 logger = logging.getLogger(__name__)
@@ -172,6 +176,8 @@ class SupabaseRepository:
         )
         self._lock = threading.RLock()
         self._cached_risk_sync_equity: Optional[float] = None
+        self._cached_risk_sync_account_id: Optional[str] = None
+        self._profile_capital_cache: Dict[str, float] = {}
         self._known_position_symbols: Optional[set[str]] = None
 
     @_db_synchronized
@@ -186,7 +192,76 @@ class SupabaseRepository:
             "last_error": status.last_error,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+        payload["ibkr_account_id"] = status.ibkr_account_id
         self.client.table("bot_status").update(payload).eq("id", 1).execute()
+
+    @_db_synchronized
+    def get_account_profile(self, account_id: str) -> Optional[dict]:
+        # Avoid maybe_single(): execute() returns None when no row (not an empty .data).
+        result = (
+            self.client.table("ibkr_account_profiles")
+            .select("*")
+            .eq("account_id", account_id)
+            .limit(1)
+            .execute()
+        )
+        if result is None or not result.data:
+            return None
+        return result.data[0]
+
+    @_db_synchronized
+    def ensure_account_profile(
+        self,
+        account_id: str,
+        equity: float,
+        *,
+        unrealized_pnl: float = 0.0,
+    ) -> dict:
+        existing = self.get_account_profile(account_id)
+        if existing:
+            return existing
+
+        realized = self.get_total_realized_pnl(account_id)
+        baseline = equity - realized - unrealized_pnl
+        now = datetime.now(timezone.utc).isoformat()
+        payload = {
+            "account_id": account_id,
+            "baseline_equity": baseline,
+            "account_capital": equity,
+            "risk_sync_equity": equity,
+            "created_at": now,
+            "updated_at": now,
+        }
+        self.client.table("ibkr_account_profiles").upsert(
+            payload,
+            on_conflict="account_id",
+            ignore_duplicates=True,
+        ).execute()
+        created = self.get_account_profile(account_id)
+        if created:
+            logger.info(
+                "New IBKR account profile %s (baseline equity $%.2f)",
+                account_id,
+                float(created.get("baseline_equity", baseline)),
+            )
+            return created
+        return payload
+
+    @_db_synchronized
+    def sync_account_capital_for_profile(
+        self,
+        account_id: str,
+        equity: float,
+    ) -> None:
+        """Keep per-account account_capital aligned with live equity snapshots."""
+        prev = self._profile_capital_cache.get(account_id)
+        if prev is not None and abs(prev - equity) < 0.01:
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("ibkr_account_profiles").update(
+            {"account_capital": equity, "updated_at": now}
+        ).eq("account_id", account_id).execute()
+        self._profile_capital_cache[account_id] = equity
 
     @_db_synchronized
     def insert_portfolio_snapshot(
@@ -202,6 +277,7 @@ class SupabaseRepository:
             "daily_pnl": daily_pnl,
             "total_pnl": total_pnl,
             "currency": account.currency,
+            "ibkr_account_id": account.account_id,
         }
         self.client.table("portfolio_history").insert(payload).execute()
 
@@ -630,10 +706,39 @@ class SupabaseRepository:
         self,
         current_equity: float,
         threshold: float = 0.05,
+        *,
+        ibkr_account_id: Optional[str] = None,
     ) -> bool:
         """Advance risk_sync_equity when equity moves enough; does not change risk dollar fields."""
         if current_equity <= 0:
             return False
+
+        if ibkr_account_id:
+            if self._cached_risk_sync_account_id != ibkr_account_id:
+                profile = self.get_account_profile(ibkr_account_id)
+                self._cached_risk_sync_equity = (
+                    float(profile["risk_sync_equity"])
+                    if profile and profile.get("risk_sync_equity") is not None
+                    else None
+                )
+                self._cached_risk_sync_account_id = ibkr_account_id
+
+            baseline = self._cached_risk_sync_equity
+            if not should_advance_baseline(current_equity, baseline, threshold):
+                return False
+
+            now = datetime.now(timezone.utc).isoformat()
+            self.client.table("ibkr_account_profiles").update(
+                {"risk_sync_equity": current_equity, "updated_at": now}
+            ).eq("account_id", ibkr_account_id).execute()
+            self._cached_risk_sync_equity = current_equity
+            logger.info(
+                "Risk recommendation baseline updated for %s: %s -> %s",
+                ibkr_account_id,
+                baseline,
+                current_equity,
+            )
+            return True
 
         baseline = self._cached_risk_sync_equity
 
@@ -652,14 +757,27 @@ class SupabaseRepository:
         return True
 
     @_db_synchronized
-    def get_open_trades(self) -> List[TradeRecord]:
-        result = (
+    def get_open_trades(
+        self,
+        ibkr_account_id: Optional[str] = None,
+    ) -> List[TradeRecord]:
+        query = (
             self.client.table("trades")
             .select("*")
             .eq("status", "open")
             .order("entry_time")
-            .execute()
         )
+        if ibkr_account_id:
+            include_legacy = include_legacy_untagged_trades(
+                self.client,
+                ibkr_account_id,
+            )
+            query = apply_trade_account_filter(
+                query,
+                ibkr_account_id,
+                include_legacy=include_legacy,
+            )
+        result = query.execute()
         return [_trade_from_row(row) for row in result.data or []]
 
     @_db_synchronized
@@ -691,15 +809,25 @@ class SupabaseRepository:
         return latest
 
     @_db_synchronized
-    def get_daily_realized_pnl(self) -> float:
+    def get_daily_realized_pnl(self, ibkr_account_id: Optional[str] = None) -> float:
         today = datetime.now(timezone.utc).date().isoformat()
-        result = (
+        query = (
             self.client.table("trades")
             .select("net_pnl")
             .eq("status", "closed")
             .gte("exit_time", f"{today}T00:00:00+00:00")
-            .execute()
         )
+        if ibkr_account_id:
+            include_legacy = include_legacy_untagged_trades(
+                self.client,
+                ibkr_account_id,
+            )
+            query = apply_trade_account_filter(
+                query,
+                ibkr_account_id,
+                include_legacy=include_legacy,
+            )
+        result = query.execute()
         total = 0.0
         for row in result.data or []:
             if row.get("net_pnl") is not None:
@@ -707,13 +835,23 @@ class SupabaseRepository:
         return total
 
     @_db_synchronized
-    def get_total_realized_pnl(self) -> float:
-        result = (
+    def get_total_realized_pnl(self, ibkr_account_id: Optional[str] = None) -> float:
+        query = (
             self.client.table("trades")
             .select("net_pnl")
             .eq("status", "closed")
-            .execute()
         )
+        if ibkr_account_id:
+            include_legacy = include_legacy_untagged_trades(
+                self.client,
+                ibkr_account_id,
+            )
+            query = apply_trade_account_filter(
+                query,
+                ibkr_account_id,
+                include_legacy=include_legacy,
+            )
+        result = query.execute()
         total = 0.0
         for row in result.data or []:
             if row.get("net_pnl") is not None:
@@ -745,6 +883,8 @@ class SupabaseRepository:
             "created_at": now,
             "updated_at": now,
         }
+        if trade.ibkr_account_id:
+            payload["ibkr_account_id"] = trade.ibkr_account_id
         self.client.table("trades").insert(payload).execute()
         return trade.id
 
@@ -849,10 +989,23 @@ class SupabaseRepository:
         unrealized_pnl: float = 0.0,
     ) -> None:
         if account is not None:
-            # IBKR account summary has equity/cash only — derive P&L from trades
-            # plus open-position unrealized, matching the simulated path.
-            daily_pnl = self.get_daily_realized_pnl() + unrealized_pnl
-            total_pnl = self.get_total_realized_pnl() + unrealized_pnl
+            profile = self.ensure_account_profile(
+                account.account_id,
+                account.net_liquidation,
+                unrealized_pnl=unrealized_pnl,
+            )
+            baseline = float(profile.get("baseline_equity", account.net_liquidation))
+            if account.ibkr_daily_pnl is not None:
+                daily_pnl = account.ibkr_daily_pnl
+            else:
+                daily_pnl = (
+                    self.get_daily_realized_pnl(account.account_id) + unrealized_pnl
+                )
+            total_pnl = account.net_liquidation - baseline
+            self.sync_account_capital_for_profile(
+                account.account_id,
+                account.net_liquidation,
+            )
             self.insert_portfolio_snapshot(
                 account,
                 daily_pnl=daily_pnl,

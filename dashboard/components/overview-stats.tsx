@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, type ReactNode } from "react";
+import { IbkrAccountBadge } from "@/components/ibkr-account-badge";
 import { useLiveBotStatus } from "@/components/bot-status-provider";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
 import { fetchLatestPortfolio, fetchPositions } from "@/lib/data-client";
@@ -52,9 +53,12 @@ export function OverviewStats({ portfolio, positions, currency, className }: Pro
   const livePortfolio = useLiveQuery(
     portfolio,
     fetchPortfolio,
-    ["portfolio_history"],
+    ["portfolio_history", "bot_status"],
     undefined,
-    { keepPreviousOnNull: true },
+    {
+      keepPreviousOnNull: true,
+      resetKey: botStatus.ibkr_account_id,
+    },
   );
   const livePositions = useLiveQuery(positions, fetchPositionsList, ["positions"]);
 
@@ -67,6 +71,9 @@ export function OverviewStats({ portfolio, positions, currency, className }: Pro
   return (
     <Card className={cn("h-full", className)}>
       <CardTitle>Portfolio</CardTitle>
+      <div className="mt-2 border-b border-zinc-800/60 pb-3">
+        <IbkrAccountBadge />
+      </div>
       <div className="mt-3">
         <StatRow
           label="Equity"

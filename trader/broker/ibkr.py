@@ -152,7 +152,8 @@ class IBKRClient:
         self.host = host
         self.port = port
         self.client_id = client_id
-        self.account = account
+        self.account = account.strip() if account else ""
+        self._preferred_account = self.account
         self.market_data_type = market_data_type
         self.ib = IB()
         self._lock = threading.RLock()
@@ -301,11 +302,8 @@ class IBKRClient:
         # 1=live, 2=frozen, 3=delayed, 4=delayed frozen — paper accounts use delayed.
         self.ib.reqMarketDataType(self.market_data_type)
         logger.info("IBKR market data type: %s", self.market_data_type)
-        if not self.account:
-            accounts = self.ib.managedAccounts()
-            if accounts:
-                self.account = accounts[0]
-                logger.info("Using IBKR account: %s", self.account)
+        if self.is_connected():
+            self._sync_session_account()
         logger.info("Connected to IBKR")
 
     @_ibkr_synchronized
@@ -314,18 +312,56 @@ class IBKRClient:
             self.ib.disconnect()
             logger.info("Disconnected from IBKR")
 
-    def _resolve_account(self) -> str:
-        if self.account:
-            return self.account
-        accounts = self.ib.managedAccounts()
-        if not accounts:
+    def _sync_session_account(self) -> str:
+        """Bind to IBKR_ACCOUNT when set, else the Gateway/TWS login session account."""
+        if not self.is_connected():
+            if self._preferred_account:
+                return self._preferred_account
+            raise RuntimeError("IBKR is not connected")
+
+        managed = list(self.ib.managedAccounts())
+        if not managed:
             raise RuntimeError("No IBKR managed accounts available")
-        self.account = accounts[0]
+
+        if self._preferred_account:
+            if self._preferred_account not in managed:
+                logger.warning(
+                    "IBKR_ACCOUNT %s not in session managed accounts %s — using pinned id",
+                    self._preferred_account,
+                    managed,
+                )
+            if self.account != self._preferred_account:
+                logger.info("Using IBKR account: %s (pinned)", self._preferred_account)
+            self.account = self._preferred_account
+            return self.account
+
+        if self.account and self.account in managed:
+            session_account = self.account
+        else:
+            session_account = managed[0]
+        if len(managed) > 1:
+            logger.debug(
+                "Multiple IBKR managed accounts %s — using %s for this session",
+                managed,
+                session_account,
+            )
+        if self.account and self.account != session_account:
+            logger.info(
+                "IBKR session account changed: %s -> %s",
+                self.account,
+                session_account,
+            )
+        elif not self.account:
+            logger.info("Using IBKR account: %s (session)", session_account)
+        self.account = session_account
         return self.account
+
+    def _resolve_account(self) -> str:
+        return self._sync_session_account()
 
     @_ibkr_synchronized
     def get_account_summary(self) -> AccountSummary:
-        account = self._resolve_account()
+        account = self._sync_session_account()
         values = {item.tag: item for item in self.ib.accountValues(account)}
 
         def value(tag: str, default: float = 0.0) -> float:
@@ -335,10 +371,19 @@ class IBKRClient:
             parsed = _safe_float(item.value)
             return parsed if parsed is not None else default
 
+        def optional_value(tag: str) -> Optional[float]:
+            item = values.get(tag)
+            if item is None:
+                return None
+            return _safe_float(item.value)
+
         currency = "USD"
         net_liq_item = values.get("NetLiquidation")
         if net_liq_item and net_liq_item.currency:
             currency = net_liq_item.currency
+
+        unrealized = value("UnrealizedPnL")
+        realized = value("RealizedPnL")
 
         return AccountSummary(
             account_id=account,
@@ -346,6 +391,9 @@ class IBKRClient:
             total_cash=value("TotalCashValue"),
             buying_power=value("BuyingPower"),
             currency=currency,
+            ibkr_daily_pnl=optional_value("DailyPnL"),
+            unrealized_pnl=unrealized,
+            realized_pnl=realized,
         )
 
     @_ibkr_synchronized

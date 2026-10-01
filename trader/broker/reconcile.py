@@ -148,6 +148,10 @@ def reconcile_orphan_ibkr_positions(
             )
 
         trade = build_reconciled_trade(position, risk_settings, trading_mode, legs)
+        try:
+            trade.ibkr_account_id = ibkr.get_account_summary().account_id
+        except Exception:
+            pass
         db.insert_trade(trade)
         risk_manager.register_open_trade(trade)
         reconciled += 1

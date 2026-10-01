@@ -28,6 +28,9 @@ class AccountSummary:
     total_cash: float
     buying_power: float
     currency: str = "USD"
+    ibkr_daily_pnl: Optional[float] = None
+    unrealized_pnl: float = 0.0
+    realized_pnl: float = 0.0
 
 
 @dataclass
@@ -59,6 +62,7 @@ class BotStatusUpdate:
     jev_connected: bool = False
     execution_mode: ExecutionMode = ExecutionMode.IBKR
     last_error: Optional[str] = None
+    ibkr_account_id: Optional[str] = None
 
 
 @dataclass
@@ -189,6 +193,7 @@ class TradeRecord:
     ibkr_tp_order_id: Optional[int] = None
     entry_commission: Optional[float] = None
     exit_commission: Optional[float] = None
+    ibkr_account_id: Optional[str] = None
 
 
 @dataclass(frozen=True)

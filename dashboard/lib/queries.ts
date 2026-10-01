@@ -1,9 +1,12 @@
+import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
+import { filterTradesByActiveIbkrAccount } from "@/lib/ibkr-trade-scope";
 import { normalizeSettings } from "@/lib/normalize-settings";
 import { createClient } from "@/lib/supabase/server";
 import type {
   BotStatus,
   EmUniverseRow,
   MarketNewsRow,
+  IbkrAccountProfile,
   PortfolioSnapshot,
   Position,
   Prediction,
@@ -26,11 +29,29 @@ export async function getSettings(): Promise<Settings | null> {
   return normalizeSettings(data as Settings | null);
 }
 
+export async function getIbkrAccountProfile(
+  accountId: string,
+): Promise<IbkrAccountProfile | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("ibkr_account_profiles")
+    .select("*")
+    .eq("account_id", accountId)
+    .limit(1)
+    .maybeSingle();
+  return data as IbkrAccountProfile | null;
+}
+
 export async function getLatestPortfolio(): Promise<PortfolioSnapshot | null> {
   const supabase = await createClient();
+  const accountId = await fetchActiveIbkrAccountId(supabase);
+  if (!accountId) {
+    return null;
+  }
   const { data } = await supabase
     .from("portfolio_history")
     .select("*")
+    .eq("ibkr_account_id", accountId)
     .order("timestamp", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -39,9 +60,14 @@ export async function getLatestPortfolio(): Promise<PortfolioSnapshot | null> {
 
 export async function getPortfolioHistory(limit = 5000): Promise<PortfolioSnapshot[]> {
   const supabase = await createClient();
+  const accountId = await fetchActiveIbkrAccountId(supabase);
+  if (!accountId) {
+    return [];
+  }
   const { data } = await supabase
     .from("portfolio_history")
     .select("*")
+    .eq("ibkr_account_id", accountId)
     .order("timestamp", { ascending: false })
     .limit(limit);
   const rows = (data ?? []) as PortfolioSnapshot[];
@@ -51,12 +77,18 @@ export async function getPortfolioHistory(limit = 5000): Promise<PortfolioSnapsh
 
 export async function getClosedTrades(): Promise<Trade[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const accountId = await fetchActiveIbkrAccountId(supabase);
+  if (!accountId) {
+    return [];
+  }
+  let query = supabase
     .from("trades")
     .select("*")
     .eq("status", "closed")
     .order("exit_time", { ascending: false })
     .limit(500);
+  const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
+  const { data } = await scoped;
   return (data ?? []) as Trade[];
 }
 
@@ -105,11 +137,17 @@ export async function getPositions(): Promise<Position[]> {
 
 export async function getOpenTrades(): Promise<Trade[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const accountId = await fetchActiveIbkrAccountId(supabase);
+  if (!accountId) {
+    return [];
+  }
+  let query = supabase
     .from("trades")
     .select("*")
     .eq("status", "open")
     .order("entry_time", { ascending: false });
+  const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
+  const { data } = await scoped;
   return (data ?? []) as Trade[];
 }
 
@@ -125,21 +163,36 @@ export async function getActiveTradeCommands(): Promise<TradeCommand[]> {
 
 export async function getRecentTrades(limit = 10): Promise<Trade[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const accountId = await fetchActiveIbkrAccountId(supabase);
+  if (!accountId) {
+    return [];
+  }
+  let query = supabase
     .from("trades")
     .select("*")
     .order("entry_time", { ascending: false })
     .limit(limit);
+  const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
+  const { data } = await scoped;
   return (data ?? []) as Trade[];
 }
 
 export async function getAllTrades(status?: "open" | "closed" | "all"): Promise<Trade[]> {
   const supabase = await createClient();
-  let query = supabase.from("trades").select("*").order("entry_time", { ascending: false });
+  const accountId = await fetchActiveIbkrAccountId(supabase);
+  if (!accountId) {
+    return [];
+  }
+  let query = supabase
+    .from("trades")
+    .select("*")
+    .order("entry_time", { ascending: false })
+    .limit(200);
   if (status && status !== "all") {
     query = query.eq("status", status);
   }
-  const { data } = await query.limit(200);
+  const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
+  const { data } = await scoped;
   return (data ?? []) as Trade[];
 }
 

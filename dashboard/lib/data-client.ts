@@ -1,3 +1,5 @@
+import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
+import { filterTradesByActiveIbkrAccount } from "@/lib/ibkr-trade-scope";
 import { createClient } from "@/lib/supabase/client";
 import type {
   MarketNewsRow,
@@ -76,11 +78,17 @@ export async function fetchTradedPredictions(limit = 10): Promise<Prediction[]> 
 
 export async function fetchOpenTrades(): Promise<Trade[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
+  const accountId = await fetchActiveIbkrAccountId(supabase);
+  if (!accountId) {
+    return [];
+  }
+  let query = supabase
     .from("trades")
     .select("*")
     .eq("status", "open")
     .order("entry_time", { ascending: false });
+  const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
+  const { data, error } = await scoped;
   if (error) {
     logFetchError("trades", error.message);
     throw new Error(error.message);
@@ -104,11 +112,17 @@ export async function fetchActiveTradeCommands(): Promise<TradeCommand[]> {
 
 export async function fetchRecentTrades(limit = 10): Promise<Trade[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
+  const accountId = await fetchActiveIbkrAccountId(supabase);
+  if (!accountId) {
+    return [];
+  }
+  let query = supabase
     .from("trades")
     .select("*")
     .order("entry_time", { ascending: false })
     .limit(limit);
+  const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
+  const { data, error } = await scoped;
   if (error) {
     logFetchError("trades", error.message);
     return [];
@@ -118,11 +132,17 @@ export async function fetchRecentTrades(limit = 10): Promise<Trade[]> {
 
 export async function fetchAllTrades(): Promise<Trade[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
+  const accountId = await fetchActiveIbkrAccountId(supabase);
+  if (!accountId) {
+    return [];
+  }
+  let query = supabase
     .from("trades")
     .select("*")
     .order("entry_time", { ascending: false })
     .limit(200);
+  const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
+  const { data, error } = await scoped;
   if (error) {
     logFetchError("trades", error.message);
     return [];
@@ -132,9 +152,14 @@ export async function fetchAllTrades(): Promise<Trade[]> {
 
 export async function fetchLatestPortfolio(): Promise<PortfolioSnapshot | null> {
   const supabase = createClient();
+  const accountId = await fetchActiveIbkrAccountId(supabase);
+  if (!accountId) {
+    return null;
+  }
   const { data, error } = await supabase
     .from("portfolio_history")
     .select("*")
+    .eq("ibkr_account_id", accountId)
     .order("timestamp", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -147,9 +172,14 @@ export async function fetchLatestPortfolio(): Promise<PortfolioSnapshot | null> 
 
 export async function fetchPortfolioHistory(limit = 5000): Promise<PortfolioSnapshot[]> {
   const supabase = createClient();
+  const accountId = await fetchActiveIbkrAccountId(supabase);
+  if (!accountId) {
+    return [];
+  }
   const { data, error } = await supabase
     .from("portfolio_history")
     .select("*")
+    .eq("ibkr_account_id", accountId)
     .order("timestamp", { ascending: false })
     .limit(limit);
   if (error) {
@@ -163,12 +193,18 @@ export async function fetchPortfolioHistory(limit = 5000): Promise<PortfolioSnap
 
 export async function fetchClosedTrades(): Promise<Trade[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
+  const accountId = await fetchActiveIbkrAccountId(supabase);
+  if (!accountId) {
+    return [];
+  }
+  let query = supabase
     .from("trades")
     .select("*")
     .eq("status", "closed")
     .order("exit_time", { ascending: false })
     .limit(500);
+  const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
+  const { data, error } = await scoped;
   if (error) {
     logFetchError("trades", error.message);
     return [];

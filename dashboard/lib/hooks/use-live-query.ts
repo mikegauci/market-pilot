@@ -34,16 +34,18 @@ export function useLiveQuery<T>(
   fetchFn: () => Promise<T>,
   tables: string[],
   pollIntervalMs = LIVE_DATA_POLL_MS,
-  options?: { keepPreviousOnNull?: boolean },
+  options?: { keepPreviousOnNull?: boolean; resetKey?: string | number | null },
 ): T {
   const [data, setData] = useState(initial);
   const syncedInitialRef = useRef(initial);
   const keepPreviousOnNull = options?.keepPreviousOnNull ?? false;
+  const resetKey = options?.resetKey ?? null;
+  const resetKeyRef = useRef(resetKey);
 
   const refresh = useCallback(async () => {
     try {
       const next = await fetchFn();
-      if (keepPreviousOnNull && next === null) {
+      if (keepPreviousOnNull && next === null && resetKeyRef.current === resetKey) {
         return;
       }
       setData(next);
@@ -52,7 +54,17 @@ export function useLiveQuery<T>(
         console.warn("Live data refresh failed:", err);
       }
     }
-  }, [fetchFn, keepPreviousOnNull]);
+  }, [fetchFn, keepPreviousOnNull, resetKey]);
+
+  useEffect(() => {
+    if (resetKeyRef.current === resetKey) {
+      return;
+    }
+    resetKeyRef.current = resetKey;
+    syncedInitialRef.current = initial;
+    setData(initial);
+    void refresh();
+  }, [resetKey, initial, refresh]);
 
   useEffect(() => {
     if (!initialDataChanged(syncedInitialRef.current, initial)) {

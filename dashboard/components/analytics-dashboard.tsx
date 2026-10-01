@@ -108,7 +108,10 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
   const loadTrades = useCallback(() => fetchClosedTrades(), []);
   const loadPredictions = useCallback(() => fetchPredictions(2000), []);
 
-  const liveHistory = useLiveQuery(portfolioHistory, loadHistory, ["portfolio_history"]);
+  const liveHistory = useLiveQuery(portfolioHistory, loadHistory, [
+    "portfolio_history",
+    "bot_status",
+  ]);
   const liveTrades = useLiveQuery(closedTrades, loadTrades, ["trades"]);
   const livePredictions = useLiveQuery([] as Prediction[], loadPredictions, ["predictions"]);
 

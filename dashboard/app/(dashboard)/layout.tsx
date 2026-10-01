@@ -8,6 +8,7 @@ const defaultBotStatus = {
   execution_mode: "ibkr" as const,
   ibkr_connected: false,
   jev_connected: false,
+  ibkr_account_id: null,
   last_heartbeat: null,
   last_error: null,
   updated_at: "",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { IbkrAccountBadge } from "@/components/ibkr-account-badge";
 import { useLiveBotStatus } from "@/components/bot-status-provider";
 import { fetchLatestPortfolio } from "@/lib/data-client";
 import { useEquityFlash } from "@/lib/hooks/use-equity-flash";
@@ -16,9 +17,12 @@ export function NavEquity() {
   const portfolio = useLiveQuery<PortfolioSnapshot | null>(
     null,
     fetchPortfolio,
-    ["portfolio_history"],
+    ["portfolio_history", "bot_status"],
     undefined,
-    { keepPreviousOnNull: true },
+    {
+      keepPreviousOnNull: true,
+      resetKey: botStatus.ibkr_account_id,
+    },
   );
 
   const equity = portfolio?.equity ?? null;
@@ -26,7 +30,9 @@ export function NavEquity() {
   const { flashKey, flashClassName } = useEquityFlash(equity);
 
   return (
-    <div className="mb-2 px-3 py-2">
+    <div className="mb-3 space-y-3 px-3 py-2">
+      <IbkrAccountBadge />
+      <div>
       <p className="flex items-baseline gap-1.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
         <span>Equity</span>
         <span
@@ -48,6 +54,7 @@ export function NavEquity() {
       >
         {equity == null ? "—" : formatCurrency(equity, currency)}
       </p>
+      </div>
     </div>
   );
 }

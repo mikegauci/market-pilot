@@ -23,6 +23,7 @@ describe("portfolio-analytics", () => {
         daily_pnl: 5,
         total_pnl: 5,
         currency: "USD",
+        ibkr_account_id: null,
         created_at: "",
       },
       {
@@ -33,6 +34,7 @@ describe("portfolio-analytics", () => {
         daily_pnl: 10,
         total_pnl: 10,
         currency: "USD",
+        ibkr_account_id: null,
         created_at: "",
       },
       {
@@ -43,6 +45,7 @@ describe("portfolio-analytics", () => {
         daily_pnl: -5,
         total_pnl: 5,
         currency: "USD",
+        ibkr_account_id: null,
         created_at: "",
       },
     ];

@@ -5,6 +5,8 @@ export type BotStatus = {
   execution_mode: "simulated" | "ibkr";
   ibkr_connected: boolean;
   jev_connected: boolean;
+  /** IBKR account id for the current session (e.g. DUR217910). */
+  ibkr_account_id: string | null;
   last_heartbeat: string | null;
   last_error: string | null;
   updated_at: string;
@@ -182,6 +184,7 @@ export type Trade = {
   jev_buy_probability: number | null;
   execution_mode?: "simulated" | "ibkr";
   exit_reason?: string | null;
+  ibkr_account_id?: string | null;
   created_at: string;
 };
 
@@ -216,7 +219,17 @@ export type PortfolioSnapshot = {
   daily_pnl: number;
   total_pnl: number;
   currency: string;
+  ibkr_account_id: string | null;
   created_at: string;
+};
+
+export type IbkrAccountProfile = {
+  account_id: string;
+  baseline_equity: number;
+  account_capital: number;
+  risk_sync_equity: number | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type SymbolBar = {
