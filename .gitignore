@@ -63,4 +63,6 @@ supabase/.branches/
 !.agents/skills/add-strategy-filter/**
 !.agents/skills/review-trading-session/
 !.agents/skills/review-trading-session/**
+!.agents/skills/evaluate-prediction-strategy/
+!.agents/skills/evaluate-prediction-strategy/**
 skills-lock.json
