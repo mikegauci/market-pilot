@@ -110,7 +110,11 @@ export function JevCalibrationCard({ minJevConfidencePct }: Props) {
             thousands of rows in the browser).
           </p>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={handleToggle}>
+        <Button
+          type="button"
+          className="border border-zinc-600 bg-transparent px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800"
+          onClick={handleToggle}
+        >
           {open ? "Hide" : "Show calibration"}
         </Button>
       </div>
@@ -120,7 +124,11 @@ export function JevCalibrationCard({ minJevConfidencePct }: Props) {
       ) : error ? (
         <div className="mt-4 space-y-2">
           <p className="text-sm text-amber-400/90">{error}</p>
-          <Button type="button" variant="outline" size="sm" onClick={() => void loadCalibration()}>
+          <Button
+            type="button"
+            className="border border-zinc-600 bg-transparent px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800"
+            onClick={() => void loadCalibration()}
+          >
             Retry
           </Button>
         </div>
