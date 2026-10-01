@@ -8,7 +8,6 @@ from typing import Callable, Dict, List, Optional, Protocol, Sequence, Tuple
 
 from typing import TYPE_CHECKING
 
-from market.history import HistoryStore
 from models.types import Quote
 
 if TYPE_CHECKING:
@@ -114,17 +113,6 @@ def compute_trend_changes(daily_bars: Sequence[Bar]) -> TrendChanges:
         change_5d=pct(min(5, len(closes) - 1)) if len(closes) > 1 else None,
         change_1w=change_1w,
     )
-
-
-def seed_history_from_intraday_bars(store: HistoryStore, bars: Sequence[Bar]) -> None:
-    """Seed rolling history from cached 5-min bars for instant Jev warm-up."""
-    if not bars:
-        return
-    symbol = bars[0].symbol.upper()
-    history = store.get(symbol)
-    for bar in sorted(bars, key=lambda b: b.ts):
-        ts = _ensure_utc(bar.ts)
-        history.record_point(ts, bar.close, bar.volume)
 
 
 def _five_min_bucket(ts: datetime) -> datetime:
@@ -250,11 +238,6 @@ class BarStore:
             self._trend_cache.clear()
             return
         self._trend_cache.pop(symbol.upper(), None)
-
-    def seed_history_store(self, store: HistoryStore, symbol: str) -> None:
-        bars = self.get_intraday_bars(symbol)
-        if bars:
-            seed_history_from_intraday_bars(store, bars)
 
     def seed_minute_aggregator(self, aggregator: "MinuteBarAggregator", symbol: str) -> None:
         if aggregator.bar_count() > 0:

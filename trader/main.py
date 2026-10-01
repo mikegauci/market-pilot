@@ -62,7 +62,7 @@ from watchlist.jev_screener import (
 )
 from watchlist.screener_scheduler import EMWatchlistScheduler, ScreenerJobContext
 from watchlist.universe import load_em_universe
-from runtime.capital import resolve_effective_capital
+from runtime.capital import resolve_effective_capital, sync_risk_manager_capital
 from runtime.entry_eval import process_ready_states
 from runtime.heartbeat import run_heartbeat_cycle
 from runtime.sim_close import persist_simulated_closes
@@ -289,6 +289,7 @@ def _init_risk_manager(
         total_realized_pnl=db.get_total_realized_pnl(ibkr_account_id),
         currency=currency,
     )
+    sync_risk_manager_capital(manager, ibkr, risk_settings.account_capital)
     manager.hydrate_reentry_cooldowns(
         db.get_recent_symbol_exit_times(risk_settings.reentry_cooldown_minutes)
     )
@@ -743,13 +744,11 @@ def run() -> int:
                         or is_us_regular_session_open()
                     ):
                         try:
-                            scan_universe = load_em_universe(
-                                db=db,
-                                path=settings.resolved_em_universe_path,
-                            )
                             snapshot_symbols = list(
                                 dict.fromkeys(
-                                    scan_universe + [benchmark_symbol] + open_symbols
+                                    merge_core_watchlist(risk_settings, open_symbols)
+                                    + [benchmark_symbol]
+                                    + open_symbols
                                 )
                             )
                             quote_snapshot = {
@@ -809,11 +808,11 @@ def run() -> int:
                     ibkr.sync_watchlist_subscriptions(all_symbols)
                 if risk_manager:
                     risk_manager.update_settings(risk_settings)
-                    capital, currency = resolve_effective_capital(
+                    sync_risk_manager_capital(
+                        risk_manager,
                         ibkr,
                         risk_settings.account_capital,
                     )
-                    risk_manager.update_capital(capital, currency)
 
             daily_pnl_account_id = (
                 active_ibkr_account_id

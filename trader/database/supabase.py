@@ -194,6 +194,24 @@ class SupabaseRepository:
         self._cached_risk_sync_account_id: Optional[str] = None
         self._profile_capital_cache: Dict[str, float] = {}
         self._known_position_symbols: Optional[set[str]] = None
+        self._legacy_untagged_cache: Dict[str, bool] = {}
+
+    def _include_legacy_untagged(self, ibkr_account_id: str) -> bool:
+        cached = self._legacy_untagged_cache.get(ibkr_account_id)
+        if cached is not None:
+            return cached
+        include_legacy = include_legacy_untagged_trades(
+            self.client,
+            ibkr_account_id,
+        )
+        self._legacy_untagged_cache[ibkr_account_id] = include_legacy
+        return include_legacy
+
+    def invalidate_legacy_untagged_cache(self, ibkr_account_id: Optional[str] = None) -> None:
+        if ibkr_account_id is None:
+            self._legacy_untagged_cache.clear()
+        else:
+            self._legacy_untagged_cache.pop(ibkr_account_id, None)
 
     @_db_synchronized
     def update_bot_status(self, status: BotStatusUpdate) -> None:
@@ -783,14 +801,10 @@ class SupabaseRepository:
             .order("entry_time")
         )
         if ibkr_account_id:
-            include_legacy = include_legacy_untagged_trades(
-                self.client,
-                ibkr_account_id,
-            )
             query = apply_trade_account_filter(
                 query,
                 ibkr_account_id,
-                include_legacy=include_legacy,
+                include_legacy=self._include_legacy_untagged(ibkr_account_id),
             )
         result = query.execute()
         return [_trade_from_row(row) for row in result.data or []]
@@ -833,14 +847,10 @@ class SupabaseRepository:
             .gte("exit_time", f"{today}T00:00:00+00:00")
         )
         if ibkr_account_id:
-            include_legacy = include_legacy_untagged_trades(
-                self.client,
-                ibkr_account_id,
-            )
             query = apply_trade_account_filter(
                 query,
                 ibkr_account_id,
-                include_legacy=include_legacy,
+                include_legacy=self._include_legacy_untagged(ibkr_account_id),
             )
         result = query.execute()
         total = 0.0
@@ -857,14 +867,10 @@ class SupabaseRepository:
             .eq("status", "closed")
         )
         if ibkr_account_id:
-            include_legacy = include_legacy_untagged_trades(
-                self.client,
-                ibkr_account_id,
-            )
             query = apply_trade_account_filter(
                 query,
                 ibkr_account_id,
-                include_legacy=include_legacy,
+                include_legacy=self._include_legacy_untagged(ibkr_account_id),
             )
         result = query.execute()
         total = 0.0
@@ -874,7 +880,24 @@ class SupabaseRepository:
         return total
 
     @_db_synchronized
+    def _trade_exists(self, trade_id: str) -> bool:
+        result = (
+            self.client.table("trades")
+            .select("id")
+            .eq("id", trade_id)
+            .limit(1)
+            .execute()
+        )
+        return bool(result.data)
+
+    @_db_synchronized
     def insert_trade(self, trade: TradeRecord) -> str:
+        if self._trade_exists(trade.id):
+            logger.warning(
+                "insert_trade skipped — %s already persisted (idempotent)",
+                trade.id,
+            )
+            return trade.id
         now = datetime.now(timezone.utc).isoformat()
         payload = {
             "id": trade.id,
@@ -900,7 +923,18 @@ class SupabaseRepository:
         }
         if trade.ibkr_account_id:
             payload["ibkr_account_id"] = trade.ibkr_account_id
-        self.client.table("trades").insert(payload).execute()
+        try:
+            self.client.table("trades").insert(payload).execute()
+        except Exception as exc:
+            if self._trade_exists(trade.id):
+                logger.warning(
+                    "insert_trade duplicate after ambiguous error — treating as success: %s",
+                    exc,
+                )
+                return trade.id
+            raise
+        if trade.ibkr_account_id:
+            self.invalidate_legacy_untagged_cache()
         return trade.id
 
     @_db_synchronized

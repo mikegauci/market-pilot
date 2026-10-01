@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from broker.ibkr import (
+    IBKRClient,
     _describe_trade_state,
     is_kid_document_rejection,
     is_permanent_ibkr_eligibility_rejection,
@@ -88,6 +90,41 @@ class TestPermanentEligibilityRejection(unittest.TestCase):
                 "IB 201: Order rejected - reason:No Trading Permission"
             )
         )
+
+
+class TestSyncBracketChildQuantities(unittest.TestCase):
+    def test_resizes_child_orders_to_filled_quantity(self) -> None:
+        client = IBKRClient.__new__(IBKRClient)
+        client.ib = MagicMock()
+
+        contract = SimpleNamespace()
+        parent = SimpleNamespace(
+            orderStatus=SimpleNamespace(status="Submitted"),
+            order=SimpleNamespace(),
+        )
+        sl = SimpleNamespace(
+            order=SimpleNamespace(totalQuantity=10),
+            orderStatus=SimpleNamespace(status="Submitted"),
+        )
+        tp = SimpleNamespace(
+            order=SimpleNamespace(totalQuantity=10),
+            orderStatus=SimpleNamespace(status="Submitted"),
+        )
+
+        client._cancel_trade = MagicMock()  # type: ignore[method-assign]
+        client._sync_bracket_child_quantities(
+            contract,
+            parent,
+            sl,
+            tp,
+            6,
+            requested_qty=10,
+            symbol="AAPL",
+        )
+
+        self.assertEqual(sl.order.totalQuantity, 6)
+        self.assertEqual(tp.order.totalQuantity, 6)
+        self.assertEqual(client.ib.placeOrder.call_count, 2)
 
 
 if __name__ == "__main__":

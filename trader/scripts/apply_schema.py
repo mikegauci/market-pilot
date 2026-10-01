@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Apply Phase 1 schema to Supabase via direct Postgres connection.
 
+Deprecated for ongoing schema work: use Supabase MCP apply_migration on the live
+project (see .cursor/rules/supabase-mcp.mdc). Keep this script for one-off local
+bootstrap or disaster recovery only.
+
 Requires in trader/.env:
   SUPABASE_URL=https://<ref>.supabase.co
   SUPABASE_DB_PASSWORD=<database password from Dashboard > Settings > Database>

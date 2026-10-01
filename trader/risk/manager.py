@@ -51,10 +51,15 @@ class RiskManager:
         self.daily_realized_pnl = daily_realized_pnl
         self.total_realized_pnl = total_realized_pnl
         self._last_exit_at: Dict[str, datetime] = {}
+        self._ibkr_buying_power: Optional[float] = None
 
     def update_capital(self, effective_capital: float, currency: str = "USD") -> None:
         self.effective_capital = effective_capital
         self.currency = currency
+
+    def set_ibkr_buying_power(self, buying_power: Optional[float]) -> None:
+        """When set, entry sizing uses IBKR buying power instead of NLV − deployed."""
+        self._ibkr_buying_power = buying_power
 
     def update_settings(self, settings: RiskSettings) -> None:
         self.settings = settings
@@ -115,6 +120,8 @@ class RiskManager:
         return sum(t.position_value for t in self.open_trades)
 
     def _available_cash(self) -> float:
+        if self._ibkr_buying_power is not None:
+            return self._ibkr_buying_power
         return self.effective_capital + self.total_realized_pnl - self._deployed_capital()
 
     def _unrealized_pnl(self, quotes: Dict[str, Quote]) -> float:

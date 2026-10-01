@@ -737,6 +737,20 @@ class IBKRClient:
                 f"Parent order for {symbol} did not fill within {fill_timeout_sec}s ({detail})"
             )
 
+        filled_qty = int(fill.quantity)
+        if filled_qty < 1:
+            raise RuntimeError(f"Invalid fill quantity for {symbol}: {fill.quantity}")
+        if filled_qty != qty:
+            self._sync_bracket_child_quantities(
+                contract,
+                parent_trade,
+                sl_trade,
+                tp_trade,
+                filled_qty,
+                requested_qty=qty,
+                symbol=symbol,
+            )
+
         logger.info(
             "IBKR bracket BUY %s x %s @ $%.2f (commission $%.2f; parent=%s sl=%s tp=%s)",
             symbol,
@@ -807,6 +821,33 @@ class IBKRClient:
             commission = _commission_from_trade(trade)
             return OrderFill(price=avg, quantity=filled, commission=commission)
         return None
+
+    def _sync_bracket_child_quantities(
+        self,
+        contract: Stock,
+        parent_trade: Trade,
+        sl_trade: Trade,
+        tp_trade: Trade,
+        filled_qty: int,
+        *,
+        requested_qty: int,
+        symbol: str,
+    ) -> None:
+        """Match SL/TP sizes to the filled parent quantity (partial fills)."""
+        if parent_trade.orderStatus.status not in TERMINAL_ORDER_STATUSES:
+            self._cancel_trade(parent_trade)
+        for child_trade in (sl_trade, tp_trade):
+            child_qty = int(_safe_float(child_trade.order.totalQuantity) or 0)
+            if child_qty == filled_qty:
+                continue
+            child_trade.order.totalQuantity = filled_qty
+            self.ib.placeOrder(contract, child_trade.order)
+        logger.info(
+            "IBKR bracket %s resized legs to %s shares (requested %s)",
+            symbol,
+            filled_qty,
+            requested_qty,
+        )
 
     def _cancel_trade(self, trade: Trade) -> None:
         if trade.orderStatus.status not in {"Filled", "Cancelled", "Inactive"}:

@@ -8,7 +8,7 @@ from broker.ibkr import IBKRClient
 from broker.reconcile import nonzero_positions
 from config import Settings
 from database.supabase import SupabaseRepository
-from runtime.capital import resolve_effective_capital
+from runtime.capital import sync_risk_manager_capital
 from runtime.timing import should_refresh
 from models.types import BotStatusUpdate, ExecutionMode, Quote, RiskSettings, TradingMode
 from risk.manager import RiskManager
@@ -68,11 +68,11 @@ def run_heartbeat_cycle(
                     active_ibkr_account_id,
                 )
                 if risk_manager:
-                    capital, currency = resolve_effective_capital(
+                    sync_risk_manager_capital(
+                        risk_manager,
                         ibkr,
                         risk_settings.account_capital,
                     )
-                    risk_manager.update_capital(capital, currency)
                     risk_manager.reload_open_trades(
                         db.get_open_trades(active_ibkr_account_id)
                     )
