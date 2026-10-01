@@ -244,6 +244,54 @@ export async function fetchAnalyticsPredictions(limit = 2000): Promise<Predictio
   return (data ?? []) as Prediction[];
 }
 
+function isHighBuySignal(p: Prediction): boolean {
+  return (
+    p.buy_probability > p.hold_probability && p.buy_probability > p.sell_probability
+  );
+}
+
+function compareBuyRank(a: Prediction, b: Prediction): number {
+  if (b.buy_probability !== a.buy_probability) {
+    return b.buy_probability - a.buy_probability;
+  }
+  return (
+    b.buy_probability -
+    b.hold_probability -
+    (a.buy_probability - a.hold_probability)
+  );
+}
+
+/** Highest BUY scores in a rolling window — one row per symbol (best eval in window). */
+export async function fetchRecentTopBuyPredictions(
+  windowMinutes = 5,
+  limit = 8,
+): Promise<Prediction[]> {
+  const supabase = createClient();
+  const since = new Date(Date.now() - windowMinutes * 60_000).toISOString();
+  const { data, error } = await supabase
+    .from("predictions")
+    .select("*")
+    .gte("timestamp", since)
+    .order("timestamp", { ascending: false })
+    .limit(400);
+  if (error) {
+    logFetchError("predictions", error.message);
+    return [];
+  }
+
+  const bestBySymbol = new Map<string, Prediction>();
+  for (const row of (data ?? []) as Prediction[]) {
+    if (!isHighBuySignal(row)) continue;
+    const key = row.symbol.toUpperCase();
+    const existing = bestBySymbol.get(key);
+    if (!existing || compareBuyRank(row, existing) < 0) {
+      bestBySymbol.set(key, row);
+    }
+  }
+
+  return [...bestBySymbol.values()].sort(compareBuyRank).slice(0, limit);
+}
+
 export async function fetchLatestPredictionsBySymbol(limit = 500): Promise<Prediction[]> {
   const supabase = createClient();
   const { data, error } = await supabase

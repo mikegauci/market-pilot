@@ -3,6 +3,7 @@
 import { LiveStatus } from "@/components/live-status";
 import { NavEquity } from "@/components/nav-equity";
 import { SidebarOpenPositions } from "@/components/sidebar-open-positions";
+import { SidebarRecentBuyPredictions } from "@/components/sidebar-recent-buy-predictions";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -17,6 +18,7 @@ export function DashboardAccountPanel({ className }: Props) {
         <NavEquity className="mb-0 px-0 py-0" />
       </div>
       <LiveStatus variant="sidebar" />
+      <SidebarRecentBuyPredictions />
       <SidebarOpenPositions />
     </div>
   );
