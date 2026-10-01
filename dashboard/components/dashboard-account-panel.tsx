@@ -16,8 +16,8 @@ export function DashboardAccountPanel({ className }: Props) {
       <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
         <NavEquity className="mb-0 px-0 py-0" />
       </div>
-      <SidebarOpenPositions />
       <LiveStatus variant="sidebar" />
+      <SidebarOpenPositions />
     </div>
   );
 }
