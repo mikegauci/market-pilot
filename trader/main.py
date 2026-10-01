@@ -68,6 +68,7 @@ from runtime.heartbeat import run_heartbeat_cycle
 from runtime.sim_close import persist_simulated_closes
 from runtime.startup import connect_ibkr_with_retries, run_ibkr_startup_backfill
 from runtime.state import TraderRuntimeState
+from runtime.status_log import log_trader_running
 from runtime.timing import compute_loop_sleep_sec, should_refresh
 
 logger = logging.getLogger(__name__)
@@ -611,6 +612,22 @@ def run() -> int:
     general_news_running = False
     general_news_lock = threading.Lock()
     data_source_label = "ibkr" if ibkr.is_connected() else "mock"
+
+    startup_market_open = (
+        settings.data_source != DataSource.IBKR or is_us_regular_session_open()
+    )
+    open_count = len(risk_manager.open_trades) if risk_manager else 0
+    log_trader_running(
+        bot_enabled=bot_enabled,
+        market_open=startup_market_open,
+        ibkr_connected=ibkr.is_connected(),
+        jev_connected=jev is not None,
+        execution_mode=execution_mode,
+        open_trades=open_count,
+        ibkr_account_id=active_ibkr_account_id,
+        data_source=data_source_label,
+    )
+    runtime.last_trader_status_log_mono = time.monotonic()
 
     def _start_general_news_refresh() -> None:
         nonlocal last_general_news_refresh, general_news_running
@@ -1160,6 +1177,23 @@ def run() -> int:
                         last_portfolio_history=last_portfolio_history,
                         now_mono=now,
                     )
+                )
+
+            if should_refresh(
+                now,
+                runtime.last_trader_status_log_mono,
+                _CLOSED_MARKET_LOG_INTERVAL_SEC,
+            ):
+                runtime.last_trader_status_log_mono = now
+                log_trader_running(
+                    bot_enabled=bot_enabled,
+                    market_open=market_open,
+                    ibkr_connected=ibkr.is_connected(),
+                    jev_connected=jev_connected_this_cycle or jev_connected,
+                    execution_mode=execution_mode,
+                    open_trades=len(risk_manager.open_trades) if risk_manager else 0,
+                    ibkr_account_id=active_ibkr_account_id,
+                    data_source=data_source_label,
                 )
 
         except Exception as exc:
