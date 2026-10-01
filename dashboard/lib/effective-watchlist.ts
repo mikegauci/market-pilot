@@ -133,6 +133,83 @@ export function formatWatchlistScanStatus(status: WatchlistScanStatus): string {
   }
 }
 
+export type EmUniverseScanSchedule = {
+  visible: boolean;
+  dueNow: boolean;
+  nextScanAt: Date | null;
+  refreshMinutes: number;
+};
+
+export type EmUniverseScanScheduleInput = Pick<
+  Settings,
+  "watchlist_dynamic_enabled" | "watchlist_screener_ran_at" | "watchlist_refresh_minutes"
+>;
+
+function parseScanTimestamp(value: string): Date {
+  return new Date(value);
+}
+
+/** Match trader watchlist.jev_screener.screener_due schedule (not deferrals). */
+export function resolveEmUniverseScanSchedule(
+  settings: EmUniverseScanScheduleInput,
+  now: Date = new Date(),
+): EmUniverseScanSchedule {
+  const refreshMinutes = Math.max(1, settings.watchlist_refresh_minutes ?? 30);
+  if (!settings.watchlist_dynamic_enabled) {
+    return { visible: false, dueNow: false, nextScanAt: null, refreshMinutes };
+  }
+  const lastRaw = settings.watchlist_screener_ran_at;
+  if (!lastRaw) {
+    return { visible: true, dueNow: true, nextScanAt: null, refreshMinutes };
+  }
+  const last = parseScanTimestamp(lastRaw);
+  const nextScanAt = new Date(last.getTime() + refreshMinutes * 60_000);
+  const dueNow = now.getTime() >= nextScanAt.getTime();
+  return { visible: true, dueNow, nextScanAt: dueNow ? null : nextScanAt, refreshMinutes };
+}
+
+function formatCountdownParts(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${secs}s`;
+  }
+  return `${secs}s`;
+}
+
+export type EmUniverseScanCountdownVariant = "overview" | "settings";
+
+/** Short label for countdown UI (overview vs settings wording). */
+export function formatEmUniverseScanCountdown(
+  schedule: EmUniverseScanSchedule,
+  now: Date = new Date(),
+  variant: EmUniverseScanCountdownVariant = "overview",
+): string {
+  if (!schedule.visible) {
+    return "";
+  }
+  if (schedule.dueNow) {
+    if (variant === "settings") {
+      return "Scan due now — may wait until market is open or bars are ready.";
+    }
+    return "EM scan due now";
+  }
+  if (!schedule.nextScanAt) {
+    return variant === "settings" ? "Scan due now." : "EM scan due now";
+  }
+  const remainingSec = (schedule.nextScanAt.getTime() - now.getTime()) / 1000;
+  const countdown = formatCountdownParts(remainingSec);
+  if (variant === "settings") {
+    return `Next scan in ${countdown}.`;
+  }
+  return `Next full EM scan in ${countdown}`;
+}
+
 /** Short label for the live predicting panel. */
 export function formatPredictingWatchlistHeadline(status: WatchlistScanStatus): string {
   switch (status.mode) {

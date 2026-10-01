@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatEmUniverseScanCountdown,
   formatPredictingWatchlistHeadline,
   formatWatchlistScanStatus,
   resolveEffectiveWatchlist,
+  resolveEmUniverseScanSchedule,
   resolveWatchlistScanStatus,
 } from "@/lib/effective-watchlist";
 import { settingsFixture } from "@/lib/test-support/settings";
@@ -96,5 +98,58 @@ describe("resolveEffectiveWatchlist", () => {
     expect(formatPredictingWatchlistHeadline({ mode: "last_scan", ranAt: "2026-01-10T15:00:00Z" })).toContain(
       "dynamic EM",
     );
+  });
+
+  it("resolves EM scan schedule like trader screener_due", () => {
+    const now = new Date("2026-01-10T15:10:00Z");
+    const base = settingsFixture({
+      watchlist_refresh_minutes: 30,
+      watchlist_screener_ran_at: "2026-01-10T15:00:00Z",
+    });
+    const notDue = resolveEmUniverseScanSchedule(base, now);
+    expect(notDue.visible).toBe(true);
+    expect(notDue.dueNow).toBe(false);
+    expect(notDue.nextScanAt?.toISOString()).toBe("2026-01-10T15:30:00.000Z");
+
+    const due = resolveEmUniverseScanSchedule(
+      settingsFixture({
+        watchlist_refresh_minutes: 30,
+        watchlist_screener_ran_at: "2026-01-10T15:00:00Z",
+      }),
+      new Date("2026-01-10T15:31:00Z"),
+    );
+    expect(due.dueNow).toBe(true);
+    expect(due.nextScanAt).toBeNull();
+  });
+
+  it("hides schedule when dynamic mode is off", () => {
+    const schedule = resolveEmUniverseScanSchedule(
+      settingsFixture({ watchlist_dynamic_enabled: false }),
+    );
+    expect(schedule.visible).toBe(false);
+  });
+
+  it("first scan pending is due now", () => {
+    const schedule = resolveEmUniverseScanSchedule(
+      settingsFixture({ watchlist_screener_ran_at: null }),
+    );
+    expect(schedule.dueNow).toBe(true);
+    expect(formatEmUniverseScanCountdown(schedule)).toBe("EM scan due now");
+  });
+
+  it("formats countdown until next scan", () => {
+    const schedule = resolveEmUniverseScanSchedule(
+      settingsFixture({
+        watchlist_refresh_minutes: 30,
+        watchlist_screener_ran_at: "2026-01-10T15:00:00Z",
+      }),
+      new Date("2026-01-10T15:10:00Z"),
+    );
+    expect(formatEmUniverseScanCountdown(schedule, new Date("2026-01-10T15:10:00Z"))).toBe(
+      "Next full EM scan in 20m 0s",
+    );
+    expect(
+      formatEmUniverseScanCountdown(schedule, new Date("2026-01-10T15:10:00Z"), "settings"),
+    ).toBe("Next scan in 20m 0s.");
   });
 });

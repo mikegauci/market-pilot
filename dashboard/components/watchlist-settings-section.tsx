@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { ClientDateTime } from "@/components/client-date-time";
+import { EmUniverseScanCountdown } from "@/components/em-universe-scan-countdown";
 import { Input } from "@/components/ui/input";
 import { WatchlistCharts } from "@/components/watchlist-charts";
 import { WatchlistCurationPanel } from "@/components/watchlist-curation-panel";
@@ -129,6 +130,16 @@ export function WatchlistSettingsSection({ settings, emUniverse }: Props) {
             formatWatchlistScanStatus(scanStatus)
           )}
         </p>
+        {dynamicEnabled ? (
+          <p className="mt-1">
+            <EmUniverseScanCountdown
+              watchlist_dynamic_enabled={dynamicEnabled}
+              watchlist_screener_ran_at={settings.watchlist_screener_ran_at}
+              watchlist_refresh_minutes={settings.watchlist_refresh_minutes ?? 30}
+              variant="settings"
+            />
+          </p>
+        ) : null}
         <div className="mt-3 flex flex-wrap gap-1.5">
           {effectiveWatchlist.length ? (
             effectiveWatchlist.map((symbol) => (
