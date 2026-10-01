@@ -74,3 +74,33 @@ export function parseWatchlistCurationPayload(raw: unknown): WatchlistCurationPa
     watchlist_dismissed: parseWatchlistDismissed(body.watchlist_dismissed),
   };
 }
+
+function pinsEqual(a: WatchlistPin[], b: WatchlistPin[]): boolean {
+  const left = watchlistPinsToJson(a);
+  const right = watchlistPinsToJson(b);
+  if (left.length !== right.length) return false;
+  return left.every(
+    (pin, index) =>
+      pin.symbol === right[index]?.symbol &&
+      pin.locked === right[index]?.locked &&
+      pin.protect_demotion === right[index]?.protect_demotion,
+  );
+}
+
+function dismissedEqual(a: string[], b: string[]): boolean {
+  const left = parseWatchlistDismissed(a);
+  const right = parseWatchlistDismissed(b);
+  if (left.length !== right.length) return false;
+  return left.every((symbol, index) => symbol === right[index]);
+}
+
+export function isWatchlistCurationDirty(
+  pins: WatchlistPin[],
+  dismissed: string[],
+  saved: WatchlistCurationPayload,
+): boolean {
+  return (
+    !pinsEqual(pins, saved.watchlist_pins) ||
+    !dismissedEqual(dismissed, saved.watchlist_dismissed)
+  );
+}

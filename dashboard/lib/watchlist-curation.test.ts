@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseWatchlistCurationPayload, parseWatchlistPins } from "@/lib/watchlist-curation";
+import {
+  isWatchlistCurationDirty,
+  parseWatchlistCurationPayload,
+  parseWatchlistPins,
+} from "@/lib/watchlist-curation";
 
 describe("watchlist curation parse", () => {
   it("parses pin rows", () => {
@@ -18,5 +22,20 @@ describe("watchlist curation parse", () => {
     });
     expect(parsed.watchlist_pins[0]?.symbol).toBe("INFY");
     expect(parsed.watchlist_dismissed).toEqual(["VALE"]);
+  });
+
+  it("detects dirty state when a symbol is added", () => {
+    const saved = {
+      watchlist_pins: [],
+      watchlist_dismissed: [],
+    };
+    expect(isWatchlistCurationDirty([], [], saved)).toBe(false);
+    expect(
+      isWatchlistCurationDirty(
+        [{ symbol: "TSM", locked: true, protect_demotion: true }],
+        [],
+        saved,
+      ),
+    ).toBe(true);
   });
 });

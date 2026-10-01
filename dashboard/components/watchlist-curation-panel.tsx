@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { Lock, LockOpen, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import type { Settings, WatchlistPin } from "@/lib/types/database";
 import {
   dedupePins,
   isValidWatchlistSymbol,
+  isWatchlistCurationDirty,
   normalizeSymbol,
   parseWatchlistDismissed,
   parseWatchlistPins,
@@ -31,6 +33,7 @@ function pinForSymbol(pins: WatchlistPin[], symbol: string): WatchlistPin | unde
 }
 
 export function WatchlistCurationPanel({ settings, compact = false }: Props) {
+  const router = useRouter();
   const [explicitPins, setExplicitPins] = useState<WatchlistPin[]>(() =>
     parseWatchlistPins(settings.watchlist_pins),
   );
@@ -40,6 +43,19 @@ export function WatchlistCurationPanel({ settings, compact = false }: Props) {
   const [addSymbol, setAddSymbol] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const savedCuration = useMemo(
+    () => ({
+      watchlist_pins: parseWatchlistPins(settings.watchlist_pins),
+      watchlist_dismissed: parseWatchlistDismissed(settings.watchlist_dismissed),
+    }),
+    [settings.watchlist_pins, settings.watchlist_dismissed, settings.updated_at],
+  );
+
+  const isDirty = useMemo(
+    () => isWatchlistCurationDirty(explicitPins, dismissed, savedCuration),
+    [explicitPins, dismissed, savedCuration],
+  );
 
   const displayRows = useMemo(
     () => buildWatchlistDisplayRows(settings, explicitPins, dismissed),
@@ -96,6 +112,7 @@ export function WatchlistCurationPanel({ settings, compact = false }: Props) {
           watchlist_pins: watchlistPinsToJson(explicitPins),
           watchlist_dismissed: dismissed,
         });
+        router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Save failed");
       }
@@ -126,14 +143,16 @@ export function WatchlistCurationPanel({ settings, compact = false }: Props) {
         >
           Add
         </Button>
-        <Button
-          type="button"
-          className="px-3 py-1.5 text-xs"
-          disabled={pending}
-          onClick={handleSave}
-        >
-          {pending ? "Saving…" : "Save watchlist"}
-        </Button>
+        {isDirty ? (
+          <Button
+            type="button"
+            className="px-3 py-1.5 text-xs"
+            disabled={pending}
+            onClick={handleSave}
+          >
+            {pending ? "Saving…" : "Save watchlist"}
+          </Button>
+        ) : null}
       </div>
 
       {error ? <p className="text-xs text-red-400">{error}</p> : null}
