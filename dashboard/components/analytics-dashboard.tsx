@@ -13,21 +13,21 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { JevCalibrationCard } from "@/components/jev-calibration-card";
 import { Card, CardTitle } from "@/components/ui/card";
 import {
   fetchClosedTrades,
   fetchPortfolioHistory,
-  fetchPredictionsForCalibration,
   fetchSettings,
 } from "@/lib/data-client";
+import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import {
-  calibrationFocusBucketLabels,
-  computeJevCalibration,
-  type CalibrationBucket,
-} from "@/lib/jev-calibration";
+  ANALYTICS_PAGE_POLL_MS,
+  ANALYTICS_PORTFOLIO_HISTORY_LIMIT,
+} from "@/lib/analytics-data";
+import { LIVE_SETTINGS_POLL_MS } from "@/lib/live-data-config";
 import { perBarTooltipProps, renderPnlActiveBar } from "@/lib/recharts-bar-interaction";
 import { confidencePercentFromDecimal } from "@/lib/settings-display";
-import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import {
   buildDailyEquitySeries,
   buildDailyPnlSeries,
@@ -41,14 +41,14 @@ import {
   filterTradesByRange,
   pnlBySymbol,
 } from "@/lib/trade-analytics";
-import type { PortfolioSnapshot, Prediction, Settings, Trade } from "@/lib/types/database";
+import type { PortfolioSnapshot, Settings, Trade } from "@/lib/types/database";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 
 type Props = {
   portfolioHistory: PortfolioSnapshot[];
   closedTrades: Trade[];
   currency: string;
-  initialSettings: Settings | null;
+  settings: Settings | null;
 };
 
 const RANGE_OPTIONS: { value: PortfolioRange; label: string }[] = [
@@ -109,69 +109,38 @@ function formatChartDate(isoDate: string): string {
   return d.toLocaleDateString("en-GB", { month: "short", day: "numeric" });
 }
 
-function CalibrationTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: { payload?: CalibrationBucket; value?: number }[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  const bucket = payload[0]?.payload;
-  if (!bucket) return null;
-  return (
-    <div className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs shadow-lg">
-      {label && <p className="mb-1 font-medium text-zinc-200">{label}</p>}
-      <p className="text-zinc-300">
-        Avg 15m return:{" "}
-        <span className="tabular-nums text-emerald-300">
-          {bucket.avgReturn15m.toFixed(3)}%
-        </span>
-      </p>
-      <p className="text-zinc-500">
-        {bucket.count.toLocaleString()} predictions · avg BUY{" "}
-        {formatPercent(bucket.avgBuy)}
-      </p>
-    </div>
-  );
-}
-
 export function AnalyticsDashboard({
   portfolioHistory,
   closedTrades,
   currency,
-  initialSettings,
+  settings,
 }: Props) {
   const [range, setRange] = useState<PortfolioRange>("1d");
 
-  const loadHistory = useCallback(() => fetchPortfolioHistory(), []);
-  const loadTrades = useCallback(() => fetchClosedTrades(), []);
-  const loadCalibrationPredictions = useCallback(
-    () => fetchPredictionsForCalibration(),
+  const loadHistory = useCallback(
+    () => fetchPortfolioHistory(ANALYTICS_PORTFOLIO_HISTORY_LIMIT),
     [],
   );
+  const loadTrades = useCallback(() => fetchClosedTrades(), []);
   const loadSettings = useCallback(() => fetchSettings(), []);
 
-  const liveHistory = useLiveQuery(portfolioHistory, loadHistory, [
-    "portfolio_history",
-    "bot_status",
-  ]);
-  const liveTrades = useLiveQuery(closedTrades, loadTrades, ["trades"]);
-  const livePredictions = useLiveQuery([] as Prediction[], loadCalibrationPredictions, [
-    "predictions",
-  ]);
-  const liveSettings = useLiveQuery(initialSettings, loadSettings, ["settings"], undefined, {
-    keepPreviousOnNull: true,
-  });
+  const liveHistory = useLiveQuery(
+    portfolioHistory,
+    loadHistory,
+    ["portfolio_history"],
+    ANALYTICS_PAGE_POLL_MS,
+  );
+  const liveTrades = useLiveQuery(closedTrades, loadTrades, ["trades"], ANALYTICS_PAGE_POLL_MS);
+  const liveSettings = useLiveQuery(
+    settings,
+    loadSettings,
+    ["settings"],
+    LIVE_SETTINGS_POLL_MS,
+    { keepPreviousOnNull: true },
+  );
 
   const minJevConfidencePct = confidencePercentFromDecimal(
     liveSettings?.minimum_jev_confidence ?? 0.85,
-  );
-  const calibrationFocusLabels = useMemo(
-    () => calibrationFocusBucketLabels(minJevConfidencePct),
-    [minJevConfidencePct],
   );
 
   const filteredHistory = useMemo(
@@ -223,15 +192,6 @@ export function AnalyticsDashboard({
       })),
     [filteredTrades],
   );
-  const calibration = useMemo(
-    () => computeJevCalibration(livePredictions),
-    [livePredictions],
-  );
-  const calibrationSampleCount = useMemo(
-    () => calibration.reduce((total, bucket) => total + bucket.count, 0),
-    [calibration],
-  );
-
   const profitFactorLabel =
     stats.profitFactor == null
       ? stats.closedCount === 0
@@ -470,43 +430,7 @@ export function AnalyticsDashboard({
         </Card>
       </div>
 
-      <Card>
-        <CardTitle>Jev calibration (15m forward return)</CardTitle>
-        <p className="mt-1 text-xs text-zinc-500">
-          After the fact: when Jev gave a BUY score, how much did price move 15 minutes later?
-          Each bar groups past predictions by BUY %; taller bars mean that bucket tended to rise
-          on average.
-          {calibrationSampleCount > 0
-            ? ` Based on ${calibrationSampleCount.toLocaleString()} matured predictions.`
-            : ""}{" "}
-          With min confidence at {minJevConfidencePct}% (Settings), focus on the{" "}
-          {calibrationFocusLabels} bars — positive averages suggest scores near your cutoff
-          tended to rise over 15 minutes. This chart does not change live trades.
-        </p>
-        {calibration.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-500">
-            Waiting for older predictions to finish their 15-minute window so we can record what
-            price did next. Bars will appear here as that catches up.
-          </p>
-        ) : (
-          <div className="mt-4 h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={calibration}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
-                <XAxis dataKey="label" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
-                <YAxis tick={{ fill: "#a1a1aa", fontSize: 11 }} unit="%" />
-                <Tooltip {...perBarTooltipProps} content={<CalibrationTooltip />} />
-                <Bar
-                  dataKey="avgReturn15m"
-                  fill="#34d399"
-                  radius={[4, 4, 0, 0]}
-                  activeBar={{ fill: "#6ee7b7", stroke: "#34d399", strokeWidth: 1 }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </Card>
+      <JevCalibrationCard minJevConfidencePct={minJevConfidencePct} />
     </div>
   );
 }

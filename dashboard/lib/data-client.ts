@@ -1,3 +1,26 @@
+import {
+  ANALYTICS_CALIBRATION_COLUMNS,
+  ANALYTICS_CALIBRATION_LIMIT,
+  ANALYTICS_CALIBRATION_LOOKBACK_DAYS,
+  ANALYTICS_SKIP_LOOKBACK_HOURS,
+  ANALYTICS_SKIP_PREDICTION_COLUMNS,
+  ANALYTICS_SKIP_REASON_LIMIT,
+} from "@/lib/analytics-data";
+import {
+  CalibrationFetchError,
+  mapCalibrationRpcRows,
+} from "@/lib/jev-calibration-rpc";
+import {
+  LATEST_PREDICTIONS_PER_SYMBOL_LIMIT,
+} from "@/lib/analytics-data";
+import {
+  normalizePredictionFeedRows,
+  mapLatestPredictionRpcRows,
+} from "@/lib/prediction-feed-normalize";
+import {
+  PREDICTION_FEED_SELECT,
+  PREDICTION_WITH_SNAPSHOT_COLUMNS,
+} from "@/lib/prediction-columns";
 import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
 import { filterTradesByActiveIbkrAccount } from "@/lib/ibkr-trade-scope";
 import { createClient } from "@/lib/supabase/client";
@@ -33,7 +56,7 @@ export async function fetchPredictions(limit = 50, symbol?: string): Promise<Pre
   const supabase = createClient();
   let query = supabase
     .from("predictions")
-    .select("*")
+    .select(PREDICTION_FEED_SELECT)
     .order("timestamp", { ascending: false })
     .limit(limit);
   if (symbol) {
@@ -44,17 +67,48 @@ export async function fetchPredictions(limit = 50, symbol?: string): Promise<Pre
     logFetchError("predictions", error.message);
     return [];
   }
-  return (data ?? []) as Prediction[];
+  return normalizePredictionFeedRows(data ?? []);
+}
+
+export async function fetchPredictionWithSnapshot(
+  id: string,
+): Promise<Prediction | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("predictions")
+    .select(PREDICTION_WITH_SNAPSHOT_COLUMNS)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    logFetchError("predictions", error.message);
+    return null;
+  }
+  return (data ?? null) as Prediction | null;
+}
+
+/** Aggregated calibration buckets (~5 rows) — preferred over row downloads. */
+export async function fetchJevCalibrationBuckets(
+  lookbackDays = ANALYTICS_CALIBRATION_LOOKBACK_DAYS,
+) {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("get_jev_calibration_buckets", {
+    lookback_days: lookbackDays,
+  });
+  if (error) {
+    logFetchError("predictions_calibration", error.message);
+    throw new CalibrationFetchError(error.message);
+  }
+  return mapCalibrationRpcRows(data);
 }
 
 /** Matured rows for Jev calibration — not the same as latest predictions feed. */
 export async function fetchPredictionsForCalibration(
-  limit = 5000,
+  limit = ANALYTICS_CALIBRATION_LIMIT,
 ): Promise<Prediction[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("predictions")
-    .select("*")
+    .select(ANALYTICS_CALIBRATION_COLUMNS)
     .not("return_15m_pct", "is", null)
     .order("timestamp", { ascending: false })
     .limit(limit);
@@ -230,11 +284,17 @@ export async function fetchClosedTrades(): Promise<Trade[]> {
   return (data ?? []) as Trade[];
 }
 
-export async function fetchAnalyticsPredictions(limit = 2000): Promise<Prediction[]> {
+export async function fetchAnalyticsPredictions(
+  limit = ANALYTICS_SKIP_REASON_LIMIT,
+): Promise<Prediction[]> {
   const supabase = createClient();
+  const since = new Date(
+    Date.now() - ANALYTICS_SKIP_LOOKBACK_HOURS * 60 * 60 * 1000,
+  ).toISOString();
   const { data, error } = await supabase
     .from("predictions")
-    .select("*")
+    .select(ANALYTICS_SKIP_PREDICTION_COLUMNS)
+    .gte("timestamp", since)
     .order("timestamp", { ascending: false })
     .limit(limit);
   if (error) {
@@ -253,7 +313,7 @@ export async function fetchRecentPredictions(
   const since = new Date(Date.now() - windowMinutes * 60_000).toISOString();
   const { data, error } = await supabase
     .from("predictions")
-    .select("*")
+    .select(PREDICTION_FEED_SELECT)
     .gte("timestamp", since)
     .order("buy_probability", { ascending: false })
     .limit(limit);
@@ -261,28 +321,21 @@ export async function fetchRecentPredictions(
     logFetchError("predictions", error.message);
     return [];
   }
-  return (data ?? []) as Prediction[];
+  return normalizePredictionFeedRows(data ?? []);
 }
 
-export async function fetchLatestPredictionsBySymbol(limit = 500): Promise<Prediction[]> {
+export async function fetchLatestPredictionsBySymbol(
+  limit = LATEST_PREDICTIONS_PER_SYMBOL_LIMIT,
+): Promise<Prediction[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("predictions")
-    .select("*")
-    .order("timestamp", { ascending: false })
-    .limit(limit);
+  const { data, error } = await supabase.rpc("get_latest_predictions_per_symbol", {
+    row_limit: limit,
+  });
   if (error) {
     logFetchError("predictions", error.message);
     return [];
   }
-  const seen = new Set<string>();
-  const latest: Prediction[] = [];
-  for (const row of (data ?? []) as Prediction[]) {
-    if (seen.has(row.symbol)) continue;
-    seen.add(row.symbol);
-    latest.push(row);
-  }
-  return latest.sort((a, b) => a.symbol.localeCompare(b.symbol));
+  return mapLatestPredictionRpcRows(data);
 }
 
 export async function fetchScreenerHistory(limit = 10): Promise<WatchlistScreenerHistory[]> {

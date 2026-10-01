@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
 import { PredictionIndicatorSummary } from "@/components/prediction-indicators";
-import { fetchLatestPredictionsBySymbol } from "@/lib/data-client";
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
-import { useLiveQuery } from "@/lib/hooks/use-live-query";
+import { useLatestPredictions } from "@/lib/latest-predictions-context";
 import { getMarketStatus } from "@/lib/market-hours";
 import {
   assessMarketCondition,
@@ -25,8 +24,7 @@ type Props = {
 };
 
 export function LiveStrategyGrid({ predictions, settings }: Props) {
-  const load = useCallback(() => fetchLatestPredictionsBySymbol(), []);
-  const live = useLiveQuery(predictions, load, ["predictions"]);
+  const live = useLatestPredictions(predictions);
   const [isMarketOpen, setIsMarketOpen] = useState(true);
 
   useEffect(() => {

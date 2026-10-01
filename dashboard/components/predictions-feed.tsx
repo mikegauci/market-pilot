@@ -1,12 +1,12 @@
 "use client";
 
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PredictionIndicators } from "@/components/prediction-indicators";
 import { SortableTh } from "@/components/sortable-th";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
-import { fetchPredictions } from "@/lib/data-client";
+import { fetchPredictionWithSnapshot, fetchPredictions } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import {
   compareNumber,
@@ -139,6 +139,11 @@ export function PredictionsFeed({
   const [symbolFilter, setSymbolFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(initialExpandedId ?? null);
   const [prevExpandedSeed, setPrevExpandedSeed] = useState(initialExpandedId ?? null);
+  const [snapshotById, setSnapshotById] = useState<
+    Record<string, MarketSnapshot | null | undefined>
+  >({});
+  const snapshotCacheRef = useRef<Record<string, MarketSnapshot | null>>({});
+  const [loadingSnapshotId, setLoadingSnapshotId] = useState<string | null>(null);
 
   const loadPredictions = useCallback(() => fetchPredictions(limit), [limit]);
   const livePredictions = useLiveQuery(predictions, loadPredictions, ["predictions"]);
@@ -188,8 +193,30 @@ export function PredictionsFeed({
     initialDirForKey,
   });
 
+  const ensureSnapshot = useCallback(async (id: string) => {
+    if (id in snapshotCacheRef.current || loadingSnapshotId === id) {
+      return;
+    }
+    setLoadingSnapshotId(id);
+    const row = await fetchPredictionWithSnapshot(id);
+    snapshotCacheRef.current[id] = row?.market_snapshot ?? null;
+    setSnapshotById({ ...snapshotCacheRef.current });
+    setLoadingSnapshotId(null);
+  }, [loadingSnapshotId]);
+
+  useEffect(() => {
+    if (!initialExpandedId) return;
+    void ensureSnapshot(initialExpandedId);
+  }, [initialExpandedId, ensureSnapshot]);
+
   function toggleExpanded(id: string) {
-    setExpandedId((current) => (current === id ? null : id));
+    setExpandedId((current) => {
+      const next = current === id ? null : id;
+      if (next) {
+        void ensureSnapshot(next);
+      }
+      return next;
+    });
   }
 
   return (
@@ -272,8 +299,7 @@ export function PredictionsFeed({
             </thead>
             <tbody>
               {sorted.map((p) => {
-                const snapshot = p.market_snapshot;
-                const hasExpandableDetail = Boolean(snapshot);
+                const snapshot = snapshotById[p.id] ?? p.market_snapshot;
                 const isExpanded = expandedId === p.id;
 
                 return (
@@ -283,20 +309,18 @@ export function PredictionsFeed({
                       className="border-b border-zinc-800/50"
                     >
                       <td className="py-2 pr-2">
-                        {hasExpandableDetail ? (
-                          <button
-                            type="button"
-                            onClick={() => toggleExpanded(p.id)}
-                            className="text-zinc-500 hover:text-zinc-300"
-                            aria-label={isExpanded ? "Collapse details" : "Expand details"}
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="h-4 w-4" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4" />
-                            )}
-                          </button>
-                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(p.id)}
+                          className="text-zinc-500 hover:text-zinc-300"
+                          aria-label={isExpanded ? "Collapse details" : "Expand details"}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </button>
                       </td>
                       <td className="py-2 pr-3 text-zinc-400">{formatDateTime(p.timestamp)}</td>
                       <td className="py-2 pr-3 font-medium">{p.symbol}</td>
@@ -317,16 +341,22 @@ export function PredictionsFeed({
                         <TradeCell prediction={p} />
                       </td>
                     </tr>
-                    {isExpanded && hasExpandableDetail && (
+                    {isExpanded && (
                       <tr className="border-b border-zinc-800/50 bg-zinc-900/40">
                         <td />
                         <td colSpan={8} className="py-3 pr-3">
                           <div className="space-y-4">
-                            <PredictionIndicators
-                              snapshot={snapshot}
-                              symbol={p.symbol}
-                              filterOptions={filterOptions}
-                            />
+                            {loadingSnapshotId === p.id || snapshot === undefined ? (
+                              <p className="text-xs text-zinc-500">Loading indicators…</p>
+                            ) : snapshot ? (
+                              <PredictionIndicators
+                                snapshot={snapshot}
+                                symbol={p.symbol}
+                                filterOptions={filterOptions}
+                              />
+                            ) : (
+                              <p className="text-xs text-zinc-500">No indicator snapshot for this row.</p>
+                            )}
                             {snapshot?.news_top_headline && (
                               <div className="space-y-2 border-t border-zinc-800/60 pt-3 text-xs text-zinc-400">
                                 <p className="text-sm font-medium text-zinc-300">News</p>

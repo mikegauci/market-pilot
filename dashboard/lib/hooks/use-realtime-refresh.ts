@@ -2,7 +2,24 @@
 
 import { useEffect } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { REALTIME_DEBOUNCE_MS } from "@/lib/live-data-config";
 import { createClient } from "@/lib/supabase/client";
+
+const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function scheduleDebouncedRefresh(tableKey: string, callbacks: Set<() => void>) {
+  const pending = debounceTimers.get(tableKey);
+  if (pending) {
+    clearTimeout(pending);
+  }
+  debounceTimers.set(
+    tableKey,
+    setTimeout(() => {
+      debounceTimers.delete(tableKey);
+      callbacks.forEach((callback) => callback());
+    }, REALTIME_DEBOUNCE_MS),
+  );
+}
 
 type ChannelEntry = {
   channel: RealtimeChannel;
@@ -28,7 +45,7 @@ function getOrCreateChannel(tableKey: string): ChannelEntry {
       "postgres_changes",
       { event: "*", schema: "public", table },
       () => {
-        callbacks.forEach((callback) => callback());
+        scheduleDebouncedRefresh(tableKey, callbacks);
       },
     );
   });
@@ -44,6 +61,9 @@ export function useRealtimeRefresh(tables: string[], onRefresh: () => void) {
   const tableKey = tables.slice().sort().join(",");
 
   useEffect(() => {
+    if (tables.length === 0) {
+      return;
+    }
     const entry = getOrCreateChannel(tableKey);
     entry.callbacks.add(onRefresh);
     entry.refCount += 1;
@@ -58,5 +78,5 @@ export function useRealtimeRefresh(tables: string[], onRefresh: () => void) {
         sharedChannels.delete(tableKey);
       }
     };
-  }, [tableKey, onRefresh]);
+  }, [tableKey, onRefresh, tables.length]);
 }

@@ -1,3 +1,4 @@
+import { LatestPredictionsProvider } from "@/lib/latest-predictions-context";
 import { MarketConditionCard } from "@/components/market-condition-card";
 import { OverviewWatchlistCard } from "@/components/overview-watchlist-card";
 import { OverviewStats } from "@/components/overview-stats";
@@ -41,20 +42,21 @@ export default async function OverviewPage() {
   const currency = portfolio?.currency ?? "USD";
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold sm:text-2xl">Overview</h2>
+    <LatestPredictionsProvider initial={predictions}>
+      <div className="space-y-6">
+        <h2 className="text-xl font-semibold sm:text-2xl">Overview</h2>
 
-      <div className="grid grid-cols-1 gap-4 items-stretch sm:grid-cols-2 xl:grid-cols-3">
-        <OverviewStats portfolio={portfolio} positions={positions} currency={currency} />
-        <MarketConditionCard
-          predictions={predictions}
-          news={news}
-          settings={settings}
-        />
-        {settings ? <OverviewWatchlistCard settings={settings} /> : null}
-      </div>
+        <div className="grid grid-cols-1 gap-4 items-stretch sm:grid-cols-2 xl:grid-cols-3">
+          <OverviewStats portfolio={portfolio} positions={positions} currency={currency} />
+          <MarketConditionCard
+            predictions={predictions}
+            news={news}
+            settings={settings}
+          />
+          {settings ? <OverviewWatchlistCard settings={settings} /> : null}
+        </div>
 
-      <PositionsGrid
+        <PositionsGrid
         positions={positions}
         openTrades={openTrades}
         tradeCommands={tradeCommands}
@@ -85,6 +87,7 @@ export default async function OverviewPage() {
         showChartExpand={false}
         title="Recent Trades"
       />
-    </div>
+      </div>
+    </LatestPredictionsProvider>
   );
 }

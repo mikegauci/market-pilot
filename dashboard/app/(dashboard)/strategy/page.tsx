@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LiveStrategyGrid } from "@/components/live-strategy-grid";
+import { LatestPredictionsProvider } from "@/lib/latest-predictions-context";
 import { StrategyGuide } from "@/components/strategy-guide";
 import { getLatestPredictionsBySymbol, getSettings } from "@/lib/queries";
 import { formatPercent } from "@/lib/utils";
@@ -47,7 +48,9 @@ export default async function StrategyPage() {
       </header>
 
       {settings && (
-        <LiveStrategyGrid predictions={latestPredictions} settings={settings} />
+        <LatestPredictionsProvider initial={latestPredictions}>
+          <LiveStrategyGrid predictions={latestPredictions} settings={settings} />
+        </LatestPredictionsProvider>
       )}
 
       <StrategyGuide

@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     heartbeat_interval_sec: int = 5
     bot_control_refresh_interval_sec: float = 5.0
     settings_refresh_interval_sec: float = 15.0
-    portfolio_history_interval_sec: float = 30.0
+    portfolio_history_interval_sec: float = 60.0
     market_snapshots_enabled: bool = False
     risk_sync_threshold_pct: float = 0.05
     log_level: str = "INFO"

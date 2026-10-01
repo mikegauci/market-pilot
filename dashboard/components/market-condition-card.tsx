@@ -3,12 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/card";
-import {
-  fetchLatestPredictionsBySymbol,
-  fetchMarketNews,
-  fetchSettings,
-} from "@/lib/data-client";
+import { fetchMarketNews, fetchSettings } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
+import { LIVE_SETTINGS_POLL_MS } from "@/lib/live-data-config";
+import { useLatestPredictions } from "@/lib/latest-predictions-context";
 import { getMarketStatus } from "@/lib/market-hours";
 import {
   marketConditionDotClass,
@@ -32,15 +30,18 @@ function useLiveMarketCondition(
   news: MarketNewsRow[],
   settings: Settings | null,
 ): MarketCondition {
-  const loadPredictions = useCallback(() => fetchLatestPredictionsBySymbol(), []);
-  const loadNews = useCallback(() => fetchMarketNews(80), []);
+  const livePredictions = useLatestPredictions(predictions);
+  const loadNews = useCallback(() => fetchMarketNews(40), []);
   const loadSettings = useCallback(() => fetchSettings(), []);
 
-  const livePredictions = useLiveQuery(predictions, loadPredictions, ["predictions"]);
   const liveNews = useLiveQuery(news, loadNews, ["market_news"]);
-  const liveSettings = useLiveQuery(settings, loadSettings, ["settings"], undefined, {
-    keepPreviousOnNull: true,
-  });
+  const liveSettings = useLiveQuery(
+    settings,
+    loadSettings,
+    ["settings"],
+    LIVE_SETTINGS_POLL_MS,
+    { keepPreviousOnNull: true },
+  );
 
   const [isMarketOpen, setIsMarketOpen] = useState(true);
 

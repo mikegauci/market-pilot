@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import {
   Bar,
   BarChart,
@@ -12,8 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardTitle } from "@/components/ui/card";
-import { fetchAnalyticsPredictions } from "@/lib/data-client";
-import { useLiveQuery } from "@/lib/hooks/use-live-query";
+import { ANALYTICS_SKIP_LOOKBACK_HOURS } from "@/lib/analytics-data";
 import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
 import {
   activityByHour,
@@ -141,25 +140,29 @@ export function SkipReasonAnalytics({
   recordThreshold,
   minConfidence,
 }: Props) {
-  const load = useCallback(() => fetchAnalyticsPredictions(), []);
-  const live = useLiveQuery(predictions, load, ["predictions"]);
-
-  const skipBuckets = useMemo(() => aggregateSkipReasons(live).slice(0, 10), [live]);
+  const skipBuckets = useMemo(
+    () => aggregateSkipReasons(predictions).slice(0, 10),
+    [predictions],
+  );
   const funnel = useMemo(
-    () => buildSignalFunnel(live, recordThreshold, minConfidence),
-    [live, recordThreshold, minConfidence],
+    () => buildSignalFunnel(predictions, recordThreshold, minConfidence),
+    [predictions, recordThreshold, minConfidence],
   );
   const nearMisses = useMemo(
-    () => findNearMisses(live, recordThreshold, minConfidence),
-    [live, recordThreshold, minConfidence],
+    () => findNearMisses(predictions, recordThreshold, minConfidence),
+    [predictions, recordThreshold, minConfidence],
   );
   const hourly = useMemo(
-    () => activityByHour(live, recordThreshold, minConfidence),
-    [live, recordThreshold, minConfidence],
+    () => activityByHour(predictions, recordThreshold, minConfidence),
+    [predictions, recordThreshold, minConfidence],
   );
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
+      <p className="text-xs text-zinc-600 xl:col-span-2">
+        Skip-reason stats use up to {predictions.length.toLocaleString()} predictions from the last{" "}
+        {ANALYTICS_SKIP_LOOKBACK_HOURS}h (page load). Refresh to update.
+      </p>
       <SignalFunnelCard
         funnel={funnel}
         recordThreshold={recordThreshold}

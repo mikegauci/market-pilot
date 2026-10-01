@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { LIVE_DATA_POLL_MS, liveRealtimeTables } from "@/lib/live-data-config";
 
-/** Poll interval aligned with trader heartbeat (2s) plus a small buffer. */
-export const LIVE_DATA_POLL_MS = 3_000;
+export { LIVE_DATA_POLL_MS };
 
 export function initialDataChanged<T>(prev: T, next: T): boolean {
   if (Object.is(prev, next)) return false;
@@ -83,7 +83,8 @@ export function useLiveQuery<T>(
     };
   }, [refresh, pollIntervalMs]);
 
-  useRealtimeRefresh(tables, () => {
+  const realtimeTables = liveRealtimeTables(tables);
+  useRealtimeRefresh(realtimeTables, () => {
     void refresh();
   });
 
