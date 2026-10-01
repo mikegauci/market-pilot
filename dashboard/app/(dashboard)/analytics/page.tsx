@@ -28,7 +28,7 @@ export default async function AnalyticsPage() {
         portfolioHistory={portfolioHistory}
         closedTrades={closedTrades}
         currency={currency}
-        minJevConfidencePct={Math.round((settings?.minimum_jev_confidence ?? 0.85) * 100)}
+        initialSettings={settings}
       />
     </div>
   );

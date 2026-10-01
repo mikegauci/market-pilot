@@ -33,6 +33,7 @@ import {
   STRATEGY_RECOMMENDATIONS,
   type StrategyHint,
 } from "@/lib/strategy-recommendations";
+import { confidencePercentFromDecimal } from "@/lib/settings-display";
 import type { EmUniverseRow, Settings } from "@/lib/types/database";
 import { cn, formatCurrency } from "@/lib/utils";
 
@@ -373,7 +374,7 @@ export function SettingsForm({
               name="minimum_jev_confidence"
               type="number"
               step="1"
-              defaultValue={Math.round(settings.minimum_jev_confidence * 100)}
+              defaultValue={confidencePercentFromDecimal(settings.minimum_jev_confidence)}
               required
             />
           </SettingsField>

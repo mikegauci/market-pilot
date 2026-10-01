@@ -22,6 +22,7 @@ import {
   findNearMisses,
   type SignalFunnel,
 } from "@/lib/skip-reason-stats";
+import { perBarTooltipProps } from "@/lib/recharts-bar-interaction";
 import type { Prediction } from "@/lib/types/database";
 import { formatDateTime, formatPercent } from "@/lib/utils";
 
@@ -182,6 +183,7 @@ export function SkipReasonAnalytics({
                   width={120}
                 />
                 <Tooltip
+                  {...perBarTooltipProps}
                   contentStyle={{
                     background: "#18181b",
                     border: "1px solid #3f3f46",
@@ -189,7 +191,12 @@ export function SkipReasonAnalytics({
                     fontSize: 12,
                   }}
                 />
-                <Bar dataKey="count" name="Count" fill="#60a5fa" />
+                <Bar
+                  dataKey="count"
+                  name="Count"
+                  fill="#60a5fa"
+                  activeBar={{ fill: "#93c5fd", stroke: "#60a5fa", strokeWidth: 1 }}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -247,6 +254,7 @@ export function SkipReasonAnalytics({
                 />
                 <YAxis allowDecimals={false} tick={{ fill: "#71717a", fontSize: 10 }} />
                 <Tooltip
+                  {...perBarTooltipProps}
                   labelFormatter={(h) => `${h}:00 UTC`}
                   contentStyle={{
                     background: "#18181b",
@@ -256,9 +264,24 @@ export function SkipReasonAnalytics({
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="highBuy" name="High BUY" fill="#71717a" />
-                <Bar dataKey="tradeEligible" name="Trade-ready" fill="#60a5fa" />
-                <Bar dataKey="traded" name="Traded" fill="#34d399" />
+                <Bar
+                  dataKey="highBuy"
+                  name="High BUY"
+                  fill="#71717a"
+                  activeBar={{ fill: "#a1a1aa", stroke: "#71717a", strokeWidth: 1 }}
+                />
+                <Bar
+                  dataKey="tradeEligible"
+                  name="Trade-ready"
+                  fill="#60a5fa"
+                  activeBar={{ fill: "#93c5fd", stroke: "#60a5fa", strokeWidth: 1 }}
+                />
+                <Bar
+                  dataKey="traded"
+                  name="Traded"
+                  fill="#34d399"
+                  activeBar={{ fill: "#6ee7b7", stroke: "#34d399", strokeWidth: 1 }}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>

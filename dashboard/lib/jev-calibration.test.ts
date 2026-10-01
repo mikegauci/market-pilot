@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { computeJevCalibration } from "@/lib/jev-calibration";
+import {
+  calibrationFocusBucketLabels,
+  computeJevCalibration,
+} from "@/lib/jev-calibration";
 import type { Prediction } from "@/lib/types/database";
 
 function prediction(buy: number, return15m: number | null): Prediction {
@@ -13,6 +16,14 @@ function prediction(buy: number, return15m: number | null): Prediction {
     return_15m_pct: return15m,
   } as Prediction;
 }
+
+describe("calibrationFocusBucketLabels", () => {
+  it("names fixed bands near a typical trade cutoff", () => {
+    expect(calibrationFocusBucketLabels(85)).toBe("80–90% and 90–100%");
+    expect(calibrationFocusBucketLabels(92)).toBe("90–100%");
+    expect(calibrationFocusBucketLabels(55)).toBe("50–60% and 60–70% and 70–80% and 80–90% and 90–100%");
+  });
+});
 
 describe("computeJevCalibration", () => {
   it("returns empty when no forward returns", () => {

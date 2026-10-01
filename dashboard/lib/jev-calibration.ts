@@ -9,6 +9,24 @@ export type CalibrationBucket = {
 
 const BUCKET_EDGES = [0.5, 0.6, 0.7, 0.8, 0.9, 1.01];
 
+const BUCKET_EDGE_PERCENT = [50, 60, 70, 80, 90, 100] as const;
+
+/** Fixed chart bands that overlap trades at `cutoffPercent` (e.g. 85 → "80–90% and 90–100%"). */
+export function calibrationFocusBucketLabels(cutoffPercent: number): string {
+  const cutoff = Math.min(100, Math.max(0, Math.round(cutoffPercent)));
+  const labels: string[] = [];
+  for (let index = 0; index < BUCKET_EDGE_PERCENT.length - 1; index += 1) {
+    const low = BUCKET_EDGE_PERCENT[index];
+    const high = BUCKET_EDGE_PERCENT[index + 1];
+    const inBucket = cutoff >= low && cutoff < high;
+    const tradesCanLandHere = high > cutoff;
+    if (inBucket || tradesCanLandHere) {
+      labels.push(`${low}–${high}%`);
+    }
+  }
+  return labels.length > 0 ? labels.join(" and ") : "90–100%";
+}
+
 export function computeJevCalibration(
   predictions: Prediction[],
 ): CalibrationBucket[] {

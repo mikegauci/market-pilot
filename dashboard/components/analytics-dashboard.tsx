@@ -18,8 +18,15 @@ import {
   fetchClosedTrades,
   fetchPortfolioHistory,
   fetchPredictionsForCalibration,
+  fetchSettings,
 } from "@/lib/data-client";
-import { computeJevCalibration } from "@/lib/jev-calibration";
+import {
+  calibrationFocusBucketLabels,
+  computeJevCalibration,
+  type CalibrationBucket,
+} from "@/lib/jev-calibration";
+import { perBarTooltipProps, renderPnlActiveBar } from "@/lib/recharts-bar-interaction";
+import { confidencePercentFromDecimal } from "@/lib/settings-display";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import {
   buildDailyEquitySeries,
@@ -34,15 +41,14 @@ import {
   filterTradesByRange,
   pnlBySymbol,
 } from "@/lib/trade-analytics";
-import type { PortfolioSnapshot, Prediction, Trade } from "@/lib/types/database";
+import type { PortfolioSnapshot, Prediction, Settings, Trade } from "@/lib/types/database";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 
 type Props = {
   portfolioHistory: PortfolioSnapshot[];
   closedTrades: Trade[];
   currency: string;
-  /** Settings → Min Jev confidence, for calibration helper copy */
-  minJevConfidencePct: number;
+  initialSettings: Settings | null;
 };
 
 const RANGE_OPTIONS: { value: PortfolioRange; label: string }[] = [
@@ -103,11 +109,40 @@ function formatChartDate(isoDate: string): string {
   return d.toLocaleDateString("en-GB", { month: "short", day: "numeric" });
 }
 
+function CalibrationTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: { payload?: CalibrationBucket; value?: number }[];
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const bucket = payload[0]?.payload;
+  if (!bucket) return null;
+  return (
+    <div className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs shadow-lg">
+      {label && <p className="mb-1 font-medium text-zinc-200">{label}</p>}
+      <p className="text-zinc-300">
+        Avg 15m return:{" "}
+        <span className="tabular-nums text-emerald-300">
+          {bucket.avgReturn15m.toFixed(3)}%
+        </span>
+      </p>
+      <p className="text-zinc-500">
+        {bucket.count.toLocaleString()} predictions · avg BUY{" "}
+        {formatPercent(bucket.avgBuy)}
+      </p>
+    </div>
+  );
+}
+
 export function AnalyticsDashboard({
   portfolioHistory,
   closedTrades,
   currency,
-  minJevConfidencePct,
+  initialSettings,
 }: Props) {
   const [range, setRange] = useState<PortfolioRange>("1d");
 
@@ -117,6 +152,7 @@ export function AnalyticsDashboard({
     () => fetchPredictionsForCalibration(),
     [],
   );
+  const loadSettings = useCallback(() => fetchSettings(), []);
 
   const liveHistory = useLiveQuery(portfolioHistory, loadHistory, [
     "portfolio_history",
@@ -126,6 +162,17 @@ export function AnalyticsDashboard({
   const livePredictions = useLiveQuery([] as Prediction[], loadCalibrationPredictions, [
     "predictions",
   ]);
+  const liveSettings = useLiveQuery(initialSettings, loadSettings, ["settings"], undefined, {
+    keepPreviousOnNull: true,
+  });
+
+  const minJevConfidencePct = confidencePercentFromDecimal(
+    liveSettings?.minimum_jev_confidence ?? 0.85,
+  );
+  const calibrationFocusLabels = useMemo(
+    () => calibrationFocusBucketLabels(minJevConfidencePct),
+    [minJevConfidencePct],
+  );
 
   const filteredHistory = useMemo(
     () => filterPortfolioByRange(liveHistory, range),
@@ -323,13 +370,14 @@ export function AnalyticsDashboard({
                   <XAxis dataKey="label" tick={{ fill: "#71717a", fontSize: 11 }} />
                   <YAxis tick={{ fill: "#71717a", fontSize: 11 }} width={70} />
                   <Tooltip
+                    {...perBarTooltipProps}
                     content={
                       <ChartTooltip
                         valueFormatter={(v) => formatCurrency(v, currency)}
                       />
                     }
                   />
-                  <Bar dataKey="dailyPnl" name="Daily P&L">
+                  <Bar dataKey="dailyPnl" name="Daily P&L" activeBar={renderPnlActiveBar}>
                     {dailyChartData.map((entry, index) => (
                       <Cell
                         key={`${entry.date}-${index}`}
@@ -362,13 +410,14 @@ export function AnalyticsDashboard({
                     width={50}
                   />
                   <Tooltip
+                    {...perBarTooltipProps}
                     content={
                       <ChartTooltip
                         valueFormatter={(v) => formatCurrency(v, currency)}
                       />
                     }
                   />
-                  <Bar dataKey="pnl" name="P&L">
+                  <Bar dataKey="pnl" name="P&L" activeBar={renderPnlActiveBar}>
                     {symbolPnl.map((entry, index) => (
                       <Cell
                         key={`${entry.symbol}-${index}`}
@@ -399,13 +448,14 @@ export function AnalyticsDashboard({
                     width={120}
                   />
                   <Tooltip
+                    {...perBarTooltipProps}
                     content={
                       <ChartTooltip
                         valueFormatter={(v) => formatCurrency(v, currency)}
                       />
                     }
                   />
-                  <Bar dataKey="pnl" name="P&L">
+                  <Bar dataKey="pnl" name="P&L" activeBar={renderPnlActiveBar}>
                     {exitReasons.map((entry, index) => (
                       <Cell
                         key={`${entry.reason}-${index}`}
@@ -429,13 +479,14 @@ export function AnalyticsDashboard({
           {calibrationSampleCount > 0
             ? ` Based on ${calibrationSampleCount.toLocaleString()} matured predictions.`
             : ""}{" "}
-          Compare buckets at or above your trade cutoff ({minJevConfidencePct}% in Settings) to
-          see if your min confidence is aligned. This chart does not change live trades.
+          With min confidence at {minJevConfidencePct}% (Settings), focus on the{" "}
+          {calibrationFocusLabels} bars — positive averages suggest scores near your cutoff
+          tended to rise over 15 minutes. This chart does not change live trades.
         </p>
         {calibration.length === 0 ? (
           <p className="mt-4 text-sm text-zinc-500">
-            Waiting for older predictions to finish their 15-minute window and backfill forward
-            returns. Bars will appear here as that backlog clears.
+            Waiting for older predictions to finish their 15-minute window so we can record what
+            price did next. Bars will appear here as that catches up.
           </p>
         ) : (
           <div className="mt-4 h-72">
@@ -444,14 +495,13 @@ export function AnalyticsDashboard({
                 <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
                 <XAxis dataKey="label" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
                 <YAxis tick={{ fill: "#a1a1aa", fontSize: 11 }} unit="%" />
-                <Tooltip
-                  contentStyle={{ background: "#18181b", border: "1px solid #3f3f46" }}
-                  formatter={(value) => [
-                    `${(typeof value === "number" ? value : Number(value ?? 0)).toFixed(3)}%`,
-                    "Avg 15m return",
-                  ]}
+                <Tooltip {...perBarTooltipProps} content={<CalibrationTooltip />} />
+                <Bar
+                  dataKey="avgReturn15m"
+                  fill="#34d399"
+                  radius={[4, 4, 0, 0]}
+                  activeBar={{ fill: "#6ee7b7", stroke: "#34d399", strokeWidth: 1 }}
                 />
-                <Bar dataKey="avgReturn15m" fill="#34d399" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
