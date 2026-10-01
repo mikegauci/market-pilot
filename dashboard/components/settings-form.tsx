@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { RiskProfilePicker } from "@/components/risk-profile-picker";
 import { WatchlistSettingsSection } from "@/components/watchlist-settings-section";
 import {

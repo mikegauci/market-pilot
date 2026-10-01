@@ -75,9 +75,12 @@ export function useLiveQuery<T>(
   }, [initial]);
 
   useEffect(() => {
-    void refresh();
+    const kickoff = window.setTimeout(() => void refresh(), 0);
     const id = setInterval(() => void refresh(), pollIntervalMs);
-    return () => clearInterval(id);
+    return () => {
+      window.clearTimeout(kickoff);
+      clearInterval(id);
+    };
   }, [refresh, pollIntervalMs]);
 
   useRealtimeRefresh(tables, () => {

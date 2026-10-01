@@ -22,13 +22,17 @@ type DashboardShellProps = {
 export function DashboardShell({ children, botStatus }: DashboardShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [navPath, setNavPath] = useState(pathname);
   const pageTitle = getDashboardPageTitle(pathname);
 
   const closeMobile = useCallback(() => setMobileOpen(false), []);
 
-  useEffect(() => {
-    closeMobile();
-  }, [pathname, closeMobile]);
+  if (navPath !== pathname) {
+    setNavPath(pathname);
+    if (mobileOpen) {
+      setMobileOpen(false);
+    }
+  }
 
   useEffect(() => {
     if (!mobileOpen) return;

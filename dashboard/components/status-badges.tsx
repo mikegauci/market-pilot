@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useIsClient } from "@/lib/hooks/use-is-client";
 import { getMarketStatus, type MarketStatus } from "@/lib/market-hours";
 import { getBrokerNotice, getTradeModeCopy } from "@/lib/trade-mode";
 import { getDisplayStatus, getStableDisplayNow } from "@/lib/trader-status";
@@ -15,48 +16,28 @@ export function StatusBadges({
   variant?: "default" | "sidebar";
 }) {
   const stableNow = getStableDisplayNow(status.last_heartbeat);
-  const [mounted, setMounted] = useState(false);
+  const isClient = useIsClient();
   const [display, setDisplay] = useState(() => getDisplayStatus(status, stableNow));
   const [market, setMarket] = useState<MarketStatus | null>(null);
-  const statusRef = useRef(status);
-  statusRef.current = status;
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    setDisplay(getDisplayStatus(status));
-    setMarket(getMarketStatus());
-  }, [
-    mounted,
-    status.enabled,
-    status.ibkr_connected,
-    status.jev_connected,
-    status.last_heartbeat,
-    status.last_error,
-    status.trading_mode,
-    status.execution_mode,
-  ]);
-
-  useEffect(() => {
-    if (!mounted) return;
+    if (!isClient) return;
 
     const tick = () => {
-      setDisplay(getDisplayStatus(statusRef.current));
+      setDisplay(getDisplayStatus(status));
       setMarket(getMarketStatus());
     };
+    tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [mounted]);
+  }, [isClient, status]);
 
   return (
     <StatusPanel
       status={status}
       display={display}
       market={market}
-      showLiveTimes={mounted}
+      showLiveTimes={isClient}
       variant={variant}
     />
   );

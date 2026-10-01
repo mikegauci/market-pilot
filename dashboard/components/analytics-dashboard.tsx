@@ -173,6 +173,10 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
     () => computeJevCalibration(livePredictions),
     [livePredictions],
   );
+  const calibrationSampleCount = useMemo(
+    () => calibration.reduce((total, bucket) => total + bucket.count, 0),
+    [calibration],
+  );
 
   const profitFactorLabel =
     stats.profitFactor == null
@@ -412,8 +416,11 @@ export function AnalyticsDashboard({ portfolioHistory, closedTrades, currency }:
       <Card>
         <CardTitle>Jev calibration (15m forward return)</CardTitle>
         <p className="mt-1 text-xs text-zinc-500">
-          Mean realized 15-minute return by BUY probability bucket. A flat curve means the signal
-          is not predictive yet.
+          Mean realized 15-minute return by BUY probability bucket
+          {calibrationSampleCount > 0
+            ? ` (${calibrationSampleCount.toLocaleString()} matured rows).`
+            : "."}{" "}
+          A flat curve means the signal is not predictive yet.
         </p>
         {calibration.length === 0 ? (
           <p className="mt-4 text-sm text-zinc-500">

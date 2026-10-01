@@ -65,7 +65,7 @@ export function equityChartDomain(equities: number[]): [number, number] {
   if (equities.length === 0) return [0, 1];
   const min = Math.min(...equities);
   const max = Math.max(...equities);
-  let span = max - min;
+  const span = max - min;
   const center = (min + max) / 2;
   const minSpan = Math.max(Math.abs(center) * 0.002, 50);
   if (span < minSpan) {

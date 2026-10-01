@@ -25,6 +25,13 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) and sign in.
 
+## Data fetching
+
+- **`lib/queries.ts`** — Server Components (RSC initial load via `createClient()` from `@/lib/supabase/server`).
+- **`lib/data-client.ts`** — Client Components (`"use client"`) polling and live refresh via the browser Supabase client.
+
+Keep query shapes aligned when adding columns or filters (e.g. calibration uses `fetchPredictionsForCalibration`, not the latest-predictions feed).
+
 ## Pages
 
 | Route | Description |

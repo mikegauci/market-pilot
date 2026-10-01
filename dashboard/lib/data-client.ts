@@ -100,7 +100,7 @@ export async function fetchOpenTrades(): Promise<Trade[]> {
   if (!accountId) {
     return [];
   }
-  let query = supabase
+  const query = supabase
     .from("trades")
     .select("*")
     .eq("status", "open")
@@ -134,7 +134,7 @@ export async function fetchRecentTrades(limit = 10): Promise<Trade[]> {
   if (!accountId) {
     return [];
   }
-  let query = supabase
+  const query = supabase
     .from("trades")
     .select("*")
     .order("entry_time", { ascending: false })
@@ -154,7 +154,7 @@ export async function fetchAllTrades(): Promise<Trade[]> {
   if (!accountId) {
     return [];
   }
-  let query = supabase
+  const query = supabase
     .from("trades")
     .select("*")
     .order("entry_time", { ascending: false })
@@ -215,7 +215,7 @@ export async function fetchClosedTrades(): Promise<Trade[]> {
   if (!accountId) {
     return [];
   }
-  let query = supabase
+  const query = supabase
     .from("trades")
     .select("*")
     .eq("status", "closed")

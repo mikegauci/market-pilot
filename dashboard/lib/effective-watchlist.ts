@@ -1,4 +1,4 @@
-import type { JevRanking, Settings } from "@/lib/types/database";
+import type { Settings } from "@/lib/types/database";
 
 function resolveWatchlistCore(settings: Settings): string[] {
   const core = settings.watchlist_core?.length

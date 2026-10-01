@@ -43,9 +43,12 @@ export function useBotStatus(initialStatus: BotStatus): BotStatus {
   }, [initialStatus]);
 
   useEffect(() => {
-    void refresh();
+    const kickoff = window.setTimeout(() => void refresh(), 0);
     const id = setInterval(() => void refresh(), POLL_INTERVAL_MS);
-    return () => clearInterval(id);
+    return () => {
+      window.clearTimeout(kickoff);
+      clearInterval(id);
+    };
   }, [refresh]);
 
   useRealtimeRefresh(["bot_status"], () => {

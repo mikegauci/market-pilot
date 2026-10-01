@@ -122,9 +122,12 @@ export function SymbolChartPanel({
 
   useEffect(() => {
     hasBarsRef.current = false;
-    setBars([]);
-    setError(null);
-    setLoading(true);
+    const reset = window.setTimeout(() => {
+      setBars([]);
+      setError(null);
+      setLoading(true);
+    }, 0);
+    return () => window.clearTimeout(reset);
   }, [symbol, resolvedBarSize]);
 
   useEffect(() => {

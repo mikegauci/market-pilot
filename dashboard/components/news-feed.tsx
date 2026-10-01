@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
 import { fetchMarketNews } from "@/lib/data-client";
@@ -56,34 +56,29 @@ export function NewsFeed({ articles }: { articles: MarketNewsRow[] }) {
     [newsItems],
   );
 
-  useEffect(() => {
-    if (sourceFilter && !sources.includes(sourceFilter)) {
-      setSourceFilter("");
-    }
-  }, [sources, sourceFilter]);
-
-  useEffect(() => {
-    if (relatedFilter && !relatedSymbols.includes(relatedFilter)) {
-      setRelatedFilter("");
-    }
-  }, [relatedSymbols, relatedFilter]);
-
-  useEffect(() => {
-    if (tagFilter && !tags.includes(tagFilter)) {
-      setTagFilter("");
-    }
-  }, [tags, tagFilter]);
+  const activeSourceFilter =
+    sourceFilter && sources.includes(sourceFilter) ? sourceFilter : "";
+  const activeRelatedFilter =
+    relatedFilter && relatedSymbols.includes(relatedFilter) ? relatedFilter : "";
+  const activeTagFilter = tagFilter && tags.includes(tagFilter) ? tagFilter : "";
 
   const filtered = useMemo(
     () =>
       filterNewsFeedItems(newsItems, {
-        source: sourceFilter || undefined,
-        relatedSymbol: relatedFilter || undefined,
+        source: activeSourceFilter || undefined,
+        relatedSymbol: activeRelatedFilter || undefined,
         sentiment: sentimentFilter,
-        tag: tagFilter || undefined,
+        tag: activeTagFilter || undefined,
         badge: badgeFilter,
       }),
-    [newsItems, sourceFilter, relatedFilter, sentimentFilter, tagFilter, badgeFilter],
+    [
+      newsItems,
+      activeSourceFilter,
+      activeRelatedFilter,
+      sentimentFilter,
+      activeTagFilter,
+      badgeFilter,
+    ],
   );
 
   return (

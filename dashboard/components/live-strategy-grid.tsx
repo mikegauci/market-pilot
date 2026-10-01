@@ -51,18 +51,16 @@ export function LiveStrategyGrid({ predictions, settings }: Props) {
     benchmarkPrediction?.market_snapshot?.benchmark_change_5m ??
     benchmarkPrediction?.market_snapshot?.spy_change_5m;
 
-  const tape = useMemo(() => {
-    const newsSentiment =
-      live
-        .map((p) => p.market_snapshot?.news_sentiment)
-        .find((v) => v != null && Number.isFinite(v)) ?? null;
-    return assessMarketCondition({
-      isMarketOpen,
-      benchmarkSymbol: benchmark,
-      benchmarkChange5m: benchmarkChange ?? null,
-      newsSentiment,
-    });
-  }, [benchmark, benchmarkChange, isMarketOpen, live]);
+  const newsSentiment =
+    live
+      .map((p) => p.market_snapshot?.news_sentiment)
+      .find((v) => v != null && Number.isFinite(v)) ?? null;
+  const tape = assessMarketCondition({
+    isMarketOpen,
+    benchmarkSymbol: benchmark,
+    benchmarkChange5m: benchmarkChange ?? null,
+    newsSentiment,
+  });
 
   const recentSkips = useMemo(() => {
     const watchSet = new Set(watchlist.map((s) => s.toUpperCase()));

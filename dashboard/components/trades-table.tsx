@@ -121,7 +121,11 @@ export function TradesTable({
     [filter, liveTrades],
   );
 
-  const compare = useCallback(compareTrades, []);
+  const compare = useCallback(
+    (a: Trade, b: Trade, key: SortKey, dir: SortDir) =>
+      compareTrades(a, b, key, dir),
+    [],
+  );
   const initialDirForKey = useCallback(
     (key: SortKey): SortDir =>
       key === "symbol" || key === "status" ? "asc" : "desc",

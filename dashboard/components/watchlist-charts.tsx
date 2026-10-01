@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { SymbolChartPanel } from "@/components/symbol-chart-panel";
 import { Card, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -33,14 +33,16 @@ export function WatchlistCharts({
   );
   const [internalSelected, setInternalSelected] = useState(sorted[0] ?? "");
   const isControlled = selectedSymbolProp !== undefined;
-  const selected = isControlled ? selectedSymbolProp : internalSelected;
 
-  useEffect(() => {
-    if (isControlled) return;
-    if (sorted.length > 0 && !sorted.includes(internalSelected)) {
-      setInternalSelected(sorted[0]);
-    }
-  }, [sorted, internalSelected, isControlled]);
+  if (
+    !isControlled &&
+    sorted.length > 0 &&
+    !sorted.includes(internalSelected)
+  ) {
+    setInternalSelected(sorted[0]);
+  }
+
+  const selected = isControlled ? selectedSymbolProp : internalSelected;
 
   function handleChange(symbol: string) {
     if (isControlled) {

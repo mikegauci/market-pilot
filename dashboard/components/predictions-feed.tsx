@@ -177,14 +177,17 @@ export function PredictionsFeed({
   limit?: number;
 }) {
   const [symbolFilter, setSymbolFilter] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(initialExpandedId);
+  const [expandedId, setExpandedId] = useState<string | null>(initialExpandedId ?? null);
+  const [prevExpandedSeed, setPrevExpandedSeed] = useState(initialExpandedId ?? null);
 
   const loadPredictions = useCallback(() => fetchPredictions(limit), [limit]);
   const livePredictions = useLiveQuery(predictions, loadPredictions, ["predictions"]);
 
-  useEffect(() => {
-    setExpandedId(initialExpandedId);
-  }, [initialExpandedId]);
+  const expandedSeed = initialExpandedId ?? null;
+  if (prevExpandedSeed !== expandedSeed) {
+    setPrevExpandedSeed(expandedSeed);
+    setExpandedId(expandedSeed);
+  }
 
   useEffect(() => {
     if (!initialExpandedId) return;
@@ -193,22 +196,22 @@ export function PredictionsFeed({
   }, [initialExpandedId, livePredictions]);
 
   const symbols = [...new Set(livePredictions.map((p) => p.symbol))].sort();
-
-  useEffect(() => {
-    if (symbolFilter && !symbols.includes(symbolFilter)) {
-      setSymbolFilter("");
-    }
-  }, [symbols, symbolFilter]);
+  const activeSymbolFilter =
+    symbolFilter && symbols.includes(symbolFilter) ? symbolFilter : "";
 
   const filtered = useMemo(
     () =>
-      symbolFilter
-        ? livePredictions.filter((p) => p.symbol === symbolFilter)
+      activeSymbolFilter
+        ? livePredictions.filter((p) => p.symbol === activeSymbolFilter)
         : livePredictions,
-    [livePredictions, symbolFilter],
+    [livePredictions, activeSymbolFilter],
   );
 
-  const compare = useCallback(comparePredictions, []);
+  const compare = useCallback(
+    (a: Prediction, b: Prediction, key: SortKey, dir: SortDir) =>
+      comparePredictions(a, b, key, dir),
+    [],
+  );
   const initialDirForKey = useCallback(
     (key: SortKey): SortDir => (key === "symbol" ? "asc" : "desc"),
     [],
