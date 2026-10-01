@@ -16,6 +16,8 @@ export type SettingsRow = Omit<
   | "watchlist_min_buy"
   | "watchlist_pins"
   | "watchlist_dismissed"
+  | "confirmation_cycles"
+  | "confirmation_seconds"
 > &
   Partial<
     Pick<
@@ -25,6 +27,8 @@ export type SettingsRow = Omit<
       | "min_hold_minutes"
       | "jev_sell_exit_threshold"
       | "reentry_cooldown_minutes"
+      | "confirmation_cycles"
+      | "confirmation_seconds"
       | "demotion_exits_enabled"
       | "demotion_max_hold_ratio"
       | "demotion_jev_sell_on_loss"
@@ -57,5 +61,7 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     watchlist_pins: raw.watchlist_pins ?? [],
     watchlist_dismissed: raw.watchlist_dismissed ?? [],
     min_dollar_volume: raw.min_dollar_volume ?? 250_000,
+    confirmation_cycles: raw.confirmation_cycles ?? 2,
+    confirmation_seconds: raw.confirmation_seconds ?? 30,
   };
 }

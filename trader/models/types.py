@@ -176,6 +176,8 @@ class RiskSettings:
     jev_sell_exit_threshold: float = 0.95
     # Block new entries in a symbol for this many minutes after an exit. 0 = off.
     reentry_cooldown_minutes: float = 45.0
+    confirmation_cycles: int = 2
+    confirmation_seconds: float = 30.0
 
 
 @dataclass

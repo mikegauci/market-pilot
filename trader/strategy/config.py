@@ -52,6 +52,8 @@ def strategy_config_with_risk_overrides(
     min_share_price: float = 0.0,
     min_dollar_volume: float = 0.0,
     jev_sell_exit_threshold: Optional[float] = None,
+    confirmation_cycles: Optional[int] = None,
+    confirmation_seconds: Optional[float] = None,
 ) -> StrategyConfig:
     """Apply dashboard settings overrides onto env-based strategy config."""
     updates: dict = {
@@ -61,4 +63,8 @@ def strategy_config_with_risk_overrides(
     }
     if jev_sell_exit_threshold is not None:
         updates["jev_sell_exit_threshold"] = jev_sell_exit_threshold
+    if confirmation_cycles is not None:
+        updates["confirmation_cycles"] = max(1, int(confirmation_cycles))
+    if confirmation_seconds is not None:
+        updates["confirmation_seconds"] = max(0.0, float(confirmation_seconds))
     return replace(base, **updates)

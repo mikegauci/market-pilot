@@ -479,7 +479,7 @@ class SupabaseRepository:
             )
         return rankings
 
-    _SETTINGS_SELECT_BASE = (
+    _SETTINGS_SELECT_CORE = (
         "minimum_jev_confidence, signal_record_threshold, risk_per_trade, "
         "max_position_size, max_daily_loss, max_open_positions, "
         "stop_loss_percentage, take_profit_percentage, max_hold_minutes, "
@@ -493,33 +493,53 @@ class SupabaseRepository:
         "watchlist_screener_ran_at, demotion_exits_enabled, demotion_max_hold_ratio, "
         "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit"
     )
+    _SETTINGS_SELECT_BASE = (
+        f"{_SETTINGS_SELECT_CORE}, confirmation_cycles, confirmation_seconds"
+    )
 
-    def _load_settings_row(self) -> dict:
-        extended = f"{self._SETTINGS_SELECT_BASE}, min_dollar_volume"
+    def _select_settings_row(self, columns: str) -> Optional[dict]:
         try:
             result = (
                 self.client.table("settings")
-                .select(extended)
+                .select(columns)
                 .eq("id", 1)
                 .single()
                 .execute()
             )
             return dict(result.data or {})
-        except Exception as exc:
-            logger.warning(
-                "Settings read without min_dollar_volume (%s) — using default",
-                exc,
-            )
-            result = (
-                self.client.table("settings")
-                .select(self._SETTINGS_SELECT_BASE)
-                .eq("id", 1)
-                .single()
-                .execute()
-            )
-            data = dict(result.data or {})
+        except Exception:
+            return None
+
+    def _load_settings_row(self) -> dict:
+        data = self._select_settings_row(f"{self._SETTINGS_SELECT_BASE}, min_dollar_volume")
+        if data is not None:
+            return data
+
+        logger.warning(
+            "Settings read without min_dollar_volume — using default",
+        )
+        data = self._select_settings_row(self._SETTINGS_SELECT_BASE)
+        if data is not None:
             data.setdefault("min_dollar_volume", 250_000)
             return data
+
+        logger.warning(
+            "Settings read without confirmation_cycles/confirmation_seconds — using defaults",
+        )
+        data = self._select_settings_row(f"{self._SETTINGS_SELECT_CORE}, min_dollar_volume")
+        if data is not None:
+            data.setdefault("confirmation_cycles", 2)
+            data.setdefault("confirmation_seconds", 30)
+            return data
+
+        data = self._select_settings_row(self._SETTINGS_SELECT_CORE)
+        if data is not None:
+            data.setdefault("min_dollar_volume", 250_000)
+            data.setdefault("confirmation_cycles", 2)
+            data.setdefault("confirmation_seconds", 30)
+            return data
+
+        raise RuntimeError("Unable to load settings row from Supabase")
 
     @_db_synchronized
     def get_risk_settings(self) -> RiskSettings:
@@ -548,6 +568,8 @@ class SupabaseRepository:
             min_hold_minutes=float(data.get("min_hold_minutes", 15)),
             jev_sell_exit_threshold=float(data.get("jev_sell_exit_threshold", 0.95)),
             reentry_cooldown_minutes=float(data.get("reentry_cooldown_minutes", 45)),
+            confirmation_cycles=int(data.get("confirmation_cycles", 2)),
+            confirmation_seconds=float(int(data.get("confirmation_seconds", 30))),
             min_volume_ratio=float(data.get("min_volume_ratio", 0.5)),
             min_share_price=float(data.get("min_share_price", 20)),
             min_dollar_volume=float(data.get("min_dollar_volume", 250_000)),

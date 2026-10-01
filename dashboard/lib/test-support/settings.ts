@@ -16,6 +16,8 @@ export function settingsFixture(overrides: Partial<Settings> = {}): Settings {
     min_hold_minutes: 15,
     jev_sell_exit_threshold: 0.95,
     reentry_cooldown_minutes: 45,
+    confirmation_cycles: 2,
+    confirmation_seconds: 30,
     min_volume_ratio: 0,
     min_share_price: 20,
     min_dollar_volume: 250_000,

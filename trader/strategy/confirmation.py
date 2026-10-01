@@ -51,3 +51,12 @@ class ConfirmationTracker:
         key = symbol.upper()
         self._counts[key] = 0
         self._first_eligible_mono.pop(key, None)
+
+    def reconfigure(self, required_cycles: int, required_seconds: float) -> None:
+        """Apply dashboard settings without clearing in-progress confirmation state.
+
+        In-progress cycle counts and the eligibility timer keep running; lowering
+        seconds or cycles can allow entry sooner, raising them can delay it.
+        """
+        self.required_cycles = max(1, int(required_cycles))
+        self.required_seconds = max(0.0, float(required_seconds))

@@ -413,6 +413,8 @@ def run() -> int:
         min_share_price=risk_settings.min_share_price,
         min_dollar_volume=risk_settings.min_dollar_volume,
         jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
+        confirmation_cycles=risk_settings.confirmation_cycles,
+        confirmation_seconds=risk_settings.confirmation_seconds,
     )
     confirmation_tracker = ConfirmationTracker(
         strategy_config.confirmation_cycles,
@@ -748,13 +750,25 @@ def run() -> int:
                     settings.settings_refresh_interval_sec,
                 ):
                     risk_settings = db.get_risk_settings()
+                    prev_cycles = strategy_config.confirmation_cycles
+                    prev_seconds = strategy_config.confirmation_seconds
                     strategy_config = strategy_config_with_risk_overrides(
                         settings.strategy_config,
                         min_volume_ratio=risk_settings.min_volume_ratio,
                         min_share_price=risk_settings.min_share_price,
                         min_dollar_volume=risk_settings.min_dollar_volume,
                         jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
+                        confirmation_cycles=risk_settings.confirmation_cycles,
+                        confirmation_seconds=risk_settings.confirmation_seconds,
                     )
+                    if (
+                        strategy_config.confirmation_cycles != prev_cycles
+                        or strategy_config.confirmation_seconds != prev_seconds
+                    ):
+                        confirmation_tracker.reconfigure(
+                            strategy_config.confirmation_cycles,
+                            strategy_config.confirmation_seconds,
+                        )
                     last_settings_sync = now_mono
 
                 benchmark_symbol = effective_benchmark(risk_settings)

@@ -44,6 +44,8 @@ Hosted Supabase Free tier: see [docs/supabase-quota.md](../docs/supabase-quota.m
 | `/strategy` | Strategy guide — indicators, filters, and decision flow |
 | `/settings` | Risk and strategy settings |
 
+**Confirmation cycles / seconds** (under Jev & signals) control how long an eligible BUY must persist before entry. When Supabase settings are available, these override `STRATEGY_CONFIRMATION_*` in `trader/.env`; the trader reloads them about every 15s without a restart.
+
 ## System status (sidebar)
 
 System status lives in the **sidebar on every page**. It shows market hours, whether the trading engine is running, and whether the broker is connected. An amber warning appears when the engine is stopped or the broker is offline.

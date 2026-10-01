@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from models.types import JevPrediction, MarketState, Quote, RiskSettings, TradeRecord, TradingMode
 from risk.manager import RiskManager
-from strategy.config import StrategyConfig
+from strategy.config import StrategyConfig, strategy_config_with_risk_overrides
 from strategy.confirmation import ConfirmationTracker
 from strategy.filters import check_correlation_cap, check_entry_filters
 from strategy.signals import (
@@ -154,6 +154,41 @@ class TestConfirmation(unittest.TestCase):
         self.assertTrue(tracker.record("NVDA", True))
         tracker.reset("NVDA")
         self.assertEqual(tracker.progress("NVDA"), (0, 2))
+
+    def test_reconfigure_updates_requirements(self) -> None:
+        tracker = ConfirmationTracker(2, required_seconds=0)
+        tracker.reconfigure(1, 0)
+        self.assertEqual(tracker.progress("NVDA"), (0, 1))
+        self.assertTrue(tracker.record("NVDA", True))
+        tracker.reconfigure(1, 15.0)
+        self.assertEqual(tracker.required_seconds, 15.0)
+
+    def test_reconfigure_preserves_in_progress_state(self) -> None:
+        tracker = ConfirmationTracker(2, required_seconds=60.0)
+        self.assertFalse(tracker.record("NVDA", True))
+        self.assertEqual(tracker.progress("NVDA"), (1, 2))
+        started = tracker._first_eligible_mono["NVDA"]
+        tracker.reconfigure(2, 15.0)
+        self.assertEqual(tracker.progress("NVDA"), (1, 2))
+        self.assertEqual(tracker._first_eligible_mono.get("NVDA"), started)
+
+    def test_reconfigure_can_allow_immediate_entry_when_cycles_tighten(self) -> None:
+        tracker = ConfirmationTracker(2, required_seconds=0)
+        self.assertFalse(tracker.record("NVDA", True))
+        tracker.reconfigure(1, 0)
+        self.assertTrue(tracker.record("NVDA", True))
+
+
+class TestStrategyConfigOverrides(unittest.TestCase):
+    def test_confirmation_from_dashboard(self) -> None:
+        merged = strategy_config_with_risk_overrides(
+            StrategyConfig(),
+            min_volume_ratio=0.5,
+            confirmation_cycles=1,
+            confirmation_seconds=15.0,
+        )
+        self.assertEqual(merged.confirmation_cycles, 1)
+        self.assertEqual(merged.confirmation_seconds, 15.0)
 
 
 class TestTimeExit(unittest.TestCase):

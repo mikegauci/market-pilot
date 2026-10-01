@@ -28,6 +28,8 @@ function labelFor(name: string): string {
     min_hold_minutes: "Min hold (minutes)",
     jev_sell_exit_threshold: "Jev SELL exit (%)",
     reentry_cooldown_minutes: "Re-entry cooldown (minutes)",
+    confirmation_cycles: "Confirmation cycles",
+    confirmation_seconds: "Confirmation seconds",
     watchlist_dynamic_size: "Dynamic top-N",
     watchlist_min_buy: "Watchlist min BUY (%)",
     min_volume_ratio: "Min volume ratio",
@@ -50,6 +52,8 @@ export type ParsedSettings = {
   min_hold_minutes: number;
   jev_sell_exit_threshold: number;
   reentry_cooldown_minutes: number;
+  confirmation_cycles: number;
+  confirmation_seconds: number;
   min_volume_ratio: number;
   min_share_price: number;
   min_dollar_volume: number;
@@ -111,6 +115,8 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     formData,
     "reentry_cooldown_minutes",
   );
+  const confirmation_cycles = parseRequiredNumber(formData, "confirmation_cycles");
+  const confirmation_seconds = parseRequiredNumber(formData, "confirmation_seconds");
   const min_volume_ratio = parseRequiredNumber(formData, "min_volume_ratio");
   const min_share_price = parseRequiredNumber(formData, "min_share_price");
   const min_dollar_volume = parseRequiredNumber(formData, "min_dollar_volume");
@@ -151,6 +157,16 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     reentry_cooldown_minutes > 480
   ) {
     throw new Error("Re-entry cooldown (minutes) must be a whole number from 0 to 480");
+  }
+  if (!Number.isInteger(confirmation_cycles) || confirmation_cycles < 1 || confirmation_cycles > 10) {
+    throw new Error("Confirmation cycles must be a whole number from 1 to 10");
+  }
+  if (
+    !Number.isInteger(confirmation_seconds) ||
+    confirmation_seconds < 0 ||
+    confirmation_seconds > 300
+  ) {
+    throw new Error("Confirmation seconds must be a whole number from 0 to 300");
   }
   if (min_volume_ratio < 0 || min_volume_ratio > 5) {
     throw new Error("Min volume ratio must be between 0 (off) and 5");
@@ -246,6 +262,8 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     min_hold_minutes,
     jev_sell_exit_threshold,
     reentry_cooldown_minutes,
+    confirmation_cycles,
+    confirmation_seconds,
     min_volume_ratio,
     min_share_price,
     min_dollar_volume,

@@ -22,6 +22,8 @@ const baseFields = {
   min_hold_minutes: "15",
   jev_sell_exit_threshold: "95",
   reentry_cooldown_minutes: "45",
+  confirmation_cycles: "2",
+  confirmation_seconds: "30",
   min_volume_ratio: "0.5",
   min_share_price: "20",
   min_dollar_volume: "250000",
@@ -151,6 +153,34 @@ describe("parseSettingsForm max_hold_minutes", () => {
     expect(() =>
       parseSettingsForm(form({ ...baseFields, max_hold_minutes: "15.5" })),
     ).toThrow("Max hold (minutes) must be a whole number from 0 to 480");
+  });
+});
+
+describe("parseSettingsForm confirmation gate", () => {
+  it("parses confirmation cycles and seconds", () => {
+    const parsed = parseSettingsForm(
+      form({ ...baseFields, confirmation_cycles: "1", confirmation_seconds: "15" }),
+    );
+    expect(parsed.confirmation_cycles).toBe(1);
+    expect(parsed.confirmation_seconds).toBe(15);
+  });
+
+  it("rejects invalid confirmation cycles", () => {
+    expect(() =>
+      parseSettingsForm(form({ ...baseFields, confirmation_cycles: "0" })),
+    ).toThrow(/Confirmation cycles/);
+  });
+
+  it("rejects non-integer confirmation seconds", () => {
+    expect(() =>
+      parseSettingsForm(form({ ...baseFields, confirmation_seconds: "15.5" })),
+    ).toThrow(/Confirmation seconds/);
+  });
+
+  it("rejects confirmation seconds above 300", () => {
+    expect(() =>
+      parseSettingsForm(form({ ...baseFields, confirmation_seconds: "301" })),
+    ).toThrow(/Confirmation seconds/);
   });
 });
 

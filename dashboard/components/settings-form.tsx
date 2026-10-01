@@ -42,6 +42,10 @@ const SETTING_DESCRIPTIONS_FULL = {
     "The AI must be at least this confident before the bot will actually buy — higher means fewer, pickier trades.",
   signal_record_threshold:
     "Buy signals above this level are marked as worth watching, so you can spot near-misses below your trade threshold.",
+  confirmation_cycles:
+    "After Jev BUY clears your min confidence, the bot waits for this many eval cycles in a row before buying — higher means fewer false starts. Saved changes apply to in-progress confirmations without resetting the streak.",
+  confirmation_seconds:
+    "Eligible BUY must stay high for at least this many seconds (0 = cycle count only, no time wait). Helps ignore one-tick spikes. Changes apply to in-progress confirmations without resetting the streak.",
   risk_per_trade:
     "Most you are willing to lose on one trade if the stop loss is hit.",
   max_position_size: "Largest amount the bot will put into a single trade.",
@@ -80,6 +84,8 @@ const SETTING_DESCRIPTIONS_FULL = {
 const SETTING_DESCRIPTIONS = {
   minimum_jev_confidence: "Minimum AI confidence before the bot opens a trade.",
   signal_record_threshold: "Log buy signals above this % as watchlist-worthy near-misses.",
+  confirmation_cycles: "Eligible BUY cycles in a row before entry.",
+  confirmation_seconds: "Min seconds eligible BUY must persist (0 = cycles only).",
   risk_per_trade: "Max loss per trade if stop loss hits.",
   max_position_size: "Cap on capital deployed in one position.",
   max_daily_loss: "Stop new trades after today's losses reach this amount.",
@@ -390,6 +396,40 @@ export function SettingsForm({
               type="number"
               step="1"
               defaultValue={Math.round(settings.signal_record_threshold * 100)}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="confirmation_cycles"
+            label="Confirmation cycles"
+            description={SETTING_DESCRIPTIONS.confirmation_cycles}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.confirmation_cycles}
+          >
+            <Input
+              id="confirmation_cycles"
+              name="confirmation_cycles"
+              type="number"
+              step="1"
+              min={1}
+              max={10}
+              defaultValue={settings.confirmation_cycles ?? 2}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="confirmation_seconds"
+            label="Confirmation seconds"
+            description={SETTING_DESCRIPTIONS.confirmation_seconds}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.confirmation_seconds}
+          >
+            <Input
+              id="confirmation_seconds"
+              name="confirmation_seconds"
+              type="number"
+              step="1"
+              min={0}
+              max={300}
+              defaultValue={settings.confirmation_seconds ?? 30}
               required
             />
           </SettingsField>

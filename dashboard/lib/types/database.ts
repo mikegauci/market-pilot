@@ -30,6 +30,10 @@ export type Settings = {
   jev_sell_exit_threshold: number;
   /** Block new entries in a symbol for this many minutes after an exit (0 = off). */
   reentry_cooldown_minutes: number;
+  /** Consecutive eligible Jev BUY eval cycles required before entry. */
+  confirmation_cycles: number;
+  /** Minimum seconds an eligible BUY must persist before entry (0 = cycle count only). */
+  confirmation_seconds: number;
   /** 0 = off; block entries when 1m volume ratio is below this vs 10-bar average */
   min_volume_ratio: number;
   /** 0 = off; block entries / EM scan picks below this USD share price */
