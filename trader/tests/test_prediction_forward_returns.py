@@ -40,9 +40,9 @@ class PredictionForwardReturnsTests(unittest.TestCase):
             ]
         )
 
-        upsert_chain = MagicMock()
-        table.upsert.return_value = upsert_chain
-        upsert_chain.execute.return_value = MagicMock(data=[{}])
+        rpc_chain = MagicMock()
+        client.rpc.return_value = rpc_chain
+        rpc_chain.execute.return_value = MagicMock(data=1)
 
         count_chain = MagicMock()
         count_chain.not_.return_value = count_chain
@@ -79,8 +79,8 @@ class PredictionForwardReturnsTests(unittest.TestCase):
         select_chain.lte.assert_called()
         lte_args = select_chain.lte.call_args[0]
         self.assertEqual(lte_args[0], "timestamp")
-        table.upsert.assert_called()
-        payload = table.upsert.call_args[0][0][0]
+        client.rpc.assert_called()
+        payload = client.rpc.call_args[0][1]["p_rows"][0]
         self.assertIsNotNone(payload.get("return_15m_pct"))
 
     @patch("database.supabase.create_client")
@@ -130,9 +130,9 @@ class PredictionForwardReturnsTests(unittest.TestCase):
             )
         ]
 
-        upsert_chain = MagicMock()
-        table.upsert.return_value = upsert_chain
-        upsert_chain.execute.return_value = MagicMock(data=[{}])
+        rpc_chain = MagicMock()
+        client.rpc.return_value = rpc_chain
+        rpc_chain.execute.return_value = MagicMock(data=1)
         count_chain = MagicMock()
         count_chain.not_.return_value = count_chain
         count_chain.limit.return_value = count_chain
@@ -149,8 +149,8 @@ class PredictionForwardReturnsTests(unittest.TestCase):
             updated = repo.backfill_prediction_forward_returns(limit=10)
 
         self.assertEqual(updated, 1)
-        table.upsert.assert_called()
-        payload = table.upsert.call_args[0][0][0]
+        client.rpc.assert_called()
+        payload = client.rpc.call_args[0][1]["p_rows"][0]
         self.assertIn("forward_returns_checked_at", payload)
         self.assertNotIn("return_15m_pct", payload)
 
@@ -183,9 +183,9 @@ class PredictionForwardReturnsTests(unittest.TestCase):
             ]
         )
 
-        upsert_chain = MagicMock()
-        table.upsert.return_value = upsert_chain
-        upsert_chain.execute.return_value = MagicMock(data=[{}])
+        rpc_chain = MagicMock()
+        client.rpc.return_value = rpc_chain
+        rpc_chain.execute.return_value = MagicMock(data=1)
         count_chain = MagicMock()
         count_chain.not_.return_value = count_chain
         count_chain.limit.return_value = count_chain
@@ -205,7 +205,7 @@ class PredictionForwardReturnsTests(unittest.TestCase):
             updated = repo.backfill_prediction_forward_returns(limit=10)
 
         self.assertEqual(updated, 1)
-        payload = table.upsert.call_args[0][0][0]
+        payload = client.rpc.call_args[0][1]["p_rows"][0]
         self.assertIn("forward_returns_checked_at", payload)
 
 

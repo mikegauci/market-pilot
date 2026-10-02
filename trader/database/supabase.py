@@ -1358,7 +1358,23 @@ class SupabaseRepository:
         chunk = _FORWARD_RETURN_UPDATE_CHUNK
         for start in range(0, len(updates), chunk):
             batch = updates[start : start + chunk]
-            self.client.table("predictions").upsert(batch, on_conflict="id").execute()
+            try:
+                self.client.rpc(
+                    "patch_prediction_forward_returns",
+                    {"p_rows": batch},
+                ).execute()
+            except Exception as exc:
+                logger.warning(
+                    "Forward-return batch RPC failed (%s rows), falling back to row updates: %s",
+                    len(batch),
+                    exc,
+                )
+                for item in batch:
+                    row_id = item["id"]
+                    payload = {k: v for k, v in item.items() if k != "id"}
+                    self.client.table("predictions").update(payload).eq(
+                        "id", row_id
+                    ).execute()
 
     def _intraday_bars_for_backfill_batch(
         self,
