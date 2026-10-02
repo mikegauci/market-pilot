@@ -64,6 +64,10 @@ export type Settings = {
   profit_take_enabled: boolean;
   profit_take_min_fraction: number;
   profit_take_max_fraction: number;
+  profit_take_min_band_hits: number;
+  profit_take_band_window_cycles: number;
+  /** 0 = off; otherwise min SELL % (fraction 0–1) for optional early exit with progress ≥ min band. */
+  profit_take_jev_sell_threshold: number;
   em_universe_synced_at: string | null;
   em_universe_source: string | null;
   updated_at: string;

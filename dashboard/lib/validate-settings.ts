@@ -29,6 +29,9 @@ function labelFor(name: string): string {
     jev_sell_exit_threshold: "Jev SELL exit (%)",
     profit_take_min_fraction: "Early take profit min (% of target)",
     profit_take_max_fraction: "Early take profit max (% of target)",
+    profit_take_min_band_hits: "Early take profit band touches",
+    profit_take_band_window_cycles: "Early take profit lookback (cycles)",
+    profit_take_jev_sell_threshold: "Early take profit Jev SELL (%)",
     reentry_cooldown_minutes: "Re-entry cooldown (minutes)",
     confirmation_cycles: "Confirmation cycles",
     confirmation_seconds: "Confirmation seconds",
@@ -75,6 +78,9 @@ export type ParsedSettings = {
   profit_take_enabled: boolean;
   profit_take_min_fraction: number;
   profit_take_max_fraction: number;
+  profit_take_min_band_hits: number;
+  profit_take_band_window_cycles: number;
+  profit_take_jev_sell_threshold: number;
 };
 
 function parseRiskProfile(formData: FormData): RiskProfile {
@@ -179,6 +185,45 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
       "Early take profit max (% of target) must be greater than min (% of target)",
     );
   }
+  const profit_take_min_band_hits = Number(
+    formData.get("profit_take_min_band_hits") ?? 3,
+  );
+  if (
+    !Number.isInteger(profit_take_min_band_hits) ||
+    profit_take_min_band_hits < 1 ||
+    profit_take_min_band_hits > 20
+  ) {
+    throw new Error("Early take profit band touches must be a whole number from 1 to 20");
+  }
+  const profit_take_band_window_cycles = Number(
+    formData.get("profit_take_band_window_cycles") ?? 10,
+  );
+  if (
+    !Number.isInteger(profit_take_band_window_cycles) ||
+    profit_take_band_window_cycles < 1 ||
+    profit_take_band_window_cycles > 30
+  ) {
+    throw new Error(
+      "Early take profit lookback (cycles) must be a whole number from 1 to 30",
+    );
+  }
+  if (profit_take_min_band_hits > profit_take_band_window_cycles) {
+    throw new Error(
+      "Early take profit band touches must be at most the lookback window",
+    );
+  }
+  const profit_take_jev_sell_pct = Number(
+    formData.get("profit_take_jev_sell_threshold") ?? 70,
+  );
+  if (
+    !Number.isFinite(profit_take_jev_sell_pct) ||
+    profit_take_jev_sell_pct < 0 ||
+    profit_take_jev_sell_pct > 100
+  ) {
+    throw new Error("Early take profit Jev SELL (%) must be from 0 (off) to 100");
+  }
+  const profit_take_jev_sell_threshold =
+    profit_take_jev_sell_pct <= 0 ? 0 : profit_take_jev_sell_pct / 100;
   if (
     !Number.isInteger(reentry_cooldown_minutes) ||
     reentry_cooldown_minutes < 0 ||
@@ -311,5 +356,8 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     profit_take_enabled,
     profit_take_min_fraction,
     profit_take_max_fraction,
+    profit_take_min_band_hits,
+    profit_take_band_window_cycles,
+    profit_take_jev_sell_threshold,
   };
 }

@@ -116,7 +116,7 @@ class TestDemotionForceExit(unittest.TestCase):
         db = MagicMock()
         db.get_daily_realized_pnl.return_value = 0.0
 
-        closed = close_ibkr_signal_exits(
+        closed, _closed_ids = close_ibkr_signal_exits(
             ibkr,
             manager,
             db,

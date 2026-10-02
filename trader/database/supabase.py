@@ -550,11 +550,22 @@ class SupabaseRepository:
     )
     _SETTINGS_SELECT_WITH_PROFIT_TAKE = (
         f"{_SETTINGS_SELECT_CORE}, "
-        "profit_take_enabled, profit_take_min_fraction, profit_take_max_fraction"
+        "profit_take_enabled, profit_take_min_fraction, profit_take_max_fraction, "
+        "profit_take_min_band_hits, profit_take_band_window_cycles, "
+        "profit_take_jev_sell_threshold"
     )
     _SETTINGS_SELECT_BASE = (
         f"{_SETTINGS_SELECT_WITH_PROFIT_TAKE}, confirmation_cycles, confirmation_seconds"
     )
+
+    @staticmethod
+    def _apply_profit_take_defaults(data: dict) -> None:
+        data.setdefault("profit_take_enabled", False)
+        data.setdefault("profit_take_min_fraction", 0.70)
+        data.setdefault("profit_take_max_fraction", 0.80)
+        data.setdefault("profit_take_min_band_hits", 3)
+        data.setdefault("profit_take_band_window_cycles", 10)
+        data.setdefault("profit_take_jev_sell_threshold", 0.70)
 
     def _select_settings_row(self, columns: str) -> Optional[dict]:
         try:
@@ -590,9 +601,7 @@ class SupabaseRepository:
             "min_dollar_volume"
         )
         if data is not None:
-            data.setdefault("profit_take_enabled", False)
-            data.setdefault("profit_take_min_fraction", 0.70)
-            data.setdefault("profit_take_max_fraction", 0.80)
+            self._apply_profit_take_defaults(data)
             return data
 
         logger.warning(
@@ -602,9 +611,7 @@ class SupabaseRepository:
         if data is not None:
             data.setdefault("confirmation_cycles", 2)
             data.setdefault("confirmation_seconds", 30)
-            data.setdefault("profit_take_enabled", False)
-            data.setdefault("profit_take_min_fraction", 0.70)
-            data.setdefault("profit_take_max_fraction", 0.80)
+            self._apply_profit_take_defaults(data)
             return data
 
         data = self._select_settings_row(self._SETTINGS_SELECT_CORE)
@@ -612,9 +619,7 @@ class SupabaseRepository:
             data.setdefault("min_dollar_volume", 250_000)
             data.setdefault("confirmation_cycles", 2)
             data.setdefault("confirmation_seconds", 30)
-            data.setdefault("profit_take_enabled", False)
-            data.setdefault("profit_take_min_fraction", 0.70)
-            data.setdefault("profit_take_max_fraction", 0.80)
+            self._apply_profit_take_defaults(data)
             return data
 
         raise RuntimeError("Unable to load settings row from Supabase")
@@ -686,6 +691,13 @@ class SupabaseRepository:
             profit_take_enabled=bool(data.get("profit_take_enabled", False)),
             profit_take_min_fraction=profit_min,
             profit_take_max_fraction=profit_max,
+            profit_take_min_band_hits=int(data.get("profit_take_min_band_hits", 3)),
+            profit_take_band_window_cycles=int(
+                data.get("profit_take_band_window_cycles", 10)
+            ),
+            profit_take_jev_sell_threshold=float(
+                data.get("profit_take_jev_sell_threshold", 0.70)
+            ),
         )
 
     @_db_synchronized

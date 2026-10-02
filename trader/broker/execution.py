@@ -5,8 +5,13 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
-from models.types import ClosedTrade, OrderFill, Quote, RiskSettings, TradeRecord
-from strategy.exits import is_profit_take_eligible
+from models.types import ClosedTrade, JevPrediction, OrderFill, Quote, RiskSettings, TradeRecord
+from strategy.exits import (
+    normalize_profit_take_fractions,
+    profit_take_should_exit,
+    take_profit_path_progress,
+)
+from strategy.profit_take_tracker import ProfitTakeBandTracker
 
 if TYPE_CHECKING:
     from broker.ibkr import IBKRClient
@@ -183,9 +188,13 @@ def close_ibkr_signal_exits(
     profit_take_trade_ids: Optional[set[str]] = None,
     fill_timeout_sec: float = 30.0,
     ibkr_account_id: Optional[str] = None,
-) -> bool:
-    """Close IBKR positions on time limit, demotion, profit take, or Jev SELL."""
+) -> tuple[bool, set[str]]:
+    """Close IBKR positions on time limit, demotion, profit take, or Jev SELL.
+
+    Returns (any_closed, trade_ids_successfully_closed).
+    """
     closed_any = False
+    closed_trade_ids: set[str] = set()
     jev_sell_symbols = jev_sell_symbols or set()
     demotion_exit_symbols = demotion_exit_symbols or set()
     profit_take_trade_ids = profit_take_trade_ids or set()
@@ -229,6 +238,7 @@ def close_ibkr_signal_exits(
 
         _record_ibkr_close(trade, fill, reason, risk_manager, db)
         closed_any = True
+        closed_trade_ids.add(trade.id)
         logger.info(
             "IBKR exit %s @ $%.2f (%s)",
             trade.symbol,
@@ -241,7 +251,7 @@ def close_ibkr_signal_exits(
             db.get_daily_realized_pnl(ibkr_account_id)
         )
 
-    return closed_any
+    return closed_any, closed_trade_ids
 
 
 def collect_time_exit_symbols(
@@ -266,23 +276,47 @@ def collect_profit_take_trade_ids(
     open_trades: List[TradeRecord],
     quotes_by_symbol: Dict[str, Quote],
     risk_settings: RiskSettings,
+    band_tracker: ProfitTakeBandTracker,
+    predictions_by_symbol: Optional[Dict[str, JevPrediction]] = None,
 ) -> set[str]:
     """Per trade id (not symbol) so multiple legs on one symbol exit independently."""
     trade_ids: set[str] = set()
+    min_fraction, max_fraction = normalize_profit_take_fractions(
+        risk_settings.profit_take_min_fraction,
+        risk_settings.profit_take_max_fraction,
+    )
+    predictions = predictions_by_symbol or {}
+
+    if not risk_settings.profit_take_enabled:
+        return set()
+
     for trade in open_trades:
         if trade.execution_mode != "ibkr":
             continue
         quote = quotes_by_symbol.get(trade.symbol)
         if quote is None or quote.price is None:
+            band_tracker.record(trade.id, False)
             continue
-        if is_profit_take_eligible(
+
+        progress = take_profit_path_progress(trade, quote.price)
+        in_band = (
+            progress is not None
+            and min_fraction <= progress <= max_fraction
+        )
+        band_hits = band_tracker.record(trade.id, in_band)
+        prediction = predictions.get(trade.symbol)
+
+        if profit_take_should_exit(
             trade,
             quote.price,
-            enabled=risk_settings.profit_take_enabled,
-            min_fraction=risk_settings.profit_take_min_fraction,
-            max_fraction=risk_settings.profit_take_max_fraction,
+            risk_settings,
+            band_hits=band_hits,
+            prediction=prediction,
         ):
             trade_ids.add(trade.id)
+
+    open_ids = {t.id for t in open_trades}
+    band_tracker.prune(open_ids)
     return trade_ids
 
 

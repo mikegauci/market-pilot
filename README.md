@@ -221,9 +221,12 @@ UPDATE bot_status SET enabled = true WHERE id = 1;
 | `max_daily_loss` | 10.00 | Stop new entries after daily loss |
 | `stop_loss_percentage` | 0.01 | 1% stop-loss from entry |
 | `take_profit_percentage` | 0.015 | 1.5% take-profit from entry |
-| `profit_take_enabled` | false | Opt-in: market-sell in the early TP band (see min/max) |
+| `profit_take_enabled` | false | Opt-in: market-sell on band persistence, soft Jev SELL, or fast spike (see below) |
 | `profit_take_min_fraction` | 0.70 | Lower bound: % of entry→TP distance (0.70 = 70% of the way) |
 | `profit_take_max_fraction` | 0.80 | Upper bound of the band; fast moves above max but below full TP still exit |
+| `profit_take_min_band_hits` | 3 | In-band eval samples within the lookback window required to exit (missing quote counts as out-of-band) |
+| `profit_take_band_window_cycles` | 10 | Rolling window of eval cycles for band-touch counting |
+| `profit_take_jev_sell_threshold` | 0.70 | Optional soft Jev SELL (dominant) for early exit; 0 = off. Requires progress ≥ min fraction |
 | `account_capital` | 1000 | Fallback capital when IBKR offline |
 
 When IBKR is connected, **effective capital** uses your paper account `NetLiquidation` (e.g. €1M). Tune absolute limits in Supabase or the dashboard Settings page.

@@ -16,6 +16,9 @@ export type SettingsRow = Omit<
   | "profit_take_enabled"
   | "profit_take_min_fraction"
   | "profit_take_max_fraction"
+  | "profit_take_min_band_hits"
+  | "profit_take_band_window_cycles"
+  | "profit_take_jev_sell_threshold"
   | "watchlist_min_buy"
   | "watchlist_pins"
   | "watchlist_dismissed"
@@ -40,6 +43,9 @@ export type SettingsRow = Omit<
       | "profit_take_enabled"
       | "profit_take_min_fraction"
       | "profit_take_max_fraction"
+      | "profit_take_min_band_hits"
+      | "profit_take_band_window_cycles"
+      | "profit_take_jev_sell_threshold"
       | "watchlist_min_buy"
       | "watchlist_pins"
       | "watchlist_dismissed"
@@ -66,6 +72,9 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     profit_take_enabled: raw.profit_take_enabled ?? false,
     profit_take_min_fraction: raw.profit_take_min_fraction ?? 0.7,
     profit_take_max_fraction: raw.profit_take_max_fraction ?? 0.8,
+    profit_take_min_band_hits: raw.profit_take_min_band_hits ?? 3,
+    profit_take_band_window_cycles: raw.profit_take_band_window_cycles ?? 10,
+    profit_take_jev_sell_threshold: raw.profit_take_jev_sell_threshold ?? 0.7,
     watchlist_min_buy: raw.watchlist_min_buy ?? 0.6,
     watchlist_pins: raw.watchlist_pins ?? [],
     watchlist_dismissed: raw.watchlist_dismissed ?? [],

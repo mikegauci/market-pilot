@@ -178,6 +178,9 @@ class RiskSettings:
     profit_take_enabled: bool = False
     profit_take_min_fraction: float = 0.70
     profit_take_max_fraction: float = 0.80
+    profit_take_min_band_hits: int = 3
+    profit_take_band_window_cycles: int = 10
+    profit_take_jev_sell_threshold: float = 0.70
     # Block new entries in a symbol for this many minutes after an exit. 0 = off.
     reentry_cooldown_minutes: float = 45.0
     confirmation_cycles: int = 2

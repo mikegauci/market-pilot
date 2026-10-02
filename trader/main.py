@@ -54,6 +54,7 @@ from models.types import (
 )
 from risk.manager import RiskManager
 from strategy.confirmation import ConfirmationTracker
+from strategy.profit_take_tracker import ProfitTakeBandTracker
 from strategy.config import strategy_config_with_risk_overrides
 from watchlist.demotion import effective_max_hold_minutes
 from watchlist.jev_screener import (
@@ -427,6 +428,9 @@ def run() -> int:
         strategy_config.confirmation_cycles,
         required_seconds=strategy_config.confirmation_seconds,
     )
+    profit_take_tracker = ProfitTakeBandTracker(
+        risk_settings.profit_take_band_window_cycles,
+    )
     logger.info(
         "Strategy filters: min confidence from settings, margin %.0f%%, "
         "confirmation %sx, max hold %.0fm (dashboard), min hold %.0fm, "
@@ -776,6 +780,9 @@ def run() -> int:
                             strategy_config.confirmation_cycles,
                             strategy_config.confirmation_seconds,
                         )
+                    profit_take_tracker.reconfigure(
+                        risk_settings.profit_take_band_window_cycles,
+                    )
                     last_settings_sync = now_mono
 
                 benchmark_symbol = effective_benchmark(risk_settings)
@@ -1036,22 +1043,18 @@ def run() -> int:
                         risk_settings,
                     )
                     refresh_ibkr_bracket_targets(ibkr, risk_manager, db)
-                    profit_take_trade_ids = collect_profit_take_trade_ids(
-                        risk_manager.open_trades,
-                        quotes_by_symbol,
-                        risk_settings,
-                    )
-                    if close_ibkr_signal_exits(
-                        ibkr,
-                        risk_manager,
-                        db,
-                        max_hold_for_symbol=_max_hold_for_symbol,
-                        demotion_exit_symbols=demotion_exit_symbols,
-                        profit_take_trade_ids=profit_take_trade_ids,
-                        fill_timeout_sec=settings.ibkr_fill_timeout_sec,
-                        ibkr_account_id=daily_pnl_account_id,
-                    ):
-                        portfolio_dirty = True
+                    if demotion_exit_symbols:
+                        demotion_closed, _ = close_ibkr_signal_exits(
+                            ibkr,
+                            risk_manager,
+                            db,
+                            max_hold_for_symbol=_max_hold_for_symbol,
+                            demotion_exit_symbols=demotion_exit_symbols,
+                            fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                            ibkr_account_id=daily_pnl_account_id,
+                        )
+                        if demotion_closed:
+                            portfolio_dirty = True
 
             if portfolio_dirty and db:
                 _sync_portfolio_state(
@@ -1096,6 +1099,7 @@ def run() -> int:
 
             jev_sell_symbols: Set[str] = set()
             prediction_rows: List[dict] = []
+            predictions_by_symbol: Dict[str, JevPrediction] = {}
 
             if news_service and eval_symbols:
                 news_service.refresh_stale(eval_symbols)
@@ -1152,11 +1156,10 @@ def run() -> int:
                     (symbol, enrich_market_state_with_news(state, news_service))
                 )
 
-            predictions_by_symbol = (
-                _fetch_jev_predictions(jev, ready_states, settings.jev_max_workers)
-                if jev is not None
-                else {}
-            )
+            if jev is not None and ready_states:
+                predictions_by_symbol = _fetch_jev_predictions(
+                    jev, ready_states, settings.jev_max_workers
+                )
             if predictions_by_symbol:
                 jev_connected_this_cycle = True
                 jev_connected = True
@@ -1199,23 +1202,50 @@ def run() -> int:
                     runtime.last_prediction_backfill_mono = backfill_now
                     db.backfill_prediction_forward_returns(limit=400)
 
+            if risk_manager and db:
+                closed_profit_take_sim = risk_manager.check_profit_take_exits(
+                    quotes_by_symbol,
+                    profit_take_tracker,
+                    predictions_by_symbol,
+                )
+                if persist_simulated_closes(
+                    db,
+                    risk_manager,
+                    closed_profit_take_sim,
+                    daily_pnl_account_id=daily_pnl_account_id,
+                ):
+                    portfolio_dirty = True
+
             if (
-                jev_sell_symbols
-                and risk_manager
+                risk_manager
                 and db
                 and execution_mode == ExecutionMode.IBKR
                 and ibkr.is_connected()
             ):
-                if close_ibkr_signal_exits(
+                profit_take_trade_ids = collect_profit_take_trade_ids(
+                    risk_manager.open_trades,
+                    quotes_by_symbol,
+                    risk_settings,
+                    profit_take_tracker,
+                    predictions_by_symbol,
+                )
+                closed_signals, closed_trade_ids = close_ibkr_signal_exits(
                     ibkr,
                     risk_manager,
                     db,
                     max_hold_minutes=0,
+                    max_hold_for_symbol=lambda sym: effective_max_hold_minutes(
+                        sym, risk_settings
+                    ),
                     jev_sell_symbols=jev_sell_symbols,
+                    profit_take_trade_ids=profit_take_trade_ids,
                     fill_timeout_sec=settings.ibkr_fill_timeout_sec,
                     ibkr_account_id=daily_pnl_account_id,
-                ):
+                )
+                if closed_signals:
                     portfolio_dirty = True
+                    for trade_id in closed_trade_ids:
+                        profit_take_tracker.clear(trade_id)
 
             if portfolio_dirty and db:
                 _sync_portfolio_state(

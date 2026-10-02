@@ -15,7 +15,8 @@ from watchlist.demotion import (
 
 from market.hours import trading_calendar_date
 from strategy.config import StrategyConfig
-from strategy.exits import is_profit_take_eligible
+from strategy.exits import profit_take_should_exit
+from strategy.profit_take_tracker import ProfitTakeBandTracker
 
 from models.types import (
     ClosedTrade,
@@ -324,17 +325,6 @@ class RiskManager:
             if price <= trade.stop_loss:
                 exit_price = trade.stop_loss
                 reason = "stop_loss"
-            elif is_profit_take_eligible(
-                trade,
-                price,
-                enabled=self.settings.profit_take_enabled,
-                min_fraction=self.settings.profit_take_min_fraction,
-                max_fraction=self.settings.profit_take_max_fraction,
-            ):
-                exit_price = (
-                    quote.bid if quote.bid is not None else price
-                )
-                reason = "profit_take"
             elif price >= trade.take_profit:
                 exit_price = trade.take_profit
                 reason = "take_profit"
@@ -356,6 +346,65 @@ class RiskManager:
 
             closed.append(self._build_closed_trade(trade, exit_price, reason))
 
+        self.open_trades = remaining
+        return closed
+
+    def check_profit_take_exits(
+        self,
+        quotes_by_symbol: Dict[str, Quote],
+        band_tracker: ProfitTakeBandTracker,
+        predictions_by_symbol: Optional[Dict[str, JevPrediction]] = None,
+    ) -> List[ClosedTrade]:
+        """Simulated early take-profit (runs after Jev eval when predictions are available)."""
+        from strategy.exits import normalize_profit_take_fractions, take_profit_path_progress
+
+        closed: List[ClosedTrade] = []
+        remaining: List[TradeRecord] = []
+        min_fraction, max_fraction = normalize_profit_take_fractions(
+            self.settings.profit_take_min_fraction,
+            self.settings.profit_take_max_fraction,
+        )
+        predictions = predictions_by_symbol or {}
+
+        if not self.settings.profit_take_enabled:
+            return []
+
+        for trade in self.open_trades:
+            if trade.execution_mode == "ibkr":
+                remaining.append(trade)
+                continue
+
+            quote = quotes_by_symbol.get(trade.symbol)
+            if quote is None or quote.price is None:
+                band_tracker.record(trade.id, False)
+                remaining.append(trade)
+                continue
+
+            price = quote.price
+            progress = take_profit_path_progress(trade, price)
+            in_band = (
+                progress is not None
+                and min_fraction <= progress <= max_fraction
+            )
+            band_hits = band_tracker.record(trade.id, in_band)
+            prediction = predictions.get(trade.symbol)
+
+            if profit_take_should_exit(
+                trade,
+                price,
+                self.settings,
+                band_hits=band_hits,
+                prediction=prediction,
+            ):
+                exit_price = quote.bid if quote.bid is not None else price
+                closed.append(self._build_closed_trade(trade, exit_price, "profit_take"))
+                band_tracker.clear(trade.id)
+                continue
+
+            remaining.append(trade)
+
+        open_ids = {t.id for t in remaining}
+        band_tracker.prune(open_ids)
         self.open_trades = remaining
         return closed
 

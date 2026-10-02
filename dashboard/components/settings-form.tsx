@@ -58,15 +58,21 @@ const SETTING_DESCRIPTIONS_FULL = {
   take_profit_percentage:
     "Auto-sell when the price rises this % above your entry to lock in gains.",
   profit_take_enabled:
-    "When on, the bot can market-sell once price reaches a band along the way to take profit (see min/max below).",
+    "When on, the bot can market-sell after price keeps visiting the early band toward take profit, on a soft Jev SELL, or on a fast spike (see fields below).",
   profit_take_min_fraction:
     "Lower bound of the early take-profit band, as % of the distance from entry to take profit (e.g. 70 = sell when price has reached 70% of the way to TP).",
   profit_take_max_fraction:
     "Upper bound of the ideal band (% of distance to take profit). If price jumps above this but is still below full TP, the bot still exits early.",
+  profit_take_min_band_hits:
+    "How many recent eval cycles must land in the early band before a market exit (reduces one-tick false exits).",
+  profit_take_band_window_cycles:
+    "How many recent eval cycles to count band touches in (one cycle ≈ your eval interval).",
+  profit_take_jev_sell_threshold:
+    "Optional: also exit early when Jev SELL reaches this % (dominant) and price is at least at the min band. 0 = off.",
   max_hold_minutes:
     "Force-close open trades after this many minutes (0 = off). When off, exits use stop loss, take profit, and Jev SELL only.",
   min_hold_minutes:
-    "Block Jev SELL soft-exits until a trade has been open this many minutes (0 = off). Stop loss and take profit still work immediately.",
+    "Block Jev SELL and early take-profit exits until a trade has been open this many minutes (0 = off). Stop loss and bracket take profit still work immediately.",
   jev_sell_exit_threshold:
     "Only soft-exit on a Jev SELL when sell probability reaches this % (and sell is dominant). Higher values let bracket take-profit work more often.",
   reentry_cooldown_minutes:
@@ -101,6 +107,9 @@ const SETTING_DESCRIPTIONS = {
   profit_take_enabled: "Early take profit along the path to full TP.",
   profit_take_min_fraction: "Min % of entry→TP distance to start early exit band.",
   profit_take_max_fraction: "Max % of entry→TP distance for early exit band.",
+  profit_take_min_band_hits: "Band touches required before early exit.",
+  profit_take_band_window_cycles: "Eval cycles to count band touches.",
+  profit_take_jev_sell_threshold: "Soft Jev SELL % for early exit (0 = off).",
   max_hold_minutes: "Force-close after N minutes (0 = off).",
   min_hold_minutes: "No Jev SELL exit until N minutes (0 = off).",
   jev_sell_exit_threshold: "Min Jev SELL % required to soft-exit.",
@@ -302,6 +311,15 @@ export function SettingsForm({
   );
   const [profitTakeMaxPct, setProfitTakeMaxPct] = useState(
     fractionToDisplayPercent(settings.profit_take_max_fraction ?? 0.8),
+  );
+  const [profitTakeMinBandHits, setProfitTakeMinBandHits] = useState(
+    settings.profit_take_min_band_hits ?? 3,
+  );
+  const [profitTakeBandWindow, setProfitTakeBandWindow] = useState(
+    settings.profit_take_band_window_cycles ?? 10,
+  );
+  const [profitTakeJevSellPct, setProfitTakeJevSellPct] = useState(
+    fractionToDisplayPercent(settings.profit_take_jev_sell_threshold ?? 0.7),
   );
   const [maxHoldMinutes, setMaxHoldMinutes] = useState(settings.max_hold_minutes ?? 0);
   const [minHoldMinutes, setMinHoldMinutes] = useState(settings.min_hold_minutes ?? 15);
@@ -593,6 +611,66 @@ export function SettingsForm({
               max={100}
               value={profitTakeMaxPct}
               onChange={(event) => setProfitTakeMaxPct(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="profit_take_min_band_hits"
+            label="Early take profit band touches"
+            description={SETTING_DESCRIPTIONS.profit_take_min_band_hits}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_min_band_hits}
+          >
+            <Input
+              id="profit_take_min_band_hits"
+              name="profit_take_min_band_hits"
+              type="number"
+              step="1"
+              min={1}
+              max={20}
+              value={profitTakeMinBandHits}
+              onChange={(event) =>
+                setProfitTakeMinBandHits(Number(event.target.value))
+              }
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="profit_take_band_window_cycles"
+            label="Early take profit lookback (cycles)"
+            description={SETTING_DESCRIPTIONS.profit_take_band_window_cycles}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_band_window_cycles}
+          >
+            <Input
+              id="profit_take_band_window_cycles"
+              name="profit_take_band_window_cycles"
+              type="number"
+              step="1"
+              min={1}
+              max={30}
+              value={profitTakeBandWindow}
+              onChange={(event) =>
+                setProfitTakeBandWindow(Number(event.target.value))
+              }
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="profit_take_jev_sell_threshold"
+            label="Early take profit Jev SELL (%)"
+            description={SETTING_DESCRIPTIONS.profit_take_jev_sell_threshold}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_jev_sell_threshold}
+          >
+            <Input
+              id="profit_take_jev_sell_threshold"
+              name="profit_take_jev_sell_threshold"
+              type="number"
+              step="1"
+              min={0}
+              max={100}
+              value={profitTakeJevSellPct}
+              onChange={(event) =>
+                setProfitTakeJevSellPct(Number(event.target.value))
+              }
               required
             />
           </SettingsField>
