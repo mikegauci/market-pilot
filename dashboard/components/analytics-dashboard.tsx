@@ -13,10 +13,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { FavorableSessionNote } from "@/components/favorable-session-note";
 import { JevCalibrationCard } from "@/components/jev-calibration-card";
 import { Card, CardTitle } from "@/components/ui/card";
 import {
   fetchClosedTrades,
+  fetchFavorableSessionDays,
   fetchPortfolioHistory,
   fetchSettings,
 } from "@/lib/data-client";
@@ -41,6 +43,11 @@ import {
   filterTradesByRange,
   pnlBySymbol,
 } from "@/lib/trade-analytics";
+import {
+  EMPTY_FAVORABLE_SESSIONS,
+  lookbackDaysForRange,
+  type FavorableSessionFetch,
+} from "@/lib/favorable-sessions";
 import type { PortfolioSnapshot, Settings, Trade } from "@/lib/types/database";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 
@@ -49,6 +56,7 @@ type Props = {
   closedTrades: Trade[];
   currency: string;
   settings: Settings | null;
+  favorableSessions: FavorableSessionFetch;
 };
 
 const RANGE_OPTIONS: { value: PortfolioRange; label: string }[] = [
@@ -114,6 +122,7 @@ export function AnalyticsDashboard({
   closedTrades,
   currency,
   settings,
+  favorableSessions,
 }: Props) {
   const [range, setRange] = useState<PortfolioRange>("1d");
 
@@ -123,6 +132,11 @@ export function AnalyticsDashboard({
   );
   const loadTrades = useCallback(() => fetchClosedTrades(), []);
   const loadSettings = useCallback(() => fetchSettings(), []);
+  const sessionLookbackDays = lookbackDaysForRange(range);
+  const loadSessions = useCallback(
+    () => fetchFavorableSessionDays(sessionLookbackDays),
+    [sessionLookbackDays],
+  );
 
   const liveHistory = useLiveQuery(
     portfolioHistory,
@@ -131,6 +145,13 @@ export function AnalyticsDashboard({
     ANALYTICS_PAGE_POLL_MS,
   );
   const liveTrades = useLiveQuery(closedTrades, loadTrades, ["trades"], ANALYTICS_PAGE_POLL_MS);
+  const liveSessions = useLiveQuery(
+    sessionLookbackDays === 1 ? favorableSessions : EMPTY_FAVORABLE_SESSIONS,
+    loadSessions,
+    ["predictions"],
+    ANALYTICS_PAGE_POLL_MS,
+    { resetKey: sessionLookbackDays },
+  );
   const liveSettings = useLiveQuery(
     settings,
     loadSettings,
@@ -221,6 +242,8 @@ export function AnalyticsDashboard({
           </button>
         ))}
       </div>
+
+      <FavorableSessionNote sessions={liveSessions} />
 
       <Card>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">

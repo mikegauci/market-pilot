@@ -7,6 +7,10 @@ import {
   ANALYTICS_SKIP_REASON_LIMIT,
 } from "@/lib/analytics-data";
 import {
+  mapFavorableSessionRpcRows,
+  type FavorableSessionFetch,
+} from "@/lib/favorable-sessions";
+import {
   CalibrationFetchError,
   mapCalibrationRpcRows,
 } from "@/lib/jev-calibration-rpc";
@@ -99,6 +103,21 @@ export async function fetchJevCalibrationBuckets(
     throw new CalibrationFetchError(error.message);
   }
   return mapCalibrationRpcRows(data);
+}
+
+/** One row per US session day — aggregated in Postgres, not raw snapshots. */
+export async function fetchFavorableSessionDays(
+  lookbackDays: number,
+): Promise<FavorableSessionFetch> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("get_favorable_session_days", {
+    lookback_days: lookbackDays,
+  });
+  if (error) {
+    logFetchError("favorable_session_days", error.message);
+    return { rows: [], error: error.message };
+  }
+  return { rows: mapFavorableSessionRpcRows(data), error: null };
 }
 
 /** Matured rows for Jev calibration — not the same as latest predictions feed. */
