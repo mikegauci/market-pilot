@@ -129,6 +129,17 @@ function sessionLabel(isOpen: boolean, nextEvent: Date) {
   return isOpen ? `Closes ${maltaTime} Malta` : `Opens ${maltaTime} Malta`;
 }
 
+/** US Eastern calendar date (YYYY-MM-DD) for daily trade boundaries (matches trader). */
+export function tradingCalendarDate(date = new Date()): string {
+  return getEtParts(date).calendarDate;
+}
+
+/** Midnight US Eastern for the current trading calendar day, as ISO UTC (matches trader). */
+export function tradingDayStartUtc(date = new Date()): string {
+  const { calendarDate } = getEtParts(date);
+  return atEtTime(calendarDate, 0, 0).toISOString();
+}
+
 export function getMarketStatus(date = new Date()): MarketStatus {
   const { isWeekday, minutesSinceMidnight } = getEtParts(date);
   const isOpen =

@@ -11,6 +11,8 @@ import { mapLatestPredictionRpcRows } from "@/lib/prediction-feed-normalize";
 import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
 import { filterTradesByActiveIbkrAccount } from "@/lib/ibkr-trade-scope";
 import { normalizeSettings } from "@/lib/normalize-settings";
+import { tradingDayStartUtc } from "@/lib/market-hours";
+import { tradingDayTradesOrFilter } from "@/lib/trading-day-trades";
 import { createClient } from "@/lib/supabase/server";
 import type {
   BotStatus,
@@ -185,7 +187,13 @@ export async function getActiveTradeCommands(): Promise<TradeCommand[]> {
   return (data ?? []) as TradeCommand[];
 }
 
-export async function getRecentTrades(limit = 10): Promise<Trade[]> {
+/**
+ * Overview trades: opened since midnight US Eastern, plus any still-open positions
+ * (including entries from prior calendar days).
+ */
+export async function getTradesForTradingDay(
+  dayStartIso = tradingDayStartUtc(),
+): Promise<Trade[]> {
   const supabase = await createClient();
   const accountId = await fetchActiveIbkrAccountId(supabase);
   if (!accountId) {
@@ -194,8 +202,8 @@ export async function getRecentTrades(limit = 10): Promise<Trade[]> {
   const query = supabase
     .from("trades")
     .select("*")
-    .order("entry_time", { ascending: false })
-    .limit(limit);
+    .or(tradingDayTradesOrFilter(dayStartIso))
+    .order("entry_time", { ascending: false });
   const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
   const { data } = await scoped;
   return (data ?? []) as Trade[];

@@ -23,6 +23,8 @@ import {
 } from "@/lib/prediction-columns";
 import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
 import { filterTradesByActiveIbkrAccount } from "@/lib/ibkr-trade-scope";
+import { tradingDayStartUtc } from "@/lib/market-hours";
+import { tradingDayTradesOrFilter } from "@/lib/trading-day-trades";
 import { createClient } from "@/lib/supabase/client";
 import type {
   MarketNewsRow,
@@ -182,7 +184,9 @@ export async function fetchActiveTradeCommands(): Promise<TradeCommand[]> {
   return (data ?? []) as TradeCommand[];
 }
 
-export async function fetchRecentTrades(limit = 10): Promise<Trade[]> {
+export async function fetchTradesForTradingDay(
+  dayStartIso = tradingDayStartUtc(),
+): Promise<Trade[]> {
   const supabase = createClient();
   const accountId = await fetchActiveIbkrAccountId(supabase);
   if (!accountId) {
@@ -191,8 +195,8 @@ export async function fetchRecentTrades(limit = 10): Promise<Trade[]> {
   const query = supabase
     .from("trades")
     .select("*")
-    .order("entry_time", { ascending: false })
-    .limit(limit);
+    .or(tradingDayTradesOrFilter(dayStartIso))
+    .order("entry_time", { ascending: false });
   const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
   const { data, error } = await scoped;
   if (error) {

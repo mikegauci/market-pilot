@@ -38,19 +38,116 @@ export function filterTradesByRange(trades: Trade[], range: PortfolioRange): Tra
 
 const EXIT_REASON_LABELS: Record<string, string> = {
   stop_loss: "Stop loss",
-  take_profit: "Take profit",
-  profit_take: "Early take profit",
+  take_profit: "Top profit take",
+  profit_take: "JEV soft sell / early take",
   time_exit: "Max hold",
-  jev_sell: "Jev SELL",
+  jev_sell: "JEV hard sell",
   demotion_exit: "Demotion exit",
   eod_flatten: "EOD flatten (incl. losers)",
   manual: "Manual close",
+  unknown: "Unknown",
 };
 
 export function exitReasonLabel(reason: string): string {
   if (reason in EXIT_REASON_LABELS) return EXIT_REASON_LABELS[reason];
   if (reason.startsWith("ibkr_")) return "Broker bracket";
   return reason.replaceAll("_", " ");
+}
+
+/** Stable bucket for filters and sort (open, known exit codes, ibkr, unknown). */
+export function normalizeExitReasonKey(trade: Trade): string {
+  if (trade.status !== "closed") return "open";
+  const reason = trade.exit_reason ?? "unknown";
+  if (reason.startsWith("ibkr_")) return "ibkr";
+  return reason;
+}
+
+/** Filter dropdown value (`all`, `open`, known exit buckets, or a raw normalized key). */
+export type ExitReasonFilterValue = "all" | "open" | string;
+
+export type ExitReasonFilterOption = {
+  value: ExitReasonFilterValue;
+  label: string;
+};
+
+const BASE_EXIT_REASON_FILTER_OPTIONS: ExitReasonFilterOption[] = (() => {
+  const closedReasons = (
+    Object.keys(EXIT_REASON_LABELS) as (keyof typeof EXIT_REASON_LABELS)[]
+  ).map((value) => ({
+    value,
+    label: exitReasonLabel(value),
+  }));
+  return [
+    { value: "all", label: "All statuses" },
+    { value: "open", label: "Open positions" },
+    ...closedReasons.filter((o) => o.value !== "unknown"),
+    { value: "ibkr", label: exitReasonLabel("ibkr_") },
+    { value: "unknown", label: exitReasonLabel("unknown") },
+  ];
+})();
+
+export function exitReasonFilterOptions(trades: Trade[] = []): ExitReasonFilterOption[] {
+  const known = new Set(BASE_EXIT_REASON_FILTER_OPTIONS.map((o) => o.value));
+  const extra: ExitReasonFilterOption[] = [];
+
+  for (const trade of trades) {
+    if (trade.status !== "closed") continue;
+    const key = normalizeExitReasonKey(trade);
+    if (known.has(key)) continue;
+    known.add(key);
+    extra.push({
+      value: key,
+      label: exitReasonSortLabel(trade),
+    });
+  }
+
+  extra.sort((a, b) => a.label.localeCompare(b.label));
+  return [...BASE_EXIT_REASON_FILTER_OPTIONS, ...extra];
+}
+
+/** Display label for sorting exit reasons A–Z. */
+export function exitReasonSortLabel(trade: Trade): string {
+  const key = normalizeExitReasonKey(trade);
+  if (key === "open") return "Open positions";
+  if (key === "ibkr") return exitReasonLabel("ibkr_");
+  return exitReasonLabel(key);
+}
+
+export function filterTradesByExitReason(
+  trades: Trade[],
+  value: ExitReasonFilterValue,
+): Trade[] {
+  if (value === "all") return trades;
+  if (value === "open") return trades.filter((t) => t.status === "open");
+  return trades.filter(
+    (t) => t.status === "closed" && normalizeExitReasonKey(t) === value,
+  );
+}
+
+/** True when status pills and exit-reason filter cannot match any row. */
+export function tradesFiltersConflict(
+  statusFilter: "all" | "open" | "closed",
+  exitReasonFilter: ExitReasonFilterValue,
+): boolean {
+  if (exitReasonFilter === "all") return false;
+  if (statusFilter === "open") return exitReasonFilter !== "open";
+  if (statusFilter === "closed") return exitReasonFilter === "open";
+  return false;
+}
+
+export function tradesEmptyMessage(
+  hasAnyTrades: boolean,
+  statusFilter: "all" | "open" | "closed",
+  exitReasonFilter: ExitReasonFilterValue,
+): string {
+  if (!hasAnyTrades) return "No trades";
+  if (tradesFiltersConflict(statusFilter, exitReasonFilter)) {
+    return "No trades match these filters. Reset the status or exit reason filter.";
+  }
+  if (statusFilter !== "all" || exitReasonFilter !== "all") {
+    return "No trades match these filters.";
+  }
+  return "No trades";
 }
 
 export function computeTradeStats(trades: Trade[]): TradeStats {
@@ -109,7 +206,7 @@ export function exitReasonBreakdown(trades: Trade[]): ExitReasonCount[] {
   const map = new Map<string, { count: number; pnl: number }>();
   for (const trade of trades) {
     if (trade.status !== "closed") continue;
-    const reason = trade.exit_reason ?? "unknown";
+    const reason = normalizeExitReasonKey(trade);
     const pnl = trade.net_pnl ?? trade.gross_pnl ?? 0;
     const existing = map.get(reason) ?? { count: 0, pnl: 0 };
     map.set(reason, { count: existing.count + 1, pnl: existing.pnl + pnl });
@@ -117,7 +214,10 @@ export function exitReasonBreakdown(trades: Trade[]): ExitReasonCount[] {
   return [...map.entries()]
     .map(([reason, data]) => ({
       reason,
-      label: exitReasonLabel(reason),
+      label:
+        reason === "ibkr"
+          ? exitReasonLabel("ibkr_")
+          : exitReasonLabel(reason),
       count: data.count,
       pnl: data.pnl,
     }))

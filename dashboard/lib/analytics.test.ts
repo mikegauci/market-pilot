@@ -8,7 +8,13 @@ import {
   computeTradeStats,
   exitReasonBreakdown,
   exitReasonLabel,
+  exitReasonFilterOptions,
+  exitReasonSortLabel,
+  filterTradesByExitReason,
   filterTradesByRange,
+  normalizeExitReasonKey,
+  tradesEmptyMessage,
+  tradesFiltersConflict,
 } from "@/lib/trade-analytics";
 import type { PortfolioSnapshot, Trade } from "@/lib/types/database";
 
@@ -128,6 +134,80 @@ describe("trade-analytics", () => {
     const breakdown = exitReasonBreakdown([closedWin, closedLoss]);
     expect(breakdown.find((r) => r.reason === "take_profit")?.pnl).toBe(5);
     expect(breakdown.find((r) => r.reason === "stop_loss")?.pnl).toBe(-5);
+  });
+
+  it("groups ibkr exit reasons in breakdown", () => {
+    const ibkrSl: Trade = {
+      ...closedLoss,
+      id: "ibkr-sl",
+      exit_reason: "ibkr_stop",
+      net_pnl: -2,
+    };
+    const ibkrTp: Trade = {
+      ...closedWin,
+      id: "ibkr-tp",
+      exit_reason: "ibkr_take_profit",
+      net_pnl: 3,
+    };
+    const breakdown = exitReasonBreakdown([ibkrSl, ibkrTp]);
+    expect(breakdown).toHaveLength(1);
+    expect(breakdown[0]?.reason).toBe("ibkr");
+    expect(breakdown[0]?.pnl).toBe(1);
+  });
+
+  const openTrade: Trade = {
+    ...closedWin,
+    id: "open",
+    status: "open",
+    exit_time: null,
+    exit_price: null,
+    net_pnl: null,
+    exit_reason: null,
+  };
+
+  it("normalizes exit reason keys for filters", () => {
+    expect(normalizeExitReasonKey(openTrade)).toBe("open");
+    expect(normalizeExitReasonKey(closedLoss)).toBe("stop_loss");
+    expect(
+      normalizeExitReasonKey({ ...closedWin, exit_reason: "ibkr_stop" }),
+    ).toBe("ibkr");
+    expect(normalizeExitReasonKey({ ...closedWin, exit_reason: null })).toBe("unknown");
+  });
+
+  it("filters trades by exit reason", () => {
+    const ibkrClosed: Trade = {
+      ...closedWin,
+      id: "ibkr",
+      exit_reason: "ibkr_take_profit",
+    };
+    const all = [openTrade, closedWin, closedLoss, ibkrClosed];
+    expect(filterTradesByExitReason(all, "all")).toHaveLength(4);
+    expect(filterTradesByExitReason(all, "open").map((t) => t.id)).toEqual(["open"]);
+    expect(filterTradesByExitReason(all, "stop_loss").map((t) => t.id)).toEqual(["2"]);
+    expect(filterTradesByExitReason(all, "ibkr").map((t) => t.id)).toEqual(["ibkr"]);
+  });
+
+  it("adds custom exit reasons to filter options from trades", () => {
+    const legacy: Trade = {
+      ...closedWin,
+      id: "legacy",
+      exit_reason: "legacy_exit",
+    };
+    const values = exitReasonFilterOptions([legacy]).map((o) => o.value);
+    expect(values).toContain("legacy_exit");
+  });
+
+  it("labels exit reasons for sort", () => {
+    expect(exitReasonSortLabel(closedLoss)).toBe("Stop loss");
+  });
+
+  it("detects conflicting table filters", () => {
+    expect(tradesFiltersConflict("open", "stop_loss")).toBe(true);
+    expect(tradesFiltersConflict("closed", "open")).toBe(true);
+    expect(tradesFiltersConflict("all", "stop_loss")).toBe(false);
+    expect(
+      tradesEmptyMessage(true, "open", "stop_loss"),
+    ).toMatch(/Reset the status or exit reason filter/);
   });
 
   it("filters closed trades by exit_time in range", () => {

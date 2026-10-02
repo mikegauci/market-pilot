@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { ClosePositionButton } from "@/components/close-position-button";
@@ -12,8 +12,17 @@ import { overlaysForTrade } from "@/lib/chart-overlays";
 import {
   fetchActiveTradeCommands,
   fetchAllTrades,
-  fetchRecentTrades,
+  fetchTradesForTradingDay,
 } from "@/lib/data-client";
+import {
+  exitReasonFilterOptions,
+  exitReasonLabel,
+  exitReasonSortLabel,
+  filterTradesByExitReason,
+  tradesEmptyMessage,
+  type ExitReasonFilterOption,
+  type ExitReasonFilterValue,
+} from "@/lib/trade-analytics";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import {
   compareNullableNumber,
@@ -30,6 +39,7 @@ import { formatCurrency, formatDateTime, formatPercent } from "@/lib/utils";
 type SortKey =
   | "symbol"
   | "status"
+  | "exitReason"
   | "entry"
   | "exit"
   | "quantity"
@@ -42,6 +52,11 @@ function compareTrades(a: Trade, b: Trade, key: SortKey, dir: SortDir): number {
       return compareString(a.symbol, b.symbol, dir);
     case "status":
       return compareString(a.status, b.status, dir);
+    case "exitReason": {
+      const cmp = compareString(exitReasonSortLabel(a), exitReasonSortLabel(b), dir);
+      if (cmp !== 0) return cmp;
+      return compareNullableTime(a.entry_time, b.entry_time, "desc");
+    }
     case "entry":
       return compareNullableTime(a.entry_time, b.entry_time, dir);
     case "exit":
@@ -55,6 +70,102 @@ function compareTrades(a: Trade, b: Trade, key: SortKey, dir: SortDir): number {
   }
 }
 
+function SortHeaderButton({
+  label,
+  active,
+  sortDir,
+  onClick,
+  className = "inline-flex items-center gap-1 hover:text-zinc-300",
+}: {
+  label: string;
+  active: boolean;
+  sortDir: SortDir;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={className}
+      aria-label={
+        active
+          ? `Sort by ${label}, currently ${sortDir === "asc" ? "ascending" : "descending"}`
+          : `Sort by ${label}`
+      }
+    >
+      {label}
+      {active &&
+        (sortDir === "asc" ? (
+          <ArrowUp className="h-3 w-3" aria-hidden />
+        ) : (
+          <ArrowDown className="h-3 w-3" aria-hidden />
+        ))}
+    </button>
+  );
+}
+
+function StatusHeaderCell({
+  sortKey,
+  sortDir,
+  onSort,
+  exitReasonFilter,
+  onExitReasonFilterChange,
+  filterOptions,
+}: {
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onSort: (key: SortKey) => void;
+  exitReasonFilter: ExitReasonFilterValue;
+  onExitReasonFilterChange: (value: ExitReasonFilterValue) => void;
+  filterOptions: ExitReasonFilterOption[];
+}) {
+  const statusActive = sortKey === "status";
+  const exitReasonActive = sortKey === "exitReason";
+  const ariaSort =
+    statusActive || exitReasonActive
+      ? sortDir === "asc"
+        ? "ascending"
+        : "descending"
+      : "none";
+
+  return (
+    <th className="pb-2 pr-3 align-bottom" aria-sort={ariaSort}>
+      <div className="flex min-w-[9rem] flex-col gap-1">
+        <SortHeaderButton
+          label="Status"
+          active={statusActive}
+          sortDir={sortDir}
+          onClick={() => onSort("status")}
+        />
+        <div className="flex flex-wrap items-center gap-1">
+          <SortHeaderButton
+            label="Exit type"
+            active={exitReasonActive}
+            sortDir={sortDir}
+            onClick={() => onSort("exitReason")}
+            className="inline-flex items-center gap-0.5 text-xs hover:text-zinc-300"
+          />
+          <select
+            value={exitReasonFilter}
+            onChange={(e) =>
+              onExitReasonFilterChange(e.target.value as ExitReasonFilterValue)
+            }
+            className="max-w-[10rem] rounded border border-zinc-700 bg-zinc-950 px-1 py-0.5 text-xs text-zinc-300"
+            aria-label="Filter by exit reason"
+          >
+            {filterOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </th>
+  );
+}
+
 type Props = {
   trades: Trade[];
   tradeCommands?: TradeCommand[];
@@ -65,7 +176,8 @@ type Props = {
   showViewAllLink?: boolean;
   showChartExpand?: boolean;
   title?: string;
-  recentLimit?: number;
+  /** Pin live refresh to SSR trading-day boundary (midnight US Eastern). */
+  tradingDayStartIso?: string;
 };
 
 export function TradesTable({
@@ -78,7 +190,7 @@ export function TradesTable({
   showViewAllLink = false,
   showChartExpand = true,
   title = "Trades",
-  recentLimit = 10,
+  tradingDayStartIso,
 }: Props) {
   const traderOnline = useTraderOnline(
     botStatus ?? {
@@ -95,10 +207,14 @@ export function TradesTable({
     },
   );
   const [filter, setFilter] = useState<"all" | "open" | "closed">("all");
+  const [exitReasonFilter, setExitReasonFilter] = useState<ExitReasonFilterValue>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const fetchTrades = useCallback(
-    () => (showFilter ? fetchAllTrades() : fetchRecentTrades(recentLimit)),
-    [showFilter, recentLimit],
+    () =>
+      showFilter
+        ? fetchAllTrades()
+        : fetchTradesForTradingDay(tradingDayStartIso),
+    [showFilter, tradingDayStartIso],
   );
   const fetchCommands = useCallback(() => fetchActiveTradeCommands(), []);
 
@@ -115,10 +231,20 @@ export function TradesTable({
     return map;
   }, [liveCommands]);
 
-  const filtered = useMemo(
-    () =>
-      filter === "all" ? liveTrades : liveTrades.filter((t) => t.status === filter),
-    [filter, liveTrades],
+  const exitReasonOptions = useMemo(
+    () => exitReasonFilterOptions(liveTrades),
+    [liveTrades],
+  );
+
+  const filtered = useMemo(() => {
+    const afterStatus =
+      filter === "all" ? liveTrades : liveTrades.filter((t) => t.status === filter);
+    return filterTradesByExitReason(afterStatus, exitReasonFilter);
+  }, [filter, exitReasonFilter, liveTrades]);
+
+  const emptyMessage = useMemo(
+    () => tradesEmptyMessage(liveTrades.length > 0, filter, exitReasonFilter),
+    [liveTrades.length, filter, exitReasonFilter],
   );
 
   const compare = useCallback(
@@ -128,7 +254,7 @@ export function TradesTable({
   );
   const initialDirForKey = useCallback(
     (key: SortKey): SortDir =>
-      key === "symbol" || key === "status" ? "asc" : "desc",
+      key === "symbol" || key === "status" || key === "exitReason" ? "asc" : "desc",
     [],
   );
 
@@ -180,7 +306,7 @@ export function TradesTable({
         )}
       </div>
       {filtered.length === 0 ? (
-        <p className="mt-4 text-sm text-zinc-500">No trades</p>
+        <p className="mt-4 text-sm text-zinc-500">{emptyMessage}</p>
       ) : (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-sm">
@@ -194,12 +320,13 @@ export function TradesTable({
                   sortDir={sortDir}
                   onSort={handleSort}
                 />
-                <SortableTh
-                  label="Status"
-                  columnKey="status"
+                <StatusHeaderCell
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={handleSort}
+                  exitReasonFilter={exitReasonFilter}
+                  onExitReasonFilterChange={setExitReasonFilter}
+                  filterOptions={exitReasonOptions}
                 />
                 <SortableTh
                   label="Entry"
@@ -280,6 +407,11 @@ export function TradesTable({
                       >
                         {t.status}
                       </Badge>
+                      {t.status === "closed" ? (
+                        <div className="mt-1 text-xs text-zinc-500">
+                          {exitReasonLabel(t.exit_reason ?? "unknown")}
+                        </div>
+                      ) : null}
                     </td>
                     <td className="py-2 pr-3">
                       <div>{formatCurrency(t.entry_price)}</div>

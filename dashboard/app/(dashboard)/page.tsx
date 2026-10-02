@@ -4,6 +4,7 @@ import { OverviewWatchlistCard } from "@/components/overview-watchlist-card";
 import { OverviewStats } from "@/components/overview-stats";
 import { PositionsGrid } from "@/components/positions-grid";
 import { TradesTable } from "@/components/trades-table";
+import { tradingDayStartUtc } from "@/lib/market-hours";
 import {
   getActiveTradeCommands,
   getBotStatus,
@@ -12,11 +13,13 @@ import {
   getMarketNews,
   getOpenTrades,
   getPositions,
-  getRecentTrades,
+  getTradesForTradingDay,
   getSettings,
 } from "@/lib/queries";
 
 export default async function OverviewPage() {
+  const tradingDayStartIso = tradingDayStartUtc();
+
   const [
     botStatus,
     portfolio,
@@ -33,7 +36,7 @@ export default async function OverviewPage() {
     getPositions(),
     getOpenTrades(),
     getActiveTradeCommands(),
-    getRecentTrades(10),
+    getTradesForTradingDay(tradingDayStartIso),
     getSettings(),
     getLatestPredictionsBySymbol(),
     getMarketNews(80),
@@ -85,7 +88,8 @@ export default async function OverviewPage() {
         showSignalColumn
         showViewAllLink
         showChartExpand={false}
-        title="Recent Trades"
+        title="Today's Trades"
+        tradingDayStartIso={tradingDayStartIso}
       />
       </div>
     </LatestPredictionsProvider>
