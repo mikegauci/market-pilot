@@ -6,6 +6,10 @@ import {
   ANALYTICS_SKIP_REASON_LIMIT,
 } from "@/lib/analytics-data";
 import { LATEST_PREDICTIONS_PER_SYMBOL_LIMIT } from "@/lib/analytics-data";
+import {
+  mapFavorableSessionRpcRows,
+  type FavorableSessionFetch,
+} from "@/lib/favorable-sessions";
 import { mapCalibrationRpcRows } from "@/lib/jev-calibration-rpc";
 import { mapLatestPredictionRpcRows } from "@/lib/prediction-feed-normalize";
 import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
@@ -128,6 +132,19 @@ export async function getJevCalibrationBuckets(
     return { buckets: [], error: error.message };
   }
   return { buckets: mapCalibrationRpcRows(data), error: null };
+}
+
+export async function getFavorableSessionDays(
+  lookbackDays: number,
+): Promise<FavorableSessionFetch> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_favorable_session_days", {
+    lookback_days: lookbackDays,
+  });
+  if (error) {
+    return { rows: [], error: error.message };
+  }
+  return { rows: mapFavorableSessionRpcRows(data), error: null };
 }
 
 export async function getLatestPredictionsBySymbol(
