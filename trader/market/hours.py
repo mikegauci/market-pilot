@@ -1,11 +1,36 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
 MARKET_OPEN_MINUTES = 9 * 60 + 30
 MARKET_CLOSE_MINUTES = 16 * 60
+
+
+def _coerce_et(when: datetime | None) -> datetime:
+    if when is None:
+        return datetime.now(tz=ET)
+    if when.tzinfo is None:
+        return when.replace(tzinfo=ET)
+    return when.astimezone(ET)
+
+
+def trading_calendar_date(when: datetime | None = None) -> str:
+    """US Eastern calendar date (YYYY-MM-DD) for daily P&L boundaries."""
+    return _coerce_et(when).date().isoformat()
+
+
+def trading_day_start_utc(when: datetime | None = None) -> datetime:
+    """Midnight US Eastern for the current trading calendar day, as UTC."""
+    local = _coerce_et(when)
+    midnight_et = datetime(
+        local.year,
+        local.month,
+        local.day,
+        tzinfo=ET,
+    )
+    return midnight_et.astimezone(timezone.utc)
 
 
 def _et_parts(when: datetime) -> tuple[bool, int]:

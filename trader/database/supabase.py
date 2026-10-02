@@ -14,6 +14,7 @@ from supabase import Client, ClientOptions, create_client
 from risk.recommendations import should_advance_baseline
 
 from market.bars import BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, Bar
+from market.hours import trading_day_start_utc
 from models.types import (
     WatchlistPin,
     AccountSummary,
@@ -903,12 +904,12 @@ class SupabaseRepository:
 
     @_db_synchronized
     def get_daily_realized_pnl(self, ibkr_account_id: Optional[str] = None) -> float:
-        today = datetime.now(timezone.utc).date().isoformat()
+        day_start = trading_day_start_utc()
         query = (
             self.client.table("trades")
             .select("net_pnl")
             .eq("status", "closed")
-            .gte("exit_time", f"{today}T00:00:00+00:00")
+            .gte("exit_time", day_start.isoformat())
         )
         if ibkr_account_id:
             query = apply_trade_account_filter(
@@ -1234,6 +1235,21 @@ class SupabaseRepository:
         self.client.table("predictions").insert(rows).execute()
 
     @_db_synchronized
+    def count_predictions_with_return_15m(self) -> int:
+        try:
+            resp = (
+                self.client.table("predictions")
+                .select("id", count="exact")
+                .not_.is_("return_15m_pct", "null")
+                .limit(0)
+                .execute()
+            )
+            return int(resp.count or 0)
+        except Exception as exc:
+            logger.debug("Forward-return stored count skipped: %s", exc)
+            return 0
+
+    @_db_synchronized
     def backfill_prediction_forward_returns(self, *, limit: int = 400) -> int:
         """Fill forward returns on mature predictions using cached 5-minute bars."""
         from market.bars import BAR_SIZE_INTRADAY
@@ -1330,6 +1346,22 @@ class SupabaseRepository:
                 continue
             self.client.table("predictions").update(payload).eq("id", row["id"]).execute()
             updated += 1
+            if updated % 400 == 0:
+                stored = self.count_predictions_with_return_15m()
+                logger.info(
+                    "Forward-return backfill: %s predictions with 15m return stored "
+                    "(400 processed this batch)",
+                    stored,
+                )
+
+        if updated and updated % 400 != 0:
+            stored = self.count_predictions_with_return_15m()
+            logger.info(
+                "Forward-return backfill: %s predictions with 15m return stored "
+                "(%s processed this batch)",
+                stored,
+                updated,
+            )
         return updated
 
     @_db_synchronized

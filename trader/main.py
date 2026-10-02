@@ -1183,11 +1183,7 @@ def run() -> int:
                     backfill_now - runtime.last_prediction_backfill_mono
                 ) >= _PREDICTION_BACKFILL_INTERVAL_SEC:
                     runtime.last_prediction_backfill_mono = backfill_now
-                    filled = db.backfill_prediction_forward_returns(limit=400)
-                    if filled:
-                        logger.info(
-                            "Backfilled forward returns on %s prediction(s)", filled
-                        )
+                    db.backfill_prediction_forward_returns(limit=400)
 
             if (
                 jev_sell_symbols

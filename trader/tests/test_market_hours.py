@@ -10,6 +10,8 @@ from market.hours import (
     is_us_regular_session_open,
     minutes_until_regular_close,
     should_force_eod_flatten,
+    trading_calendar_date,
+    trading_day_start_utc,
 )
 
 
@@ -53,6 +55,21 @@ class MarketHoursTests(unittest.TestCase):
     def test_minutes_until_close(self) -> None:
         when = datetime(2026, 9, 30, 15, 30, tzinfo=ET)
         self.assertEqual(minutes_until_regular_close(when), 30.0)
+
+    def test_trading_day_starts_at_eastern_midnight(self) -> None:
+        utc = ZoneInfo("UTC")
+        # 2026-10-02 02:00 UTC is still 2026-10-01 evening in New York (EDT).
+        when = datetime(2026, 10, 2, 2, 0, tzinfo=utc)
+        self.assertEqual(trading_calendar_date(when), "2026-10-01")
+        start = trading_day_start_utc(when)
+        self.assertEqual(start.isoformat(), "2026-10-01T04:00:00+00:00")
+
+        after_midnight_et = datetime(2026, 10, 2, 6, 0, tzinfo=utc)
+        self.assertEqual(trading_calendar_date(after_midnight_et), "2026-10-02")
+        self.assertEqual(
+            trading_day_start_utc(after_midnight_et).isoformat(),
+            "2026-10-02T04:00:00+00:00",
+        )
 
 
 if __name__ == "__main__":

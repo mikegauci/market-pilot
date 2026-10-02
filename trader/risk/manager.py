@@ -13,6 +13,7 @@ from watchlist.demotion import (
     price_between_entry_and_take_profit,
 )
 
+from market.hours import trading_calendar_date
 from strategy.config import StrategyConfig
 
 from models.types import (
@@ -50,6 +51,7 @@ class RiskManager:
         self.open_trades: List[TradeRecord] = list(open_trades or [])
         self.daily_realized_pnl = daily_realized_pnl
         self.total_realized_pnl = total_realized_pnl
+        self._daily_pnl_trading_date = trading_calendar_date()
         self._last_exit_at: Dict[str, datetime] = {}
         self._ibkr_buying_power: Optional[float] = None
 
@@ -69,6 +71,20 @@ class RiskManager:
 
     def set_daily_realized_pnl(self, daily_pnl: float) -> None:
         self.daily_realized_pnl = daily_pnl
+
+    def _ensure_current_trading_day(self) -> None:
+        """Zero in-memory daily realized P&L after US Eastern midnight."""
+        today = trading_calendar_date()
+        if today != self._daily_pnl_trading_date:
+            self._daily_pnl_trading_date = today
+            self.daily_realized_pnl = 0.0
+
+    def sync_daily_realized_for_trading_day(self, realized_pnl: float) -> None:
+        """On a new trading day, reload realized P&L from persisted trades."""
+        today = trading_calendar_date()
+        if today != self._daily_pnl_trading_date:
+            self._daily_pnl_trading_date = today
+            self.daily_realized_pnl = realized_pnl
 
     def hydrate_reentry_cooldowns(self, exits_by_symbol: Dict[str, datetime]) -> None:
         """Seed per-symbol exit timestamps (e.g. from DB on startup)."""
@@ -134,6 +150,7 @@ class RiskManager:
         return total
 
     def _daily_pnl(self, quotes: Dict[str, Quote]) -> float:
+        self._ensure_current_trading_day()
         return self.daily_realized_pnl + self._unrealized_pnl(quotes)
 
     def compute_position_size(
@@ -273,6 +290,7 @@ class RiskManager:
         self.open_trades = [t for t in self.open_trades if t.id != trade_id]
 
     def record_closed_pnl(self, net_pnl: float) -> None:
+        self._ensure_current_trading_day()
         self.daily_realized_pnl += net_pnl
         self.total_realized_pnl += net_pnl
 
@@ -464,6 +482,7 @@ class RiskManager:
         net_pnl = gross_pnl - entry_comm - exit_comm
         now = datetime.now(timezone.utc)
 
+        self._ensure_current_trading_day()
         self.daily_realized_pnl += net_pnl
         self.total_realized_pnl += net_pnl
         logger.info(
@@ -485,6 +504,7 @@ class RiskManager:
         )
 
     def get_portfolio_snapshot(self, quotes_by_symbol: Dict[str, Quote]) -> SimulatedPortfolio:
+        self._ensure_current_trading_day()
         unrealized = self._unrealized_pnl(quotes_by_symbol)
         equity = self.effective_capital + self.total_realized_pnl + unrealized
         cash = self._available_cash()
