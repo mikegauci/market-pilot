@@ -15,6 +15,7 @@ from watchlist.demotion import (
 
 from market.hours import trading_calendar_date
 from strategy.config import StrategyConfig
+from strategy.exits import is_profit_take_eligible
 
 from models.types import (
     ClosedTrade,
@@ -323,6 +324,17 @@ class RiskManager:
             if price <= trade.stop_loss:
                 exit_price = trade.stop_loss
                 reason = "stop_loss"
+            elif is_profit_take_eligible(
+                trade,
+                price,
+                enabled=self.settings.profit_take_enabled,
+                min_fraction=self.settings.profit_take_min_fraction,
+                max_fraction=self.settings.profit_take_max_fraction,
+            ):
+                exit_price = (
+                    quote.bid if quote.bid is not None else price
+                )
+                reason = "profit_take"
             elif price >= trade.take_profit:
                 exit_price = trade.take_profit
                 reason = "take_profit"

@@ -14,12 +14,17 @@ from broker.execution import (
     EOD_RETRY_SEC,
     close_ibkr_signal_exits,
     collect_demotion_exit_symbols,
+    collect_profit_take_trade_ids,
     force_eod_ibkr_exits,
     sync_ibkr_exits,
 )
 from broker.manual_close import process_manual_close_commands
 from broker.ibkr import IBKRClient, MARKET_DATA_COMPETING_SESSION_MSG
-from broker.reconcile import nonzero_positions, reconcile_orphan_ibkr_positions
+from broker.reconcile import (
+    nonzero_positions,
+    reconcile_orphan_ibkr_positions,
+    refresh_ibkr_bracket_targets,
+)
 from config import Settings, load_settings
 from execution_mode import effective_execution_mode
 from instance_lock import acquire_trader_lock
@@ -1030,12 +1035,19 @@ def run() -> int:
                         risk_manager.open_trades,
                         risk_settings,
                     )
+                    refresh_ibkr_bracket_targets(ibkr, risk_manager, db)
+                    profit_take_trade_ids = collect_profit_take_trade_ids(
+                        risk_manager.open_trades,
+                        quotes_by_symbol,
+                        risk_settings,
+                    )
                     if close_ibkr_signal_exits(
                         ibkr,
                         risk_manager,
                         db,
                         max_hold_for_symbol=_max_hold_for_symbol,
                         demotion_exit_symbols=demotion_exit_symbols,
+                        profit_take_trade_ids=profit_take_trade_ids,
                         fill_timeout_sec=settings.ibkr_fill_timeout_sec,
                         ibkr_account_id=daily_pnl_account_id,
                     ):

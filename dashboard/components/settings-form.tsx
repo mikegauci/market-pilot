@@ -57,6 +57,12 @@ const SETTING_DESCRIPTIONS_FULL = {
     "Auto-sell if the price drops this % below your entry — also controls how large each trade is for a given risk budget.",
   take_profit_percentage:
     "Auto-sell when the price rises this % above your entry to lock in gains.",
+  profit_take_enabled:
+    "When on, the bot can market-sell once price reaches a band along the way to take profit (see min/max below).",
+  profit_take_min_fraction:
+    "Lower bound of the early take-profit band, as % of the distance from entry to take profit (e.g. 70 = sell when price has reached 70% of the way to TP).",
+  profit_take_max_fraction:
+    "Upper bound of the ideal band (% of distance to take profit). If price jumps above this but is still below full TP, the bot still exits early.",
   max_hold_minutes:
     "Force-close open trades after this many minutes (0 = off). When off, exits use stop loss, take profit, and Jev SELL only.",
   min_hold_minutes:
@@ -92,6 +98,9 @@ const SETTING_DESCRIPTIONS = {
   max_open_positions: "Concurrent open trades allowed (recommend ≥ max dynamic symbols).",
   stop_loss_percentage: "Exit when price falls this % below entry.",
   take_profit_percentage: "Exit when price rises this % above entry.",
+  profit_take_enabled: "Early take profit along the path to full TP.",
+  profit_take_min_fraction: "Min % of entry→TP distance to start early exit band.",
+  profit_take_max_fraction: "Max % of entry→TP distance for early exit band.",
   max_hold_minutes: "Force-close after N minutes (0 = off).",
   min_hold_minutes: "No Jev SELL exit until N minutes (0 = off).",
   jev_sell_exit_threshold: "Min Jev SELL % required to soft-exit.",
@@ -284,6 +293,15 @@ export function SettingsForm({
   );
   const [takeProfitPct, setTakeProfitPct] = useState(
     fractionToDisplayPercent(settings.take_profit_percentage),
+  );
+  const [profitTakeEnabled, setProfitTakeEnabled] = useState(
+    settings.profit_take_enabled ?? false,
+  );
+  const [profitTakeMinPct, setProfitTakeMinPct] = useState(
+    fractionToDisplayPercent(settings.profit_take_min_fraction ?? 0.7),
+  );
+  const [profitTakeMaxPct, setProfitTakeMaxPct] = useState(
+    fractionToDisplayPercent(settings.profit_take_max_fraction ?? 0.8),
   );
   const [maxHoldMinutes, setMaxHoldMinutes] = useState(settings.max_hold_minutes ?? 0);
   const [minHoldMinutes, setMinHoldMinutes] = useState(settings.min_hold_minutes ?? 15);
@@ -523,6 +541,61 @@ export function SettingsForm({
               STRATEGY_RECOMMENDATIONS.take_profit_percentage,
             )}
           />
+          <SettingsField
+            id="profit_take_enabled"
+            label="Early take profit"
+            description={SETTING_DESCRIPTIONS.profit_take_enabled}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_enabled}
+          >
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
+              <input
+                type="checkbox"
+                id="profit_take_enabled"
+                name="profit_take_enabled"
+                value="on"
+                checked={profitTakeEnabled}
+                onChange={(event) => setProfitTakeEnabled(event.target.checked)}
+                className="rounded border-zinc-700"
+              />
+              <span className="text-xs">Enable band exit toward take profit</span>
+            </label>
+          </SettingsField>
+          <SettingsField
+            id="profit_take_min_fraction"
+            label="Early take profit min (% of target)"
+            description={SETTING_DESCRIPTIONS.profit_take_min_fraction}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_min_fraction}
+          >
+            <Input
+              id="profit_take_min_fraction"
+              name="profit_take_min_fraction"
+              type="number"
+              step="1"
+              min={1}
+              max={100}
+              value={profitTakeMinPct}
+              onChange={(event) => setProfitTakeMinPct(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="profit_take_max_fraction"
+            label="Early take profit max (% of target)"
+            description={SETTING_DESCRIPTIONS.profit_take_max_fraction}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_max_fraction}
+          >
+            <Input
+              id="profit_take_max_fraction"
+              name="profit_take_max_fraction"
+              type="number"
+              step="1"
+              min={1}
+              max={100}
+              value={profitTakeMaxPct}
+              onChange={(event) => setProfitTakeMaxPct(Number(event.target.value))}
+              required
+            />
+          </SettingsField>
           <SettingsField
             id="max_hold_minutes"
             label="Max hold (minutes)"

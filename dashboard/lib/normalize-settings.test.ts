@@ -42,6 +42,9 @@ describe("normalizeSettings", () => {
     expect(normalized?.demotion_max_hold_ratio).toBe(0.5);
     expect(normalized?.demotion_jev_sell_on_loss).toBe(true);
     expect(normalized?.demotion_force_exit).toBe(false);
+    expect(normalized?.profit_take_enabled).toBe(false);
+    expect(normalized?.profit_take_min_fraction).toBe(0.7);
+    expect(normalized?.profit_take_max_fraction).toBe(0.8);
     expect(normalized?.watchlist_min_buy).toBe(0.6);
     expect(normalized?.confirmation_cycles).toBe(2);
     expect(normalized?.confirmation_seconds).toBe(30);

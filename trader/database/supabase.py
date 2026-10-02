@@ -15,6 +15,7 @@ from risk.recommendations import should_advance_baseline
 
 from market.bars import BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, Bar
 from market.hours import trading_day_start_utc
+from strategy.exits import normalize_profit_take_fractions
 from models.types import (
     WatchlistPin,
     AccountSummary,
@@ -545,11 +546,14 @@ class SupabaseRepository:
         "watchlist_refresh_minutes, benchmark_symbol, watchlist_jev_rankings, "
         "watchlist_pins, watchlist_dismissed, "
         "watchlist_screener_ran_at, demotion_exits_enabled, demotion_max_hold_ratio, "
-        "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit, "
+        "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit"
+    )
+    _SETTINGS_SELECT_WITH_PROFIT_TAKE = (
+        f"{_SETTINGS_SELECT_CORE}, "
         "profit_take_enabled, profit_take_min_fraction, profit_take_max_fraction"
     )
     _SETTINGS_SELECT_BASE = (
-        f"{_SETTINGS_SELECT_CORE}, confirmation_cycles, confirmation_seconds"
+        f"{_SETTINGS_SELECT_WITH_PROFIT_TAKE}, confirmation_cycles, confirmation_seconds"
     )
 
     def _select_settings_row(self, columns: str) -> Optional[dict]:
@@ -579,12 +583,28 @@ class SupabaseRepository:
             return data
 
         logger.warning(
+            "Settings read without profit_take columns — using defaults",
+        )
+        data = self._select_settings_row(
+            f"{self._SETTINGS_SELECT_CORE}, confirmation_cycles, confirmation_seconds, "
+            "min_dollar_volume"
+        )
+        if data is not None:
+            data.setdefault("profit_take_enabled", False)
+            data.setdefault("profit_take_min_fraction", 0.70)
+            data.setdefault("profit_take_max_fraction", 0.80)
+            return data
+
+        logger.warning(
             "Settings read without confirmation_cycles/confirmation_seconds — using defaults",
         )
         data = self._select_settings_row(f"{self._SETTINGS_SELECT_CORE}, min_dollar_volume")
         if data is not None:
             data.setdefault("confirmation_cycles", 2)
             data.setdefault("confirmation_seconds", 30)
+            data.setdefault("profit_take_enabled", False)
+            data.setdefault("profit_take_min_fraction", 0.70)
+            data.setdefault("profit_take_max_fraction", 0.80)
             return data
 
         data = self._select_settings_row(self._SETTINGS_SELECT_CORE)
@@ -592,6 +612,9 @@ class SupabaseRepository:
             data.setdefault("min_dollar_volume", 250_000)
             data.setdefault("confirmation_cycles", 2)
             data.setdefault("confirmation_seconds", 30)
+            data.setdefault("profit_take_enabled", False)
+            data.setdefault("profit_take_min_fraction", 0.70)
+            data.setdefault("profit_take_max_fraction", 0.80)
             return data
 
         raise RuntimeError("Unable to load settings row from Supabase")
@@ -610,6 +633,10 @@ class SupabaseRepository:
         )
         self._cached_risk_sync_equity = risk_sync_equity
         screener_ran_at = data.get("watchlist_screener_ran_at")
+        profit_min, profit_max = normalize_profit_take_fractions(
+            float(data.get("profit_take_min_fraction", 0.70)),
+            float(data.get("profit_take_max_fraction", 0.80)),
+        )
         return RiskSettings(
             minimum_jev_confidence=float(data.get("minimum_jev_confidence", 0.85)),
             signal_record_threshold=float(data.get("signal_record_threshold", 0.80)),
@@ -656,9 +683,9 @@ class SupabaseRepository:
                 data.get("demotion_jev_sell_max_loss_pct", 0.02)
             ),
             demotion_force_exit=bool(data.get("demotion_force_exit", False)),
-            profit_take_enabled=bool(data.get("profit_take_enabled", True)),
-            profit_take_min_fraction=float(data.get("profit_take_min_fraction", 0.70)),
-            profit_take_max_fraction=float(data.get("profit_take_max_fraction", 0.80)),
+            profit_take_enabled=bool(data.get("profit_take_enabled", False)),
+            profit_take_min_fraction=profit_min,
+            profit_take_max_fraction=profit_max,
         )
 
     @_db_synchronized

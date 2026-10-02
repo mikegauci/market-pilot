@@ -27,6 +27,8 @@ function labelFor(name: string): string {
     max_hold_minutes: "Max hold (minutes)",
     min_hold_minutes: "Min hold (minutes)",
     jev_sell_exit_threshold: "Jev SELL exit (%)",
+    profit_take_min_fraction: "Early take profit min (% of target)",
+    profit_take_max_fraction: "Early take profit max (% of target)",
     reentry_cooldown_minutes: "Re-entry cooldown (minutes)",
     confirmation_cycles: "Confirmation cycles",
     confirmation_seconds: "Confirmation seconds",
@@ -70,6 +72,9 @@ export type ParsedSettings = {
   demotion_jev_sell_on_loss: boolean;
   demotion_jev_sell_max_loss_pct: number;
   demotion_force_exit: boolean;
+  profit_take_enabled: boolean;
+  profit_take_min_fraction: number;
+  profit_take_max_fraction: number;
 };
 
 function parseRiskProfile(formData: FormData): RiskProfile {
@@ -92,6 +97,14 @@ function parseStrategyPercent(formData: FormData, name: string): number {
   const pct = parseRequiredNumber(formData, name);
   if (pct < 0.1 || pct > 25) {
     throw new Error(`${labelFor(name)} must be between 0.1 and 25`);
+  }
+  return pct / 100;
+}
+
+function parseTargetPathPercent(formData: FormData, name: string): number {
+  const pct = parseRequiredNumber(formData, name);
+  if (pct <= 0 || pct > 100) {
+    throw new Error(`${labelFor(name)} must be between 1 and 100`);
   }
   return pct / 100;
 }
@@ -150,6 +163,21 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   if (jev_sell_exit_threshold < 0.5) {
     throw new Error("Jev SELL exit (%) must be at least 50");
+  }
+  const profit_take_enabled =
+    String(formData.get("profit_take_enabled") ?? "") === "on";
+  const profit_take_min_fraction = parseTargetPathPercent(
+    formData,
+    "profit_take_min_fraction",
+  );
+  const profit_take_max_fraction = parseTargetPathPercent(
+    formData,
+    "profit_take_max_fraction",
+  );
+  if (profit_take_max_fraction <= profit_take_min_fraction) {
+    throw new Error(
+      "Early take profit max (% of target) must be greater than min (% of target)",
+    );
   }
   if (
     !Number.isInteger(reentry_cooldown_minutes) ||
@@ -280,5 +308,8 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     demotion_jev_sell_on_loss,
     demotion_jev_sell_max_loss_pct,
     demotion_force_exit,
+    profit_take_enabled,
+    profit_take_min_fraction,
+    profit_take_max_fraction,
   };
 }

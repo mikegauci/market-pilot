@@ -13,6 +13,9 @@ export type SettingsRow = Omit<
   | "demotion_jev_sell_on_loss"
   | "demotion_jev_sell_max_loss_pct"
   | "demotion_force_exit"
+  | "profit_take_enabled"
+  | "profit_take_min_fraction"
+  | "profit_take_max_fraction"
   | "watchlist_min_buy"
   | "watchlist_pins"
   | "watchlist_dismissed"
@@ -34,6 +37,9 @@ export type SettingsRow = Omit<
       | "demotion_jev_sell_on_loss"
       | "demotion_jev_sell_max_loss_pct"
       | "demotion_force_exit"
+      | "profit_take_enabled"
+      | "profit_take_min_fraction"
+      | "profit_take_max_fraction"
       | "watchlist_min_buy"
       | "watchlist_pins"
       | "watchlist_dismissed"
@@ -57,6 +63,9 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     demotion_jev_sell_on_loss: raw.demotion_jev_sell_on_loss ?? true,
     demotion_jev_sell_max_loss_pct: raw.demotion_jev_sell_max_loss_pct ?? 0.02,
     demotion_force_exit: raw.demotion_force_exit ?? false,
+    profit_take_enabled: raw.profit_take_enabled ?? false,
+    profit_take_min_fraction: raw.profit_take_min_fraction ?? 0.7,
+    profit_take_max_fraction: raw.profit_take_max_fraction ?? 0.8,
     watchlist_min_buy: raw.watchlist_min_buy ?? 0.6,
     watchlist_pins: raw.watchlist_pins ?? [],
     watchlist_dismissed: raw.watchlist_dismissed ?? [],

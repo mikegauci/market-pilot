@@ -18,6 +18,8 @@ const baseFields = {
   max_open_positions: "5",
   stop_loss_percentage: "1",
   take_profit_percentage: "1.5",
+  profit_take_min_fraction: "70",
+  profit_take_max_fraction: "80",
   max_hold_minutes: "0",
   min_hold_minutes: "15",
   jev_sell_exit_threshold: "95",
@@ -195,6 +197,16 @@ describe("parseSettingsForm exit tuning", () => {
     );
     expect(parsed.min_hold_minutes).toBe(15);
     expect(parsed.jev_sell_exit_threshold).toBe(0.95);
+    expect(parsed.profit_take_min_fraction).toBe(0.7);
+    expect(parsed.profit_take_max_fraction).toBe(0.8);
+    expect(parsed.profit_take_enabled).toBe(false);
+  });
+
+  it("parses profit_take_enabled when checkbox is on", () => {
+    const parsed = parseSettingsForm(
+      form({ ...baseFields, profit_take_enabled: "on" }),
+    );
+    expect(parsed.profit_take_enabled).toBe(true);
   });
 
   it("rejects min hold above max hold when max hold is on", () => {

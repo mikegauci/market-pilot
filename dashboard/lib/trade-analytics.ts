@@ -39,6 +39,7 @@ export function filterTradesByRange(trades: Trade[], range: PortfolioRange): Tra
 const EXIT_REASON_LABELS: Record<string, string> = {
   stop_loss: "Stop loss",
   take_profit: "Take profit",
+  profit_take: "Early take profit",
   time_exit: "Max hold",
   jev_sell: "Jev SELL",
   demotion_exit: "Demotion exit",

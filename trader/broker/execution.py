@@ -5,7 +5,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
-from models.types import ClosedTrade, OrderFill, TradeRecord
+from models.types import ClosedTrade, OrderFill, Quote, RiskSettings, TradeRecord
+from strategy.exits import is_profit_take_eligible
 
 if TYPE_CHECKING:
     from broker.ibkr import IBKRClient
@@ -179,13 +180,15 @@ def close_ibkr_signal_exits(
     max_hold_for_symbol: Optional[Callable[[str], float]] = None,
     jev_sell_symbols: Optional[set[str]] = None,
     demotion_exit_symbols: Optional[set[str]] = None,
+    profit_take_trade_ids: Optional[set[str]] = None,
     fill_timeout_sec: float = 30.0,
     ibkr_account_id: Optional[str] = None,
 ) -> bool:
-    """Close IBKR positions on time limit, demotion, or high-confidence Jev SELL."""
+    """Close IBKR positions on time limit, demotion, profit take, or Jev SELL."""
     closed_any = False
     jev_sell_symbols = jev_sell_symbols or set()
     demotion_exit_symbols = demotion_exit_symbols or set()
+    profit_take_trade_ids = profit_take_trade_ids or set()
 
     for trade in list(risk_manager.open_trades):
         if trade.execution_mode != "ibkr":
@@ -199,11 +202,14 @@ def close_ibkr_signal_exits(
         time_exit = _trade_hold_expired(trade, hold_minutes)
         jev_exit = trade.symbol in jev_sell_symbols
         demotion_exit = trade.symbol in demotion_exit_symbols
-        if not time_exit and not jev_exit and not demotion_exit:
+        profit_take_exit = trade.id in profit_take_trade_ids
+        if not time_exit and not jev_exit and not demotion_exit and not profit_take_exit:
             continue
 
         if demotion_exit:
             reason = "demotion_exit"
+        elif profit_take_exit:
+            reason = "profit_take"
         elif time_exit:
             reason = "time_exit"
         else:
@@ -254,6 +260,30 @@ def collect_time_exit_symbols(
         if hold_minutes > 0 and _trade_hold_expired(trade, hold_minutes):
             symbols.add(trade.symbol)
     return symbols
+
+
+def collect_profit_take_trade_ids(
+    open_trades: List[TradeRecord],
+    quotes_by_symbol: Dict[str, Quote],
+    risk_settings: RiskSettings,
+) -> set[str]:
+    """Per trade id (not symbol) so multiple legs on one symbol exit independently."""
+    trade_ids: set[str] = set()
+    for trade in open_trades:
+        if trade.execution_mode != "ibkr":
+            continue
+        quote = quotes_by_symbol.get(trade.symbol)
+        if quote is None or quote.price is None:
+            continue
+        if is_profit_take_eligible(
+            trade,
+            quote.price,
+            enabled=risk_settings.profit_take_enabled,
+            min_fraction=risk_settings.profit_take_min_fraction,
+            max_fraction=risk_settings.profit_take_max_fraction,
+        ):
+            trade_ids.add(trade.id)
+    return trade_ids
 
 
 def collect_demotion_exit_symbols(

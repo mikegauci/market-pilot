@@ -165,3 +165,44 @@ def reconcile_orphan_ibkr_positions(
         )
 
     return reconciled
+
+
+def refresh_ibkr_bracket_targets(
+    ibkr: IBKRClient,
+    risk_manager: RiskManager,
+    db: SupabaseRepository,
+) -> int:
+    """Sync open-trade SL/TP from live IBKR bracket legs (e.g. after partial-fill resize)."""
+    if not ibkr.is_connected():
+        return 0
+
+    updated = 0
+    for trade in risk_manager.open_trades:
+        if trade.execution_mode != "ibkr":
+            continue
+        if not trade.ibkr_sl_order_id or not trade.ibkr_tp_order_id:
+            legs = ibkr.find_open_bracket_legs(trade.symbol)
+            if legs is not None:
+                _apply_bracket_legs(trade, legs)
+                db.update_trade_ibkr_bracket(trade)
+                updated += 1
+            continue
+
+        legs = ibkr.find_open_bracket_legs(trade.symbol)
+        if legs is None:
+            continue
+        if (
+            legs.stop_loss == trade.stop_loss
+            and legs.take_profit == trade.take_profit
+        ):
+            continue
+        _apply_bracket_legs(trade, legs)
+        db.update_trade_ibkr_bracket(trade)
+        updated += 1
+        logger.debug(
+            "Refreshed %s bracket targets from IBKR (SL $%.2f / TP $%.2f)",
+            trade.symbol,
+            trade.stop_loss,
+            trade.take_profit,
+        )
+    return updated

@@ -60,6 +60,10 @@ export type Settings = {
   demotion_jev_sell_on_loss: boolean;
   demotion_jev_sell_max_loss_pct: number;
   demotion_force_exit: boolean;
+  /** Market-sell when price is in the entry→TP path band (fractions 0–1). */
+  profit_take_enabled: boolean;
+  profit_take_min_fraction: number;
+  profit_take_max_fraction: number;
   em_universe_synced_at: string | null;
   em_universe_source: string | null;
   updated_at: string;
