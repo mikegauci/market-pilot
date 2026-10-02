@@ -40,10 +40,21 @@ class PredictionForwardReturnsTests(unittest.TestCase):
             ]
         )
 
-        update_chain = MagicMock()
-        table.update.return_value = update_chain
-        update_chain.eq.return_value = update_chain
-        update_chain.execute.return_value = MagicMock(data=[{}])
+        upsert_chain = MagicMock()
+        table.upsert.return_value = upsert_chain
+        upsert_chain.execute.return_value = MagicMock(data=[{}])
+
+        count_chain = MagicMock()
+        count_chain.not_.return_value = count_chain
+        count_chain.limit.return_value = count_chain
+        count_chain.execute.return_value = MagicMock(count=1)
+
+        def select_side_effect(*args, **kwargs):
+            if kwargs.get("count") == "exact":
+                return count_chain
+            return select_chain
+
+        table.select.side_effect = select_side_effect
 
         create_client.return_value = client
         repo = SupabaseRepository("https://example.supabase.co", "service-role-key")
@@ -61,15 +72,15 @@ class PredictionForwardReturnsTests(unittest.TestCase):
             )
         ]
 
-        with patch.object(repo, "get_bars", return_value=bars):
+        with patch.object(repo, "_query_bars", return_value=bars):
             updated = repo.backfill_prediction_forward_returns(limit=10)
 
         self.assertEqual(updated, 1)
         select_chain.lte.assert_called()
         lte_args = select_chain.lte.call_args[0]
         self.assertEqual(lte_args[0], "timestamp")
-        table.update.assert_called()
-        payload = table.update.call_args[0][0]
+        table.upsert.assert_called()
+        payload = table.upsert.call_args[0][0][0]
         self.assertIsNotNone(payload.get("return_15m_pct"))
 
     @patch("database.supabase.create_client")
@@ -119,12 +130,27 @@ class PredictionForwardReturnsTests(unittest.TestCase):
             )
         ]
 
-        with patch.object(repo, "get_bars", return_value=bars):
+        upsert_chain = MagicMock()
+        table.upsert.return_value = upsert_chain
+        upsert_chain.execute.return_value = MagicMock(data=[{}])
+        count_chain = MagicMock()
+        count_chain.not_.return_value = count_chain
+        count_chain.limit.return_value = count_chain
+        count_chain.execute.return_value = MagicMock(count=0)
+
+        def select_side_effect(*args, **kwargs):
+            if kwargs.get("count") == "exact":
+                return count_chain
+            return select_chain
+
+        table.select.side_effect = select_side_effect
+
+        with patch.object(repo, "_query_bars", return_value=bars):
             updated = repo.backfill_prediction_forward_returns(limit=10)
 
         self.assertEqual(updated, 1)
-        table.update.assert_called()
-        payload = table.update.call_args[0][0]
+        table.upsert.assert_called()
+        payload = table.upsert.call_args[0][0][0]
         self.assertIn("forward_returns_checked_at", payload)
         self.assertNotIn("return_15m_pct", payload)
 
@@ -157,19 +183,29 @@ class PredictionForwardReturnsTests(unittest.TestCase):
             ]
         )
 
-        update_chain = MagicMock()
-        table.update.return_value = update_chain
-        update_chain.eq.return_value = update_chain
-        update_chain.execute.return_value = MagicMock(data=[{}])
+        upsert_chain = MagicMock()
+        table.upsert.return_value = upsert_chain
+        upsert_chain.execute.return_value = MagicMock(data=[{}])
+        count_chain = MagicMock()
+        count_chain.not_.return_value = count_chain
+        count_chain.limit.return_value = count_chain
+        count_chain.execute.return_value = MagicMock(count=0)
+
+        def select_side_effect(*args, **kwargs):
+            if kwargs.get("count") == "exact":
+                return count_chain
+            return select_chain
+
+        table.select.side_effect = select_side_effect
 
         create_client.return_value = client
         repo = SupabaseRepository("https://example.supabase.co", "service-role-key")
 
-        with patch.object(repo, "get_bars", return_value=[]):
+        with patch.object(repo, "_query_bars", return_value=[]):
             updated = repo.backfill_prediction_forward_returns(limit=10)
 
         self.assertEqual(updated, 1)
-        payload = table.update.call_args[0][0]
+        payload = table.upsert.call_args[0][0][0]
         self.assertIn("forward_returns_checked_at", payload)
 
 

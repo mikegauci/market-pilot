@@ -148,6 +148,8 @@ def _configure_logging(level: str) -> None:
     )
     # ib_insync logs every orderStatus tick at INFO — far too noisy for normal use.
     logging.getLogger("ib_insync").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def _all_symbols(watchlist: list[str], benchmark: str = "SPY") -> list[str]:

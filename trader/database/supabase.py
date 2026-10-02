@@ -46,6 +46,7 @@ MAX_EM_UNIVERSE_SIZE = 80
 _INTRADAY_BAR_DURATION = timedelta(minutes=5)
 # When the target falls in a gap (halt/overnight), allow the next bar if it opens soon after.
 _FORWARD_RETURN_BAR_SLOP = _INTRADAY_BAR_DURATION
+_FORWARD_RETURN_UPDATE_CHUNK = 100
 
 # Failure backoff so a bad Finnhub/DB cycle does not wait the full refresh interval.
 GENERAL_NEWS_FAILURE_BACKOFF_SEC = 60.0
@@ -142,6 +143,58 @@ def _parse_timestamp(value: object) -> datetime:
     text = _normalize_iso_timestamp(str(value))
     parsed = datetime.fromisoformat(text)
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _bar_close_at_offset(
+    bars: Sequence[Bar],
+    entry_ts: datetime,
+    minutes_ahead: int,
+) -> Optional[float]:
+    target = entry_ts + timedelta(minutes=minutes_ahead)
+    for bar in bars:
+        bar_ts = bar.ts
+        if bar_ts.tzinfo is None:
+            bar_ts = bar_ts.replace(tzinfo=timezone.utc)
+        bar_end = bar_ts + _INTRADAY_BAR_DURATION
+        if bar_ts <= target < bar_end:
+            return bar.close
+        if bar_ts > target:
+            if bar_ts - target <= _FORWARD_RETURN_BAR_SLOP:
+                return bar.close
+            return None
+    return None
+
+
+def _forward_return_payload(
+    *,
+    row_id: str,
+    bars: Sequence[Bar],
+    entry_ts: datetime,
+    entry_price: float,
+    checked_at: datetime,
+) -> dict:
+    def pct(minutes_ahead: int) -> Optional[float]:
+        future = _bar_close_at_offset(bars, entry_ts, minutes_ahead)
+        if future is None:
+            return None
+        return round((future - entry_price) / entry_price * 100, 4)
+
+    payload = {
+        "id": row_id,
+        "return_5m_pct": pct(5),
+        "return_15m_pct": pct(15),
+        "return_30m_pct": pct(30),
+        "forward_returns_checked_at": checked_at.isoformat(),
+    }
+    if all(
+        payload[key] is None
+        for key in ("return_5m_pct", "return_15m_pct", "return_30m_pct")
+    ):
+        return {
+            "id": row_id,
+            "forward_returns_checked_at": payload["forward_returns_checked_at"],
+        }
+    return payload
 
 
 def _trade_from_row(row: dict) -> TradeRecord:
@@ -492,7 +545,8 @@ class SupabaseRepository:
         "watchlist_refresh_minutes, benchmark_symbol, watchlist_jev_rankings, "
         "watchlist_pins, watchlist_dismissed, "
         "watchlist_screener_ran_at, demotion_exits_enabled, demotion_max_hold_ratio, "
-        "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit"
+        "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit, "
+        "profit_take_enabled, profit_take_min_fraction, profit_take_max_fraction"
     )
     _SETTINGS_SELECT_BASE = (
         f"{_SETTINGS_SELECT_CORE}, confirmation_cycles, confirmation_seconds"
@@ -602,6 +656,9 @@ class SupabaseRepository:
                 data.get("demotion_jev_sell_max_loss_pct", 0.02)
             ),
             demotion_force_exit=bool(data.get("demotion_force_exit", False)),
+            profit_take_enabled=bool(data.get("profit_take_enabled", True)),
+            profit_take_min_fraction=float(data.get("profit_take_min_fraction", 0.70)),
+            profit_take_max_fraction=float(data.get("profit_take_max_fraction", 0.80)),
         )
 
     @_db_synchronized
@@ -703,17 +760,25 @@ class SupabaseRepository:
         )
         return bool(result.data)
 
-    @_db_synchronized
-    def get_bars(self, symbol: str, bar_size: str) -> List[Bar]:
-        result = (
+    def _query_bars(
+        self,
+        symbol: str,
+        bar_size: str,
+        *,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+    ) -> List[Bar]:
+        query = (
             self.client.table("symbol_bars")
             .select("symbol, bar_size, ts, open, high, low, close, volume")
             .eq("symbol", symbol.upper())
             .eq("bar_size", bar_size)
-            .order("ts")
-            .limit(2000)
-            .execute()
         )
+        if since is not None:
+            query = query.gte("ts", _ensure_utc_iso(since))
+        if until is not None:
+            query = query.lte("ts", _ensure_utc_iso(until))
+        result = query.order("ts").limit(2000).execute()
         bars: List[Bar] = []
         for row in result.data or []:
             bars.append(
@@ -729,6 +794,17 @@ class SupabaseRepository:
                 )
             )
         return bars
+
+    @_db_synchronized
+    def get_bars(
+        self,
+        symbol: str,
+        bar_size: str,
+        *,
+        since: Optional[datetime] = None,
+        until: Optional[datetime] = None,
+    ) -> List[Bar]:
+        return self._query_bars(symbol, bar_size, since=since, until=until)
 
     @_db_synchronized
     def upsert_bars(self, bars: List[Bar]) -> None:
@@ -1249,6 +1325,42 @@ class SupabaseRepository:
             logger.debug("Forward-return stored count skipped: %s", exc)
             return 0
 
+    def _flush_forward_return_updates(self, updates: List[dict]) -> None:
+        if not updates:
+            return
+        chunk = _FORWARD_RETURN_UPDATE_CHUNK
+        for start in range(0, len(updates), chunk):
+            batch = updates[start : start + chunk]
+            self.client.table("predictions").upsert(batch, on_conflict="id").execute()
+
+    def _intraday_bars_for_backfill_batch(
+        self,
+        rows: List[dict],
+        *,
+        bar_size: str,
+    ) -> Dict[str, List[Bar]]:
+        bounds: Dict[str, tuple[datetime, datetime]] = {}
+        for row in rows:
+            ts_raw = row.get("timestamp")
+            symbol = str(row.get("symbol", "")).upper()
+            if not symbol or not ts_raw:
+                continue
+            entry_ts = _parse_timestamp(ts_raw)
+            latest = entry_ts + timedelta(minutes=30) + _FORWARD_RETURN_BAR_SLOP
+            if symbol in bounds:
+                lo, hi = bounds[symbol]
+                bounds[symbol] = (min(lo, entry_ts), max(hi, latest))
+            else:
+                bounds[symbol] = (entry_ts, latest)
+
+        bars_by_symbol: Dict[str, List[Bar]] = {}
+        for symbol, (since, until) in bounds.items():
+            bars_by_symbol[symbol] = sorted(
+                self._query_bars(symbol, bar_size, since=since, until=until),
+                key=lambda bar: bar.ts,
+            )
+        return bars_by_symbol
+
     @_db_synchronized
     def backfill_prediction_forward_returns(self, *, limit: int = 400) -> int:
         """Fill forward returns on mature predictions using cached 5-minute bars."""
@@ -1275,93 +1387,50 @@ class SupabaseRepository:
         if not rows:
             return 0
 
-        symbols = list(
-            dict.fromkeys(
-                str(row.get("symbol", "")).upper()
-                for row in rows
-                if str(row.get("symbol", "")).strip()
-            )
+        bars_by_symbol = self._intraday_bars_for_backfill_batch(
+            rows, bar_size=BAR_SIZE_INTRADAY
         )
-        bars_by_symbol: Dict[str, List[Bar]] = {}
-        for symbol in symbols:
-            bars_by_symbol[symbol] = sorted(
-                self.get_bars(symbol, BAR_SIZE_INTRADAY),
-                key=lambda bar: bar.ts,
-            )
 
-        updated = 0
+        updates: List[dict] = []
         for row in rows:
             ts_raw = row.get("timestamp")
             symbol = str(row.get("symbol", "")).upper()
             entry_price = float(row.get("price") or 0)
-            if not symbol or entry_price <= 0 or not ts_raw:
+            row_id = str(row.get("id", ""))
+            if not symbol or entry_price <= 0 or not ts_raw or not row_id:
                 continue
             entry_ts = _parse_timestamp(ts_raw)
-            if entry_ts.tzinfo is None:
-                entry_ts = entry_ts.replace(tzinfo=timezone.utc)
 
             bars = bars_by_symbol.get(symbol) or []
             if not bars:
-                self.client.table("predictions").update(
-                    {"forward_returns_checked_at": now.isoformat()}
-                ).eq("id", row["id"]).execute()
-                updated += 1
-                continue
-
-            def price_at(minutes_ahead: int) -> Optional[float]:
-                target = entry_ts + timedelta(minutes=minutes_ahead)
-                for bar in bars:
-                    bar_ts = bar.ts
-                    if bar_ts.tzinfo is None:
-                        bar_ts = bar_ts.replace(tzinfo=timezone.utc)
-                    bar_end = bar_ts + _INTRADAY_BAR_DURATION
-                    if bar_ts <= target < bar_end:
-                        return bar.close
-                    if bar_ts > target:
-                        if bar_ts - target <= _FORWARD_RETURN_BAR_SLOP:
-                            return bar.close
-                        return None
-                return None
-
-            def pct(minutes_ahead: int) -> Optional[float]:
-                future = price_at(minutes_ahead)
-                if future is None:
-                    return None
-                return round((future - entry_price) / entry_price * 100, 4)
-
-            payload = {
-                "return_5m_pct": pct(5),
-                "return_15m_pct": pct(15),
-                "return_30m_pct": pct(30),
-                "forward_returns_checked_at": now.isoformat(),
-            }
-            if all(
-                payload[key] is None
-                for key in ("return_5m_pct", "return_15m_pct", "return_30m_pct")
-            ):
-                self.client.table("predictions").update(
-                    {"forward_returns_checked_at": payload["forward_returns_checked_at"]}
-                ).eq("id", row["id"]).execute()
-                updated += 1
-                continue
-            self.client.table("predictions").update(payload).eq("id", row["id"]).execute()
-            updated += 1
-            if updated % 400 == 0:
-                stored = self.count_predictions_with_return_15m()
-                logger.info(
-                    "Forward-return backfill: %s predictions with 15m return stored "
-                    "(400 processed this batch)",
-                    stored,
+                updates.append(
+                    {"id": row_id, "forward_returns_checked_at": now.isoformat()}
                 )
+                continue
 
-        if updated and updated % 400 != 0:
-            stored = self.count_predictions_with_return_15m()
-            logger.info(
-                "Forward-return backfill: %s predictions with 15m return stored "
-                "(%s processed this batch)",
-                stored,
-                updated,
+            updates.append(
+                _forward_return_payload(
+                    row_id=row_id,
+                    bars=bars,
+                    entry_ts=entry_ts,
+                    entry_price=entry_price,
+                    checked_at=now,
+                )
             )
+
+        if not updates:
+            return 0
+
+        self._flush_forward_return_updates(updates)
+        updated = len(updates)
+
+        stored = self.count_predictions_with_return_15m()
+        logger.info(
+            "Forward-return backfill: %s predictions with 15m return stored "
+            "(%s processed this batch)",
+            stored,
+            updated,
+        )
         return updated
 
     @_db_synchronized
