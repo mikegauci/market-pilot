@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ClosePositionButton } from "@/components/close-position-button";
 import { SortableTh } from "@/components/sortable-th";
 import { SymbolChartPanel } from "@/components/symbol-chart-panel";
@@ -146,20 +146,22 @@ function StatusHeaderCell({
             onClick={() => onSort("exitReason")}
             className="inline-flex items-center gap-0.5 text-xs hover:text-zinc-300"
           />
-          <select
-            value={exitReasonFilter}
-            onChange={(e) =>
-              onExitReasonFilterChange(e.target.value as ExitReasonFilterValue)
-            }
-            className="max-w-[10rem] rounded border border-zinc-700 bg-zinc-950 px-1 py-0.5 text-xs text-zinc-300"
-            aria-label="Filter by exit reason"
-          >
-            {filterOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          {filterOptions.length > 1 ? (
+            <select
+              value={exitReasonFilter}
+              onChange={(e) =>
+                onExitReasonFilterChange(e.target.value as ExitReasonFilterValue)
+              }
+              className="max-w-[10rem] rounded border border-zinc-700 bg-zinc-950 px-1 py-0.5 text-xs text-zinc-300"
+              aria-label="Filter by exit reason"
+            >
+              {filterOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
         </div>
       </div>
     </th>
@@ -231,16 +233,27 @@ export function TradesTable({
     return map;
   }, [liveCommands]);
 
-  const exitReasonOptions = useMemo(
-    () => exitReasonFilterOptions(liveTrades),
-    [liveTrades],
+  const afterStatus = useMemo(
+    () =>
+      filter === "all" ? liveTrades : liveTrades.filter((t) => t.status === filter),
+    [filter, liveTrades],
   );
 
+  const exitReasonOptions = useMemo(
+    () => exitReasonFilterOptions(afterStatus),
+    [afterStatus],
+  );
+
+  useEffect(() => {
+    if (exitReasonFilter === "all") return;
+    if (!exitReasonOptions.some((o) => o.value === exitReasonFilter)) {
+      setExitReasonFilter("all");
+    }
+  }, [exitReasonFilter, exitReasonOptions]);
+
   const filtered = useMemo(() => {
-    const afterStatus =
-      filter === "all" ? liveTrades : liveTrades.filter((t) => t.status === filter);
     return filterTradesByExitReason(afterStatus, exitReasonFilter);
-  }, [filter, exitReasonFilter, liveTrades]);
+  }, [afterStatus, exitReasonFilter]);
 
   const emptyMessage = useMemo(
     () => tradesEmptyMessage(liveTrades.length > 0, filter, exitReasonFilter),

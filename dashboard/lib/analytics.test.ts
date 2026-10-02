@@ -187,6 +187,12 @@ describe("trade-analytics", () => {
     expect(filterTradesByExitReason(all, "ibkr").map((t) => t.id)).toEqual(["ibkr"]);
   });
 
+  it("only lists exit filters present in the trade list", () => {
+    const values = exitReasonFilterOptions([closedLoss]).map((o) => o.value);
+    expect(values).toEqual(["all", "stop_loss"]);
+    expect(values).not.toContain("take_profit");
+  });
+
   it("adds custom exit reasons to filter options from trades", () => {
     const legacy: Trade = {
       ...closedWin,
@@ -195,6 +201,7 @@ describe("trade-analytics", () => {
     };
     const values = exitReasonFilterOptions([legacy]).map((o) => o.value);
     expect(values).toContain("legacy_exit");
+    expect(values).not.toContain("stop_loss");
   });
 
   it("labels exit reasons for sort", () => {
