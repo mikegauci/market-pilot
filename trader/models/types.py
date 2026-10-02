@@ -174,6 +174,10 @@ class RiskSettings:
     min_hold_minutes: float = 15.0
     # Minimum Jev SELL probability to soft-exit (must also be sell-dominant).
     jev_sell_exit_threshold: float = 0.95
+    # Early take-profit when price reaches a band along entry→TP (fractions 0–1).
+    profit_take_enabled: bool = False
+    profit_take_min_fraction: float = 0.70
+    profit_take_max_fraction: float = 0.80
     # Block new entries in a symbol for this many minutes after an exit. 0 = off.
     reentry_cooldown_minutes: float = 45.0
     confirmation_cycles: int = 2
