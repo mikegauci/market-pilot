@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { Lock, LockOpen, Trash2 } from "lucide-react";
+import { Lock, LockOpen, Shield, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { updateWatchlistCuration } from "@/lib/actions";
@@ -71,6 +71,8 @@ export function WatchlistCurationPanel({ settings, compact = false }: Props) {
     return [...symbols].sort();
   }, [settings, explicitPins, dismissed]);
 
+  const effectiveWatchCount = effectivePreview.length;
+
   function upsertExplicitPin(symbol: string, patch: Partial<WatchlistPin>) {
     const key = normalizeSymbol(symbol);
     setExplicitPins((current) => {
@@ -119,14 +121,16 @@ export function WatchlistCurationPanel({ settings, compact = false }: Props) {
     });
   }
 
+  const cellPad = compact ? "px-1.5 py-1" : "px-2 py-1.5";
+
   return (
     <div className={cn("space-y-3", compact && "text-sm")}>
-      <p className="text-xs text-zinc-500">
-        Add or remove symbols, lock names so EM scans cannot drop them (extra slots beyond max
-        dynamic), and choose demotion protection per symbol. Only rows you change here are saved —
-        scan picks rotate unless locked. Locked names stay until you remove them, or until an EM
-        scan scores them below watchlist min BUY.
-      </p>
+      {!compact ? (
+        <p className="text-xs text-zinc-500">
+          Add or remove symbols and set demotion protection per row. Lock symbols so scans cannot
+          drop them; they stay until you remove them or EM scores below watchlist min BUY.
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <Input
@@ -159,36 +163,58 @@ export function WatchlistCurationPanel({ settings, compact = false }: Props) {
 
       <div
         className={cn(
-          "overflow-y-auto overflow-x-auto rounded border border-zinc-800",
-          compact ? "max-h-52" : "max-h-72",
+          "overflow-y-auto rounded border border-zinc-800",
+          compact ? "max-h-44 overflow-x-hidden" : "max-h-72 overflow-x-auto",
         )}
       >
-        <table className="w-full text-xs">
+        <table className={cn("w-full text-xs", compact && "table-fixed")}>
           <thead className="sticky top-0 z-10 bg-zinc-950 text-zinc-500">
             <tr>
-              <th className="px-2 py-1.5 text-left">Symbol</th>
-              <th className="px-2 py-1.5 text-left">Lock</th>
-              <th className="px-2 py-1.5 text-left">Demotion protect</th>
-              <th className="px-2 py-1.5 text-right">Remove</th>
+              <th className={cn(cellPad, "text-left", compact && "w-[38%]")}>Symbol</th>
+              {compact ? (
+                <>
+                  <th className={cn(cellPad, "w-9 text-center")} title="Lock">
+                    <Lock className="mx-auto h-3.5 w-3.5" aria-hidden />
+                    <span className="sr-only">Lock</span>
+                  </th>
+                  <th className={cn(cellPad, "w-9 text-center")} title="Demotion protect">
+                    <Shield className="mx-auto h-3.5 w-3.5" aria-hidden />
+                    <span className="sr-only">Demotion protect</span>
+                  </th>
+                  <th className={cn(cellPad, "w-9 text-center")} title="Remove">
+                    <Trash2 className="mx-auto h-3.5 w-3.5" aria-hidden />
+                    <span className="sr-only">Remove</span>
+                  </th>
+                </>
+              ) : (
+                <>
+                  <th className={cn(cellPad, "text-left")}>Lock</th>
+                  <th className={cn(cellPad, "text-left")}>Demotion protect</th>
+                  <th className={cn(cellPad, "text-right")}>Remove</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
             {displayRows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-2 py-3 text-zinc-500">
+                <td colSpan={4} className={cn(cellPad, compact ? "py-2" : "py-3", "text-zinc-500")}>
                   No symbols — add one or wait for a dynamic scan.
                 </td>
               </tr>
             ) : (
               displayRows.map((pin) => (
                 <tr key={pin.symbol} className="border-t border-zinc-900">
-                  <td className="px-2 py-1.5 font-mono text-zinc-200">{pin.symbol}</td>
-                  <td className="px-2 py-1.5">
+                  <td className={cn(cellPad, "truncate font-mono text-zinc-200")}>{pin.symbol}</td>
+                  <td className={cn(cellPad, compact && "text-center")}>
                     <button
                       type="button"
                       title={pin.locked ? "Locked — scan cannot drop" : "Unlocked — scan may rotate out"}
                       onClick={() => upsertExplicitPin(pin.symbol, { locked: !pin.locked })}
-                      className="inline-flex items-center gap-1 text-zinc-300 hover:text-emerald-300"
+                      className={cn(
+                        "inline-flex items-center gap-1 text-zinc-300 hover:text-emerald-300",
+                        compact && "mx-auto",
+                      )}
                     >
                       {pin.locked ? (
                         <Lock className="h-3.5 w-3.5 text-emerald-400" />
@@ -198,8 +224,14 @@ export function WatchlistCurationPanel({ settings, compact = false }: Props) {
                       <span className="sr-only">{pin.locked ? "Locked" : "Unlocked"}</span>
                     </button>
                   </td>
-                  <td className="px-2 py-1.5">
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 text-zinc-400">
+                  <td className={cn(cellPad, compact && "text-center")}>
+                    <label
+                      className={cn(
+                        "inline-flex cursor-pointer items-center gap-1.5 text-zinc-400",
+                        compact && "mx-auto",
+                      )}
+                      title="Demotion protect"
+                    >
                       <input
                         type="checkbox"
                         checked={pin.protect_demotion}
@@ -207,18 +239,20 @@ export function WatchlistCurationPanel({ settings, compact = false }: Props) {
                           upsertExplicitPin(pin.symbol, { protect_demotion: e.target.checked })
                         }
                         className="rounded border-zinc-700"
+                        aria-label={`Demotion protect ${pin.symbol}`}
                       />
-                      <span className="hidden sm:inline">Protect</span>
+                      {!compact ? <span className="hidden sm:inline">Protect</span> : null}
                     </label>
                   </td>
-                  <td className="px-2 py-1.5 text-right">
+                  <td className={cn(cellPad, compact ? "text-center" : "text-right")}>
                     <button
                       type="button"
                       title="Remove and block from next scan picks"
+                      aria-label={`Remove ${pin.symbol} from watchlist`}
                       onClick={() => handleRemove(pin.symbol)}
-                      className="text-zinc-500 hover:text-red-400"
+                      className={cn("text-zinc-500 hover:text-red-400", compact && "mx-auto inline-flex")}
                     >
-                      <Trash2 className="inline h-3.5 w-3.5" />
+                      <Trash2 className="inline h-3.5 w-3.5" aria-hidden />
                     </button>
                   </td>
                 </tr>
@@ -228,15 +262,25 @@ export function WatchlistCurationPanel({ settings, compact = false }: Props) {
         </table>
       </div>
 
-      <div className="rounded border border-zinc-800/80 bg-zinc-950/40 px-2 py-2">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-          Bot will watch
+      {compact ? (
+        <p className="text-[11px] leading-snug text-zinc-600">
+          {effectiveWatchCount > 0
+            ? `${effectiveWatchCount} symbol${effectiveWatchCount === 1 ? "" : "s"} the bot will watch`
+            : "No symbols on the watchlist yet"}
+          {" · "}
+          Open positions are added at runtime.
         </p>
-        <p className="mt-1 font-mono text-xs text-zinc-200">
-          {effectivePreview.length ? effectivePreview.join(", ") : "—"}
-        </p>
-        <p className="mt-1 text-[11px] text-zinc-600">Open positions are added at runtime.</p>
-      </div>
+      ) : (
+        <div className="rounded border border-zinc-800/80 bg-zinc-950/40 px-2 py-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+            Bot will watch
+          </p>
+          <p className="mt-1 font-mono text-xs text-zinc-200">
+            {effectiveWatchCount ? effectivePreview.join(", ") : "—"}
+          </p>
+          <p className="mt-1 text-[11px] text-zinc-600">Open positions are added at runtime.</p>
+        </div>
+      )}
     </div>
   );
 }

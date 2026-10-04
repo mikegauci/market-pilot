@@ -3,11 +3,13 @@ import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
 export function SettingsSection({
+  id,
   title,
   description,
   children,
   className,
 }: {
+  id?: string;
   title: string;
   description?: string;
   children: ReactNode;
@@ -15,8 +17,9 @@ export function SettingsSection({
 }) {
   return (
     <section
+      id={id}
       className={cn(
-        "rounded-xl border border-zinc-800/80 bg-zinc-950/20 p-4 sm:p-5",
+        "scroll-mt-6 rounded-xl border border-zinc-800/80 bg-zinc-950/20 p-4 sm:p-5",
         className,
       )}
     >

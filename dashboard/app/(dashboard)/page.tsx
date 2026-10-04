@@ -49,7 +49,7 @@ export default async function OverviewPage() {
       <div className="space-y-6">
         <h2 className="text-xl font-semibold sm:text-2xl">Overview</h2>
 
-        <div className="grid grid-cols-1 gap-4 items-stretch sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <OverviewStats portfolio={portfolio} positions={positions} currency={currency} />
           <MarketConditionCard
             predictions={predictions}

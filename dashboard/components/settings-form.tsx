@@ -811,6 +811,7 @@ export function SettingsForm({
       </SettingsSection>
 
       <SettingsSection
+        id="watchlist"
         title="Watchlist"
         description="Fallback symbols or dynamic EM top-N after each successful Jev scan, plus intraday charts."
       >
