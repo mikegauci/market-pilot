@@ -13,6 +13,12 @@ import { filterTradesByActiveIbkrAccount } from "@/lib/ibkr-trade-scope";
 import { normalizeSettings } from "@/lib/normalize-settings";
 import { tradingDayStartUtc } from "@/lib/market-hours";
 import { tradingDayTradesOrFilter } from "@/lib/trading-day-trades";
+import { SESSION_BRIEF_FIRST_DATE } from "@/lib/session-brief/constants";
+import {
+  buildSessionBriefHistory,
+  parseSessionBriefDays,
+  type SessionBriefHistoryEntry,
+} from "@/lib/session-brief/history";
 import { createClient } from "@/lib/supabase/server";
 import type {
   BotStatus,
@@ -24,6 +30,7 @@ import type {
   Prediction,
   Settings,
   SymbolBar,
+  SessionBriefRow,
   Trade,
   TradeCommand,
   WatchlistScreenerHistory,
@@ -117,6 +124,39 @@ export async function getAnalyticsPredictions(
     .order("timestamp", { ascending: false })
     .limit(limit);
   return (data ?? []) as Prediction[];
+}
+
+export type SessionBriefHistoryLoad = {
+  history: SessionBriefHistoryEntry[];
+  loadError: string | null;
+};
+
+export async function getSessionBriefHistory(): Promise<SessionBriefHistoryLoad> {
+  const supabase = await createClient();
+  const [{ data: daysRaw, error: daysError }, { data: briefRows, error: briefsError }] =
+    await Promise.all([
+      supabase.rpc("list_prediction_session_dates", { p_since: SESSION_BRIEF_FIRST_DATE }),
+      supabase.rpc("get_latest_session_briefs", { p_since: SESSION_BRIEF_FIRST_DATE }),
+    ]);
+
+  if (daysError) {
+    return {
+      history: [],
+      loadError: daysError.message,
+    };
+  }
+  if (briefsError) {
+    return {
+      history: [],
+      loadError: briefsError.message,
+    };
+  }
+
+  const days = parseSessionBriefDays(daysRaw);
+  return {
+    history: buildSessionBriefHistory(days, (briefRows ?? []) as SessionBriefRow[]),
+    loadError: null,
+  };
 }
 
 export async function getJevCalibrationBuckets(

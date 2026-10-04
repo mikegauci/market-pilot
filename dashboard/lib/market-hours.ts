@@ -140,6 +140,20 @@ export function tradingDayStartUtc(date = new Date()): string {
   return atEtTime(calendarDate, 0, 0).toISOString();
 }
 
+function nextEtCalendarDate(calendarDate: string): string {
+  const anchor = atEtTime(calendarDate, 12, 0);
+  return getEtParts(new Date(anchor.getTime() + 86_400_000)).calendarDate;
+}
+
+/** Inclusive start, exclusive end (UTC ISO) for one US Eastern calendar day. */
+export function etDayBoundsUtc(calendarDate: string): { startIso: string; endIso: string } {
+  const endDate = nextEtCalendarDate(calendarDate);
+  return {
+    startIso: atEtTime(calendarDate, 0, 0).toISOString(),
+    endIso: atEtTime(endDate, 0, 0).toISOString(),
+  };
+}
+
 export function getMarketStatus(date = new Date()): MarketStatus {
   const { isWeekday, minutesSinceMidnight } = getEtParts(date);
   const isOpen =

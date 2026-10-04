@@ -1,19 +1,23 @@
 import { AnalyticsDashboard } from "@/components/analytics-dashboard";
+import { SessionBriefCard } from "@/components/session-brief-card";
 import { ANALYTICS_PORTFOLIO_HISTORY_LIMIT } from "@/lib/analytics-data";
 import {
   getClosedTrades,
   getLatestPortfolio,
+  getSessionBriefHistory,
   getPortfolioHistory,
   getSettings,
 } from "@/lib/queries";
 
 export default async function AnalyticsPage() {
-  const [portfolioHistory, closedTrades, portfolio, settings] = await Promise.all([
-    getPortfolioHistory(ANALYTICS_PORTFOLIO_HISTORY_LIMIT),
-    getClosedTrades(),
-    getLatestPortfolio(),
-    getSettings(),
-  ]);
+  const [portfolioHistory, closedTrades, portfolio, settings, sessionBriefLoad] =
+    await Promise.all([
+      getPortfolioHistory(ANALYTICS_PORTFOLIO_HISTORY_LIMIT),
+      getClosedTrades(),
+      getLatestPortfolio(),
+      getSettings(),
+      getSessionBriefHistory(),
+    ]);
 
   const currency = portfolio?.currency ?? "USD";
 
@@ -31,6 +35,10 @@ export default async function AnalyticsPage() {
         closedTrades={closedTrades}
         currency={currency}
         settings={settings}
+      />
+      <SessionBriefCard
+        initialHistory={sessionBriefLoad.history}
+        initialLoadError={sessionBriefLoad.loadError}
       />
     </div>
   );

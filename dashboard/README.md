@@ -12,11 +12,11 @@ The dashboard reads from Supabase with the **publishable (anon) key** and Supaba
 cp .env.example .env.local
 ```
 
-2. Fill in `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from [Supabase API settings](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/settings/api) (publishable or anon key — **not** service_role).
+2. Fill in `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from [Supabase API settings](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/settings/api) (publishable or anon key — **not** service_role). For **Analytics → Session brief**, add server-only `OPENAI_API_KEY` (see `.env.example`).
 
 3. Create a user in [Supabase Auth](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/auth/users) (email + password).
 
-4. Install and run:
+4. Install and run (Node **22+** required for the OpenAI SDK):
 
 ```bash
 npm install
@@ -43,6 +43,7 @@ Hosted Supabase Free tier: see [docs/supabase-quota.md](../docs/supabase-quota.m
 | `/trades` | Full trade history (open / closed) with expandable charts |
 | `/strategy` | Strategy guide — indicators, filters, and decision flow |
 | `/settings` | Risk and strategy settings |
+| `/analytics` | Equity, P&L, optional Jev calibration, day-by-day AI session briefs (from 2 Oct 2026) |
 
 **Confirmation cycles / seconds** (under Jev & signals) control how long an eligible BUY must persist before entry. When Supabase settings are available, these override `STRATEGY_CONFIRMATION_*` in `trader/.env`; the trader reloads them about every 15s without a restart.
 
@@ -70,6 +71,8 @@ Production: [market-pilot-dashboard on Vercel](https://vercel.com/mikegaucis-pro
 3. Environment variables (Production + Preview):
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   - `OPENAI_API_KEY` (server-only, for Session brief on Analytics)
+   - `OPENAI_BRIEF_MODEL` (optional)
 4. In [Supabase Auth URL config](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/auth/url-configuration), add:
    - Site URL: `https://market-pilot-dashboard.vercel.app`
    - Redirect URL: `https://market-pilot-dashboard.vercel.app/auth/callback`
@@ -78,4 +81,5 @@ Production: [market-pilot-dashboard on Vercel](https://vercel.com/mikegaucis-pro
 
 - RLS policies allow authenticated users to read all tables
 - Dashboard may update `bot_status` and `settings` only (paper mode enforced — cannot set live trading from UI)
+- Dashboard may insert into `session_briefs` (AI session summaries; advisory only)
 - Never put `SUPABASE_SERVICE_ROLE_KEY` in dashboard env vars

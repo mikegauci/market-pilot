@@ -273,6 +273,25 @@ export type ChartOverlayLine = {
   lineStyle?: "solid" | "dashed";
 };
 
+export type SessionBriefContent = {
+  headline: string;
+  what_happened: string[];
+  entry_blockers: { reason: string; count: number; takeaway: string }[];
+  exits: string[];
+  suggestions: { setting: string; direction: "raise" | "lower" | "keep"; why: string }[];
+  caveats: string[];
+};
+
+export type SessionBriefRow = {
+  id: string;
+  session_date: string;
+  model: string;
+  input: Record<string, unknown>;
+  brief: SessionBriefContent;
+  created_by: string;
+  created_at: string;
+};
+
 export type ChartMarker = {
   time: string;
   price: number;
