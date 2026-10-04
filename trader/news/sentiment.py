@@ -58,6 +58,29 @@ _EVENT_RULES: Sequence[tuple[re.Pattern[str], str]] = (
     (re.compile(r"\bacquisition\b", re.I), "merger"),
 )
 
+KNOWN_NEWS_TAGS: frozenset[str] = (
+    frozenset(tag for _, tag, _ in _NEGATIVE_RULES)
+    | frozenset(tag for _, tag, _ in _POSITIVE_RULES)
+    | frozenset(tag for _, tag in _EVENT_RULES)
+)
+
+
+def merge_news_scores(
+    base_sentiment: float,
+    base_tags: Sequence[str],
+    llm_sentiment: float,
+    llm_tags: Sequence[str],
+) -> tuple[float, List[str]]:
+    """Conservative merge: lower sentiment, union of known tags."""
+    sentiment = min(base_sentiment, llm_sentiment)
+    sentiment = max(-1.0, min(1.0, round(sentiment, 3)))
+    merged = {
+        tag
+        for tag in (*base_tags, *llm_tags)
+        if tag in KNOWN_NEWS_TAGS
+    }
+    return sentiment, sorted(merged)
+
 
 def _article_text(article: NewsArticle) -> str:
     return f"{article.headline} {article.summary}".strip()

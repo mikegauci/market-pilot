@@ -34,6 +34,7 @@ from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
 from news.cache import TtlCache
 from news.client import FetchStatus, FinnhubNewsClient, NewsService
+from news.openai_scorer import OpenAiNewsScorer
 from news.enrich import enrich_market_state_with_news
 from news.sentiment import NewsContext
 from market.hours import (
@@ -467,11 +468,19 @@ def run() -> int:
     news_service: Optional[NewsService] = None
     news_client: Optional[FinnhubNewsClient] = None
     if settings.news_enabled and settings.data_source != DataSource.MOCK:
+        news_llm_scorer: Optional[OpenAiNewsScorer] = None
+        if settings.news_llm_enabled:
+            news_llm_scorer = OpenAiNewsScorer(
+                settings.openai_api_key,
+                model=settings.news_llm_model,
+                timeout_sec=settings.news_llm_timeout_sec,
+            )
         news_client = FinnhubNewsClient(
             settings.finnhub_api_key,
             lookback_hours=settings.news_lookback_hours,
             max_headlines=settings.news_max_headlines,
             max_retries=settings.news_max_retries,
+            scorer=news_llm_scorer,
         )
         news_cache: TtlCache[NewsContext] = TtlCache(settings.news_cache_ttl_sec)
         news_service = NewsService(
@@ -483,10 +492,11 @@ def run() -> int:
             fetch_workers=settings.news_fetch_workers,
         )
         logger.info(
-            "News enrichment enabled (Finnhub, cache TTL %.0fs, general refresh %.0fs, skip %s)",
+            "News enrichment enabled (Finnhub, cache TTL %.0fs, general refresh %.0fs, skip %s%s)",
             settings.news_cache_ttl_sec,
             settings.news_general_refresh_sec,
             ", ".join(sorted(settings.news_skip_symbol_set)) or "none",
+            f", OpenAI scorer {settings.news_llm_model}" if news_llm_scorer else "",
         )
     elif settings.data_source == DataSource.MOCK:
         logger.info("News enrichment skipped in mock data mode")

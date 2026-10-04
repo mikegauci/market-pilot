@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
+import threading
 import time
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
+
+import httpx
 
 from models.types import MarketState
 from news.cache import CooldownTracker, TtlCache
@@ -18,7 +22,8 @@ from news.client import (
     parse_related_symbols,
 )
 from news.enrich import apply_news_context, enrich_market_state_with_news
-from news.sentiment import NewsArticle, NewsContext, score_articles
+from news.openai_scorer import OpenAiNewsScorer, ScoredNews
+from news.sentiment import NewsArticle, NewsContext, merge_news_scores, score_articles
 from strategy.config import StrategyConfig
 from strategy.filters import check_entry_filters
 
@@ -346,6 +351,269 @@ class TestNewsSettings(unittest.TestCase):
 
         settings = Settings(news_enabled=True, finnhub_api_key="")
         self.assertFalse(settings.news_enabled)
+
+    def test_news_llm_disabled_without_openai_key(self) -> None:
+        from config import Settings
+
+        settings = Settings(
+            news_enabled=True,
+            finnhub_api_key="finnhub-key",
+            news_llm_enabled=True,
+            openai_api_key="",
+        )
+        self.assertFalse(settings.news_llm_enabled)
+
+    def test_news_llm_disabled_when_news_off(self) -> None:
+        from config import Settings
+
+        settings = Settings(
+            news_enabled=False,
+            news_llm_enabled=True,
+            openai_api_key="sk-test",
+        )
+        self.assertFalse(settings.news_llm_enabled)
+
+    def test_news_llm_stays_enabled_with_prerequisites(self) -> None:
+        from config import Settings
+
+        settings = Settings(
+            news_enabled=True,
+            finnhub_api_key="finnhub-key",
+            news_llm_enabled=True,
+            openai_api_key="sk-test",
+        )
+        self.assertTrue(settings.news_llm_enabled)
+
+
+class TestMergeNewsScores(unittest.TestCase):
+    def test_takes_lower_sentiment_and_unions_tags(self) -> None:
+        sentiment, tags = merge_news_scores(
+            0.2,
+            ["earnings_beat"],
+            -0.5,
+            ["guidance_cut"],
+        )
+        self.assertEqual(sentiment, -0.5)
+        self.assertEqual(tags, ["earnings_beat", "guidance_cut"])
+
+    def test_drops_unknown_tags(self) -> None:
+        _, tags = merge_news_scores(0.0, [], 0.0, ["made_up_tag", "downgrade"])
+        self.assertEqual(tags, ["downgrade"])
+
+    def test_keeps_regex_bearish_when_llm_bullish(self) -> None:
+        sentiment, tags = merge_news_scores(
+            -0.35,
+            ["downgrade"],
+            0.6,
+            ["earnings_beat"],
+        )
+        self.assertEqual(sentiment, -0.35)
+        self.assertEqual(tags, ["downgrade", "earnings_beat"])
+
+
+class TestOpenAiNewsScorer(unittest.TestCase):
+    def test_cache_avoids_second_http_call(self) -> None:
+        scorer = OpenAiNewsScorer("test-key", max_retries=1)
+        articles = [NewsArticle(headline="Company faces lawsuit")]
+        response_body = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {"sentiment": -0.4, "tags": ["lawsuit"]}
+                        )
+                    }
+                }
+            ]
+        }
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = response_body
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("news.openai_scorer.httpx.Client") as mock_client_cls:
+            mock_client_cls.return_value.__enter__.return_value.post.return_value = (
+                mock_response
+            )
+            first = scorer.score("NVDA", articles)
+            second = scorer.score("NVDA", articles)
+
+        self.assertIsNotNone(first)
+        assert first is not None
+        self.assertEqual(first.sentiment, -0.4)
+        self.assertEqual(second, first)
+        mock_client_cls.return_value.__enter__.return_value.post.assert_called_once()
+
+    def test_failure_returns_none(self) -> None:
+        scorer = OpenAiNewsScorer("test-key", max_retries=1)
+        articles = [NewsArticle(headline="Headline")]
+
+        with patch("news.openai_scorer.httpx.Client") as mock_client_cls:
+            mock_client_cls.return_value.__enter__.return_value.post.side_effect = (
+                RuntimeError("network down")
+            )
+            self.assertIsNone(scorer.score("NVDA", articles))
+
+    def test_failure_cooldown_is_per_symbol(self) -> None:
+        scorer = OpenAiNewsScorer("test-key", max_retries=1, failure_cooldown_sec=60.0)
+        articles_nvda = [NewsArticle(headline="NVDA headline")]
+        articles_aapl = [NewsArticle(headline="AAPL headline")]
+        ok_body = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps({"sentiment": -0.2, "tags": ["downgrade"]})
+                    }
+                }
+            ]
+        }
+        ok_response = MagicMock()
+        ok_response.status_code = 200
+        ok_response.json.return_value = ok_body
+        ok_response.raise_for_status = MagicMock()
+
+        with patch("news.openai_scorer.httpx.Client") as mock_client_cls:
+            mock_client_cls.return_value.__enter__.return_value.post.side_effect = [
+                RuntimeError("network down"),
+                ok_response,
+            ]
+            self.assertIsNone(scorer.score("NVDA", articles_nvda))
+            result = scorer.score("AAPL", articles_aapl)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result.tags, ["downgrade"])
+        self.assertEqual(
+            mock_client_cls.return_value.__enter__.return_value.post.call_count,
+            2,
+        )
+
+    def test_auth_error_uses_global_cooldown(self) -> None:
+        scorer = OpenAiNewsScorer("test-key", max_retries=1)
+        articles = [NewsArticle(headline="Headline")]
+        auth_response = MagicMock()
+        auth_response.status_code = 401
+        auth_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "auth",
+            request=MagicMock(),
+            response=auth_response,
+        )
+
+        with patch("news.openai_scorer.httpx.Client") as mock_client_cls:
+            mock_client_cls.return_value.__enter__.return_value.post.return_value = (
+                auth_response
+            )
+            self.assertIsNone(scorer.score("NVDA", articles))
+            self.assertIsNone(scorer.score("AAPL", [NewsArticle(headline="Other")]))
+
+        mock_client_cls.return_value.__enter__.return_value.post.assert_called_once()
+
+    def test_concurrent_score_single_http_call(self) -> None:
+        scorer = OpenAiNewsScorer("test-key", max_retries=1)
+        articles = [NewsArticle(headline="Shared headline")]
+        response_body = {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps({"sentiment": -0.1, "tags": []})
+                    }
+                }
+            ]
+        }
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = response_body
+        mock_response.raise_for_status = MagicMock()
+
+        def slow_post(*args: object, **kwargs: object) -> MagicMock:
+            time.sleep(0.05)
+            return mock_response
+
+        results: list[Optional[ScoredNews]] = []
+
+        def worker() -> None:
+            results.append(scorer.score("NVDA", articles))
+
+        with patch("news.openai_scorer.httpx.Client") as mock_client_cls:
+            mock_client_cls.return_value.__enter__.return_value.post.side_effect = (
+                slow_post
+            )
+            threads = [threading.Thread(target=worker) for _ in range(3)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=5.0)
+
+        self.assertEqual(len(results), 3)
+        self.assertTrue(all(item is not None for item in results))
+        mock_client_cls.return_value.__enter__.return_value.post.assert_called_once()
+
+
+class TestFinnhubClientLlmMerge(unittest.TestCase):
+    def test_fetch_news_merges_scorer_into_regex_context(self) -> None:
+        client = FinnhubNewsClient("test-key", max_retries=1)
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        raw = [
+            {
+                "datetime": now_ts - 30,
+                "headline": "NVDA beats estimates",
+                "summary": "",
+            }
+        ]
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = raw
+        mock_response.raise_for_status = MagicMock()
+
+        class StubScorer:
+            def score(self, symbol: str, articles: object) -> ScoredNews:
+                return ScoredNews(sentiment=-0.2, tags=["guidance_cut"])
+
+        client.scorer = StubScorer()
+
+        with patch("news.client.httpx.Client") as mock_client_cls:
+            mock_client_cls.return_value.__enter__.return_value.get.return_value = (
+                mock_response
+            )
+            outcome = client.fetch_news("NVDA")
+
+        self.assertEqual(outcome.status, FetchStatus.OK)
+        assert outcome.context is not None
+        self.assertIn("guidance_cut", outcome.context.tags)
+        self.assertIn("earnings_beat", outcome.context.tags)
+        self.assertLess(outcome.context.sentiment, 0)
+
+    def test_fetch_news_uses_regex_when_scorer_fails(self) -> None:
+        client = FinnhubNewsClient("test-key", max_retries=1)
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        raw = [
+            {
+                "datetime": now_ts - 30,
+                "headline": "Analyst downgrade hits NVDA shares",
+                "summary": "",
+            }
+        ]
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = raw
+        mock_response.raise_for_status = MagicMock()
+
+        class FailingScorer:
+            def score(self, symbol: str, articles: object) -> None:
+                return None
+
+        client.scorer = FailingScorer()
+
+        with patch("news.client.httpx.Client") as mock_client_cls:
+            mock_client_cls.return_value.__enter__.return_value.get.return_value = (
+                mock_response
+            )
+            outcome = client.fetch_news("NVDA")
+
+        self.assertEqual(outcome.status, FetchStatus.OK)
+        assert outcome.context is not None
+        self.assertIn("downgrade", outcome.context.tags)
+        self.assertLess(outcome.context.sentiment, 0)
 
 
 if __name__ == "__main__":

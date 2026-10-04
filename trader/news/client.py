@@ -4,17 +4,19 @@ import hashlib
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Dict, FrozenSet, List, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 
 from news.cache import CooldownTracker, TtlCache
+from news.openai_scorer import NewsLlmScorer
 from news.sentiment import (
     NewsArticle,
     NewsContext,
+    merge_news_scores,
     published_at_from_unix,
     score_articles,
     score_single_article,
@@ -179,6 +181,7 @@ class FinnhubNewsClient:
         max_headlines: int = 5,
         timeout_sec: float = 10.0,
         max_retries: int = 3,
+        scorer: Optional[NewsLlmScorer] = None,
     ) -> None:
         if not api_key:
             raise ValueError("FINNHUB_API_KEY is required for FinnhubNewsClient")
@@ -187,6 +190,7 @@ class FinnhubNewsClient:
         self.max_headlines = max_headlines
         self.timeout_sec = timeout_sec
         self.max_retries = max_retries
+        self.scorer = scorer
 
     def fetch_news(self, symbol: str) -> FetchOutcome:
         now = datetime.now(timezone.utc)
@@ -270,8 +274,19 @@ class FinnhubNewsClient:
             )
 
         fetched_at = now.isoformat()
+        context = score_articles(articles, fetched_at=fetched_at)
+        if self.scorer is not None:
+            llm = self.scorer.score(symbol, articles)
+            if llm is not None:
+                sentiment, tags = merge_news_scores(
+                    context.sentiment,
+                    context.tags,
+                    llm.sentiment,
+                    llm.tags,
+                )
+                context = replace(context, sentiment=sentiment, tags=tags)
         return FetchOutcome(
-            context=score_articles(articles, fetched_at=fetched_at),
+            context=context,
             status=FetchStatus.OK,
         )
 

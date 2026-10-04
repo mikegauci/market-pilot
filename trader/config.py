@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     news_fetch_workers: int = 3
     news_max_retries: int = 3
     news_general_keep: int = 100
+    news_llm_enabled: bool = False
+    openai_api_key: str = ""
+    news_llm_model: str = "gpt-4o-mini"
+    news_llm_timeout_sec: float = 8.0
 
     em_universe_path: str = ""
     bar_backfill_pacing_sec: float = 12.0
@@ -153,6 +157,13 @@ class Settings(BaseSettings):
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
+    @field_validator("news_llm_enabled", mode="before")
+    @classmethod
+    def parse_news_llm_enabled(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
     @field_validator("market_snapshots_enabled", mode="before")
     @classmethod
     def parse_market_snapshots_enabled(cls, value: object) -> bool:
@@ -202,6 +213,19 @@ class Settings(BaseSettings):
     def disable_news_without_api_key(self) -> Settings:
         if self.news_enabled and not self.finnhub_api_key.strip():
             self.news_enabled = False
+        return self
+
+    @model_validator(mode="after")
+    def disable_news_llm_without_prerequisites(self) -> Settings:
+        if not self.news_llm_enabled:
+            return self
+        if not self.news_enabled or not self.openai_api_key.strip():
+            print(
+                "WARNING: NEWS_LLM_ENABLED=true but company-news LLM scoring requires "
+                "NEWS_ENABLED=true and OPENAI_API_KEY — LLM scoring disabled.",
+                file=sys.stderr,
+            )
+            self.news_llm_enabled = False
         return self
 
     @property
