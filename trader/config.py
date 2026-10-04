@@ -104,6 +104,10 @@ class Settings(BaseSettings):
     em_backfill_on_startup: bool = True
     forward_return_backfill_enabled: bool = True
 
+    # Optional Telegram alerts on trade open/close. Blank disables them.
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
     @field_validator("trading_mode", mode="before")
     @classmethod
     def parse_trading_mode(cls, value: object) -> TradingMode:

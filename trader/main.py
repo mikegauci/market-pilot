@@ -43,6 +43,7 @@ from market.hours import (
 )
 from market.indicators import build_market_state
 from market.mock import MockMarketProvider
+from notify.telegram import configure_telegram
 from models.types import (
     BotStatusUpdate,
     DataSource,
@@ -376,6 +377,9 @@ def run() -> int:
         settings.settings_refresh_interval_sec,
         settings.portfolio_history_interval_sec,
     )
+    configure_telegram(settings.telegram_bot_token, settings.telegram_chat_id)
+    if settings.telegram_bot_token.strip() and settings.telegram_chat_id.strip():
+        logger.info("Telegram trade alerts enabled")
     if not settings.forward_return_backfill_enabled:
         logger.info(
             "15m forward-return backfill disabled (calibration analytics only)"

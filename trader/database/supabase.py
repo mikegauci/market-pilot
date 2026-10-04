@@ -34,6 +34,7 @@ from models.types import (
     TradingMode,
 )
 from database.prediction_payload import build_prediction_payload as _build_prediction_payload
+from notify.telegram import notify_trade_closed, notify_trade_opened
 from database.trade_account_scope import (
     apply_trade_account_filter,
     include_legacy_untagged_trades,
@@ -1115,6 +1116,7 @@ class SupabaseRepository:
             raise
         if trade.ibkr_account_id:
             self.invalidate_legacy_untagged_cache()
+        self._schedule_open_alert(trade)
         return trade.id
 
     @_db_synchronized
@@ -1156,7 +1158,40 @@ class SupabaseRepository:
             payload["position_value"] = round(exit_price * filled_quantity, 6)
         if exit_reason:
             payload["exit_reason"] = exit_reason
-        self.client.table("trades").update(payload).eq("id", trade_id).execute()
+        result = (
+            self.client.table("trades")
+            .update(payload)
+            .eq("id", trade_id)
+            .eq("status", "open")
+            .select("symbol")
+            .execute()
+        )
+        rows = result.data or []
+        if rows:
+            symbol = rows[0].get("symbol")
+            if symbol:
+                self._schedule_close_alert(str(symbol), net_pnl, exit_reason)
+
+    @staticmethod
+    def _schedule_open_alert(trade: TradeRecord) -> None:
+        try:
+            notify_trade_opened(trade)
+        except Exception:
+            logger.warning(
+                "Trade open alert failed to schedule for %s",
+                trade.symbol,
+            )
+
+    @staticmethod
+    def _schedule_close_alert(
+        symbol: str,
+        net_pnl: float,
+        exit_reason: Optional[str],
+    ) -> None:
+        try:
+            notify_trade_closed(symbol, net_pnl, exit_reason)
+        except Exception:
+            logger.warning("Trade close alert failed to schedule for %s", symbol)
 
     @_db_synchronized
     def sync_positions_from_trades(
