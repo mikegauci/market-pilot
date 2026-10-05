@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { WatchlistCharts } from "@/components/watchlist-charts";
 import { WatchlistPicker } from "@/components/watchlist-picker";
-import { FieldDescription, SettingsFieldGroup } from "@/components/settings-section";
+import { FieldDescription } from "@/components/settings-section";
 import type { Settings } from "@/lib/types/database";
 import {
   formatPredictingWatchlistHeadline,
@@ -50,7 +50,7 @@ export function WatchlistSettingsSection({ settings }: Props) {
         </div>
       </div>
 
-      <SettingsFieldGroup>
+      <div className="space-y-2">
         <WatchlistPicker
           inputName="watchlist"
           defaultValue={settings.watchlist?.length ? settings.watchlist : []}
@@ -59,7 +59,7 @@ export function WatchlistSettingsSection({ settings }: Props) {
         <FieldDescription title="Comma-separated tickers the bot evaluates for new trades (plus any open positions for exits).">
           Save to apply.
         </FieldDescription>
-      </SettingsFieldGroup>
+      </div>
 
       <WatchlistCharts
         symbols={effectiveWatchlist}
