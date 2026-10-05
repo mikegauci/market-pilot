@@ -11,7 +11,6 @@ export type TradeStats = {
   profitFactor: number | null;
   avgHoldMinutes: number | null;
   totalPnl: number;
-  expectancy: number;
 };
 
 export type SymbolPnl = {
@@ -162,7 +161,6 @@ export function computeTradeStats(trades: Trade[]): TradeStats {
   const winRate = closed.length > 0 ? wins.length / closed.length : 0;
   const avgWin = wins.length > 0 ? grossWins / wins.length : 0;
   const avgLoss = losses.length > 0 ? grossLosses / losses.length : 0;
-  const expectancy = winRate * avgWin - (1 - winRate) * avgLoss;
 
   return {
     closedCount: closed.length,
@@ -177,7 +175,6 @@ export function computeTradeStats(trades: Trade[]): TradeStats {
         ? holdMinutes.reduce((a, b) => a + b, 0) / holdMinutes.length
         : null,
     totalPnl: pnls.reduce((sum, p) => sum + p, 0),
-    expectancy,
   };
 }
 

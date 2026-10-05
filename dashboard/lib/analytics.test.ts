@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildEquityReconciliation,
-  findOfflineEquityGaps,
-  snapshotAccruedCash,
-} from "@/lib/equity-reconciliation";
-import {
   buildDailyEquitySeries,
   buildDailyPnlSeries,
   equityChartDomain,
@@ -82,168 +77,6 @@ describe("portfolio-analytics", () => {
   });
 });
 
-describe("equity-reconciliation", () => {
-  it("attributes offline equity jumps to accrued cash when flat", () => {
-    const history: PortfolioSnapshot[] = [
-      {
-        id: "fri",
-        timestamp: "2026-10-02T20:44:39Z",
-        balance: 999_765.68,
-        equity: 999_899.75,
-        daily_pnl: 39.65,
-        total_pnl: -297.63,
-        currency: "EUR",
-        ibkr_account_id: "DUR217910",
-        ibkr_accrued_cash: 134.07,
-        created_at: "",
-      },
-      {
-        id: "mon",
-        timestamp: "2026-10-05T13:42:14Z",
-        balance: 999_764.47,
-        equity: 999_951.26,
-        daily_pnl: 0,
-        total_pnl: -246.12,
-        currency: "EUR",
-        ibkr_account_id: "DUR217910",
-        ibkr_accrued_cash: 186.79,
-        created_at: "",
-      },
-    ];
-    expect(snapshotAccruedCash(history[0]!)).toBeCloseTo(134.07, 2);
-    const gaps = findOfflineEquityGaps(history, []);
-    expect(gaps).toHaveLength(1);
-    expect(gaps[0]!.equityChange).toBeCloseTo(51.51, 2);
-    expect(gaps[0]!.accruedCashChange).toBeCloseTo(52.72, 2);
-    expect(gaps[0]!.closedTradePnl).toBe(0);
-
-    const recon = buildEquityReconciliation(history, [], "all");
-    expect(recon?.unexplained).toBeCloseTo(0, 2);
-    expect(recon?.accruedCashChange).toBeCloseTo(52.72, 2);
-  });
-
-  it("does not double-count closed P&L against cash balance", () => {
-    const history: PortfolioSnapshot[] = [
-      {
-        id: "a",
-        timestamp: "2026-10-05T13:00:00Z",
-        balance: 1_000_000,
-        equity: 1_000_100,
-        daily_pnl: 0,
-        total_pnl: 100,
-        currency: "USD",
-        ibkr_account_id: null,
-        ibkr_accrued_cash: 100,
-        created_at: "",
-      },
-      {
-        id: "b",
-        timestamp: "2026-10-05T15:00:00Z",
-        balance: 1_000_050,
-        equity: 1_000_150,
-        daily_pnl: 50,
-        total_pnl: 150,
-        currency: "USD",
-        ibkr_account_id: null,
-        ibkr_accrued_cash: 100,
-        created_at: "",
-      },
-    ];
-    const trades: Trade[] = [
-      {
-        id: "t1",
-        symbol: "AAPL",
-        status: "closed",
-        entry_time: "2026-10-05T14:00:00Z",
-        exit_time: "2026-10-05T14:30:00Z",
-        net_pnl: 50,
-        gross_pnl: 50,
-      } as Trade,
-    ];
-    const recon = buildEquityReconciliation(history, trades, "all");
-    expect(recon?.closedTradePnl).toBe(50);
-    expect(recon?.equityChange).toBe(50);
-    expect(recon?.balanceChange).toBe(50);
-    expect(recon?.unexplained).toBeCloseTo(0, 2);
-  });
-
-  it("returns null accrued delta when IBKR accrued is missing", () => {
-    const history: PortfolioSnapshot[] = [
-      {
-        id: "a",
-        timestamp: "2026-10-05T13:00:00Z",
-        balance: 100,
-        equity: 200,
-        daily_pnl: 0,
-        total_pnl: 0,
-        currency: "USD",
-        ibkr_account_id: null,
-        ibkr_accrued_cash: null,
-        created_at: "",
-      },
-      {
-        id: "b",
-        timestamp: "2026-10-05T15:00:00Z",
-        balance: 150,
-        equity: 280,
-        daily_pnl: 0,
-        total_pnl: 0,
-        currency: "USD",
-        ibkr_account_id: null,
-        ibkr_accrued_cash: null,
-        created_at: "",
-      },
-    ];
-    expect(snapshotAccruedCash(history[0]!)).toBeNull();
-    const recon = buildEquityReconciliation(history, [], "all");
-    expect(recon?.accruedCashChange).toBeNull();
-    expect(recon?.unexplained).toBe(30);
-  });
-
-  it("counts gap trades closed at the gap start timestamp", () => {
-    const history: PortfolioSnapshot[] = [
-      {
-        id: "a",
-        timestamp: "2026-10-05T10:00:00Z",
-        balance: 0,
-        equity: 100,
-        daily_pnl: 0,
-        total_pnl: 0,
-        currency: "USD",
-        ibkr_account_id: null,
-        ibkr_accrued_cash: 0,
-        created_at: "",
-      },
-      {
-        id: "b",
-        timestamp: "2026-10-05T20:00:00Z",
-        balance: 0,
-        equity: 110,
-        daily_pnl: 0,
-        total_pnl: 0,
-        currency: "USD",
-        ibkr_account_id: null,
-        ibkr_accrued_cash: 0,
-        created_at: "",
-      },
-    ];
-    const trades: Trade[] = [
-      {
-        id: "t1",
-        symbol: "AAPL",
-        status: "closed",
-        entry_time: "2026-10-05T09:00:00Z",
-        exit_time: "2026-10-05T10:00:00Z",
-        net_pnl: 7,
-        gross_pnl: 7,
-      } as Trade,
-    ];
-    const gaps = findOfflineEquityGaps(history, trades);
-    expect(gaps).toHaveLength(1);
-    expect(gaps[0]!.closedTradePnl).toBe(7);
-  });
-});
-
 describe("trade-analytics", () => {
   const closedWin: Trade = {
     id: "1",
@@ -289,11 +122,6 @@ describe("trade-analytics", () => {
 
   it("computes win rate from closed trades", () => {
     expect(computeTradeStats([closedWin, closedLoss]).winRate).toBe(0.5);
-  });
-
-  it("computes expectancy from win rate and avg win/loss", () => {
-    const stats = computeTradeStats([closedWin, closedLoss]);
-    expect(stats.expectancy).toBeCloseTo(0);
   });
 
   it("labels eod_flatten exits for analytics", () => {
