@@ -45,7 +45,19 @@ export const SESSION_BRIEF_JSON_SCHEMA = {
         type: "object",
         additionalProperties: false,
         properties: {
-          setting: { type: "string" },
+          setting: {
+            type: "string",
+            enum: [
+              "minimum_jev_confidence",
+              "signal_record_threshold",
+              "stop_loss_percentage",
+              "take_profit_percentage",
+              "max_hold_minutes",
+              "max_open_positions",
+              "min_volume_ratio",
+              "reentry_cooldown_minutes",
+            ],
+          },
           direction: { type: "string", enum: ["raise", "lower", "keep"] },
           why: { type: "string" },
         },

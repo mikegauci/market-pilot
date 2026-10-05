@@ -159,6 +159,18 @@ export async function getSessionBriefHistory(): Promise<SessionBriefHistoryLoad>
   };
 }
 
+export async function getLatestSessionBrief(): Promise<SessionBriefRow | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("session_briefs")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as SessionBriefRow;
+}
+
 export async function getJevCalibrationBuckets(
   lookbackDays = ANALYTICS_CALIBRATION_LOOKBACK_DAYS,
 ) {

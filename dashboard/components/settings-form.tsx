@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { BriefSettingDiff } from "@/components/brief-setting-diff";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RiskProfilePicker } from "@/components/risk-profile-picker";
@@ -34,6 +35,8 @@ import {
   type StrategyHint,
 } from "@/lib/strategy-recommendations";
 import { confidencePercentFromDecimal } from "@/lib/settings-display";
+import { buildSettingDiffs } from "@/lib/session-brief/setting-diff";
+import type { SessionBriefSuggestion } from "@/lib/session-brief/schema";
 import type { EmUniverseRow, Settings } from "@/lib/types/database";
 import { cn, formatCurrency } from "@/lib/utils";
 
@@ -286,11 +289,15 @@ export function SettingsForm({
   baselineEquity,
   currency,
   emUniverse,
+  briefSessionDate = null,
+  briefSuggestions = [],
 }: {
   settings: Settings;
   baselineEquity: number;
   currency: string;
   emUniverse: EmUniverseStats;
+  briefSessionDate?: string | null;
+  briefSuggestions?: SessionBriefSuggestion[];
 }) {
   const [pending, startTransition] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -334,6 +341,14 @@ export function SettingsForm({
   const [minDollarVolume, setMinDollarVolume] = useState(
     settings.min_dollar_volume ?? 250_000,
   );
+  const [minJevPct, setMinJevPct] = useState(
+    confidencePercentFromDecimal(settings.minimum_jev_confidence),
+  );
+  const [signalRecordPct, setSignalRecordPct] = useState(
+    confidencePercentFromDecimal(settings.signal_record_threshold),
+  );
+  const [maxOpenPositions, setMaxOpenPositions] = useState(settings.max_open_positions);
+  const [briefApplied, setBriefApplied] = useState(false);
   const maxHoldHints = getMaxHoldHints(maxHoldMinutes);
   const [selectedProfile, setSelectedProfile] = useState<RiskProfile>(
     resolveRiskProfile(settings.risk_profile),
@@ -343,6 +358,39 @@ export function SettingsForm({
   const takeProfitFraction = takeProfitPct / 100;
   const stopLossHints = getStopLossHints(stopLossFraction);
   const takeProfitHints = getTakeProfitHints(takeProfitFraction, stopLossFraction);
+  const briefDiffs = buildSettingDiffs(settings, briefSuggestions);
+
+  function applyBriefDiffs() {
+    for (const diff of briefDiffs) {
+      switch (diff.key) {
+        case "minimum_jev_confidence":
+          setMinJevPct(diff.proposed);
+          break;
+        case "signal_record_threshold":
+          setSignalRecordPct(diff.proposed);
+          break;
+        case "stop_loss_percentage":
+          setStopLossPct(diff.proposed);
+          break;
+        case "take_profit_percentage":
+          setTakeProfitPct(diff.proposed);
+          break;
+        case "max_hold_minutes":
+          setMaxHoldMinutes(diff.proposed);
+          break;
+        case "max_open_positions":
+          setMaxOpenPositions(diff.proposed);
+          break;
+        case "min_volume_ratio":
+          setMinVolumeRatio(diff.proposed);
+          break;
+        case "reentry_cooldown_minutes":
+          setReentryCooldownMinutes(diff.proposed);
+          break;
+      }
+    }
+    setBriefApplied(true);
+  }
 
   const riskValues = {
     risk_per_trade: riskPerTrade,
@@ -391,6 +439,15 @@ export function SettingsForm({
     >
       <input type="hidden" name="risk_profile" value={selectedProfile} />
 
+      {briefSessionDate ? (
+        <BriefSettingDiff
+          sessionDate={briefSessionDate}
+          diffs={briefDiffs}
+          applied={briefApplied}
+          onApply={applyBriefDiffs}
+        />
+      ) : null}
+
       <SettingsSection
         title="Jev & signals"
         description="When the bot acts on AI predictions and how aggressively it filters buys."
@@ -416,7 +473,8 @@ export function SettingsForm({
               name="minimum_jev_confidence"
               type="number"
               step="1"
-              defaultValue={confidencePercentFromDecimal(settings.minimum_jev_confidence)}
+              value={minJevPct}
+              onChange={(event) => setMinJevPct(Number(event.target.value))}
               required
             />
           </SettingsField>
@@ -431,7 +489,8 @@ export function SettingsForm({
               name="signal_record_threshold"
               type="number"
               step="1"
-              defaultValue={Math.round(settings.signal_record_threshold * 100)}
+              value={signalRecordPct}
+              onChange={(event) => setSignalRecordPct(Number(event.target.value))}
               required
             />
           </SettingsField>
@@ -521,7 +580,8 @@ export function SettingsForm({
               name="max_open_positions"
               type="number"
               step="1"
-              defaultValue={settings.max_open_positions}
+              value={maxOpenPositions}
+              onChange={(event) => setMaxOpenPositions(Number(event.target.value))}
               required
             />
           </SettingsField>

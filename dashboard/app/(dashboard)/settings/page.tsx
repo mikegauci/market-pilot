@@ -2,15 +2,16 @@ import Link from "next/link";
 import { SettingsForm } from "@/components/settings-form";
 import { ScreenerRankingDelta } from "@/components/screener-ranking-delta";
 import { resolveBaselineEquity } from "@/lib/risk-recommendations";
-import { getEmUniverseStats, getLatestPortfolio, getScreenerHistory, getSettings } from "@/lib/queries";
+import { getEmUniverseStats, getLatestPortfolio, getLatestSessionBrief, getScreenerHistory, getSettings } from "@/lib/queries";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function SettingsPage() {
-  const [settings, portfolio, emUniverse, screenerHistory] = await Promise.all([
+  const [settings, portfolio, emUniverse, screenerHistory, latestBrief] = await Promise.all([
     getSettings(),
     getLatestPortfolio(),
     getEmUniverseStats(),
     getScreenerHistory(5),
+    getLatestSessionBrief(),
   ]);
 
   if (!settings) {
@@ -58,6 +59,8 @@ export default async function SettingsPage() {
         baselineEquity={baselineEquity}
         currency={currency}
         emUniverse={emUniverse}
+        briefSessionDate={latestBrief?.session_date ?? null}
+        briefSuggestions={latestBrief?.brief?.suggestions ?? []}
       />
 
       <ScreenerRankingDelta history={screenerHistory} />

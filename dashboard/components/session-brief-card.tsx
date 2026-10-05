@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { generateSessionBrief } from "@/lib/session-brief/actions";
 import { defaultSelectedSessionDate, type SessionBriefHistoryEntry } from "@/lib/session-brief/history";
+import { sessionBriefSettingLabel } from "@/lib/session-brief/setting-diff";
 import type { SessionBriefContent } from "@/lib/types/database";
 import { cn, formatDateTime } from "@/lib/utils";
 
@@ -102,13 +103,16 @@ function BriefBody({
                 className="rounded-md border border-zinc-800 px-3 py-2"
               >
                 <p className="font-medium text-zinc-200">
-                  {row.setting}{" "}
+                  {sessionBriefSettingLabel(row.setting)}{" "}
                   <span className="text-emerald-400/90">({directionLabel(row.direction)})</span>
                 </p>
                 <p className="mt-1 text-zinc-400">{row.why}</p>
               </li>
             ))}
           </ul>
+          <p className="text-xs text-zinc-500">
+            Known settings can be reviewed on Settings. Applying a step still needs Save.
+          </p>
         </section>
       ) : null}
 
