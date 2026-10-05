@@ -87,6 +87,41 @@ class ManualCloseTests(unittest.TestCase):
         self.assertFalse(dirty)
         self.db.fail_trade_command.assert_called_once_with("cmd-1", "trade_not_open")
 
+    def test_ibkr_manual_close_skips_sell_when_broker_flat(self) -> None:
+        ibkr_trade = _trade(
+            execution_mode="ibkr",
+            quantity=14.0,
+            ibkr_parent_order_id=1,
+            ibkr_sl_order_id=2,
+            ibkr_tp_order_id=3,
+        )
+        self.risk_manager.open_trades = [ibkr_trade]
+        self.ibkr.is_connected.return_value = True
+        self.ibkr.get_long_quantity.return_value = 0.0
+        self.ibkr.get_bracket_exit_status.return_value = (99.0, "stop_loss")
+        self.db.get_pending_trade_commands.return_value = [
+            {"id": "cmd-1", "trade_id": "trade-1"}
+        ]
+        self.db.claim_trade_command.return_value = True
+
+        quotes = {
+            "AAPL": Quote(symbol="AAPL", price=99.0, bid=None, ask=None, spread=None),
+        }
+
+        dirty = process_manual_close_commands(
+            self.db,
+            self.risk_manager,
+            self.ibkr,
+            ExecutionMode.IBKR,
+            quotes,
+        )
+
+        self.assertTrue(dirty)
+        self.ibkr.close_long_position.assert_not_called()
+        self.db.close_trade.assert_called_once()
+        kwargs = self.db.close_trade.call_args.kwargs
+        self.assertEqual(kwargs.get("exit_reason"), "stop_loss")
+
     def test_closes_ibkr_trade_with_partial_fill(self) -> None:
         ibkr_trade = _trade(
             execution_mode="ibkr",
@@ -97,6 +132,7 @@ class ManualCloseTests(unittest.TestCase):
         )
         self.risk_manager.open_trades = [ibkr_trade]
         self.ibkr.is_connected.return_value = True
+        self.ibkr.get_long_quantity.return_value = 16.0
         from models.types import OrderFill
 
         self.ibkr.close_long_position.return_value = OrderFill(

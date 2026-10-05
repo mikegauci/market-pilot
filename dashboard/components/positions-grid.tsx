@@ -69,14 +69,22 @@ export function PositionsGrid({
                     <p className="text-base font-semibold text-zinc-100">
                       <span className="inline-flex items-center gap-2">
                         {p.symbol}
-                        {!trade && (
+                        {p.quantity < 0 ? (
+                          <span
+                            className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-400"
+                            title="Short at the broker. Cover in IBKR — the bot does not manage short exposure."
+                          >
+                            Short
+                          </span>
+                        ) : null}
+                        {!trade && p.quantity > 0 ? (
                           <span
                             className="rounded bg-zinc-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400"
                             title="Broker still holds this symbol. The bot has no open trade for it, so exit rules do not apply."
                           >
                             Untracked
                           </span>
-                        )}
+                        ) : null}
                       </span>
                     </p>
                     <p className="mt-1 text-xs text-zinc-500">

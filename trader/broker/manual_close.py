@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Dict, Optional
 
+from broker.execution import build_ibkr_flat_closed_trade
 from models.types import ClosedTrade, ExecutionMode, OrderFill, Quote, TradeRecord
 
 if TYPE_CHECKING:
@@ -66,9 +67,30 @@ def _execute_manual_close(
         if not ibkr.is_connected():
             raise RuntimeError("ibkr_not_connected")
 
+        long_qty = ibkr.get_long_quantity(trade.symbol)
+        if long_qty < 1:
+            logger.warning(
+                "Manual close %s skipped market sell — IBKR flat; closing trade in book only",
+                trade.symbol,
+            )
+            closed = build_ibkr_flat_closed_trade(
+                trade, ibkr, risk_manager, quotes_by_symbol
+            )
+            risk_manager.record_closed_pnl(closed.net_pnl)
+            return closed
+
+        sell_qty = min(trade.quantity, long_qty)
+        if sell_qty < trade.quantity:
+            logger.warning(
+                "Manual close %s: selling %s of %s (IBKR long)",
+                trade.symbol,
+                int(sell_qty),
+                int(trade.quantity),
+            )
+
         fill: OrderFill = ibkr.close_long_position(
             trade.symbol,
-            trade.quantity,
+            sell_qty,
             parent_order_id=trade.ibkr_parent_order_id,
             sl_order_id=trade.ibkr_sl_order_id,
             tp_order_id=trade.ibkr_tp_order_id,

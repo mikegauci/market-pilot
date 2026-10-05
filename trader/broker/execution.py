@@ -5,7 +5,15 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
-from models.types import ClosedTrade, JevPrediction, OrderFill, Quote, RiskSettings, TradeRecord
+from models.types import (
+    ClosedTrade,
+    JevPrediction,
+    OrderFill,
+    Position,
+    Quote,
+    RiskSettings,
+    TradeRecord,
+)
 from strategy.exits import (
     normalize_profit_take_fractions,
     profit_take_should_exit,
@@ -106,6 +114,140 @@ def sync_ibkr_exits(
             exit_price,
             reason,
             net_pnl,
+        )
+
+    if closed_any:
+        risk_manager.set_daily_realized_pnl(
+            db.get_daily_realized_pnl(ibkr_account_id)
+        )
+
+    return closed_any
+
+
+def long_quantities_by_symbol(positions: List[Position]) -> dict[str, float]:
+    return {
+        position.symbol: float(position.quantity)
+        for position in positions
+        if position.quantity > 0
+    }
+
+
+def resolve_ibkr_already_flat_exit(
+    trade: TradeRecord,
+    ibkr: IBKRClient,
+    quotes_by_symbol: Dict[str, Quote],
+) -> tuple[float, str]:
+    """Exit price and reason when IBKR holds no long for an open trade row."""
+    if trade.ibkr_sl_order_id and trade.ibkr_tp_order_id:
+        exit_info = ibkr.get_bracket_exit_status(
+            trade.ibkr_parent_order_id,
+            trade.ibkr_sl_order_id,
+            trade.ibkr_tp_order_id,
+            trade.entry_price,
+            trade.quantity,
+        )
+        if exit_info is not None:
+            return exit_info
+
+    quote = quotes_by_symbol.get(trade.symbol)
+    if quote is not None and quote.price is not None and quote.price > 0:
+        return quote.price, "broker_flat"
+    return trade.entry_price, "broker_flat"
+
+
+def _record_ibkr_book_close(
+    trade: TradeRecord,
+    exit_price: float,
+    reason: str,
+    risk_manager: RiskManager,
+    db: SupabaseRepository,
+    *,
+    filled_quantity: Optional[float] = None,
+) -> None:
+    qty = (
+        filled_quantity
+        if filled_quantity is not None
+        else float(trade.quantity)
+    )
+    entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
+    exit_comm = risk_manager.estimate_ibkr_commission(qty, round_trip=False)
+    gross_pnl = (exit_price - trade.entry_price) * qty
+    net_pnl = gross_pnl - entry_comm - exit_comm
+    now = datetime.now(timezone.utc)
+
+    db.close_trade(
+        trade.id,
+        exit_price,
+        now,
+        gross_pnl,
+        net_pnl,
+        exit_reason=reason,
+        filled_quantity=filled_quantity,
+    )
+    risk_manager.remove_open_trade(trade.id)
+    risk_manager.record_closed_pnl(net_pnl)
+    risk_manager.note_symbol_exit(trade.symbol, now)
+
+
+def build_ibkr_flat_closed_trade(
+    trade: TradeRecord,
+    ibkr: IBKRClient,
+    risk_manager: RiskManager,
+    quotes_by_symbol: Dict[str, Quote],
+) -> ClosedTrade:
+    """Book-only close payload when IBKR holds no long (no market sell)."""
+    exit_price, reason = resolve_ibkr_already_flat_exit(
+        trade, ibkr, quotes_by_symbol
+    )
+    qty = float(trade.quantity)
+    entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
+    exit_comm = risk_manager.estimate_ibkr_commission(qty, round_trip=False)
+    gross_pnl = (exit_price - trade.entry_price) * qty
+    net_pnl = gross_pnl - entry_comm - exit_comm
+    now = datetime.now(timezone.utc)
+    return ClosedTrade(
+        trade_id=trade.id,
+        symbol=trade.symbol,
+        exit_price=exit_price,
+        exit_time=now,
+        gross_pnl=gross_pnl,
+        net_pnl=net_pnl,
+        reason=reason,
+        filled_quantity=None,
+    )
+
+
+def reconcile_flat_ibkr_trades(
+    ibkr: IBKRClient,
+    risk_manager: RiskManager,
+    db: SupabaseRepository,
+    quotes_by_symbol: Dict[str, Quote],
+    *,
+    ibkr_account_id: Optional[str] = None,
+) -> bool:
+    """Close DB trades when IBKR has no long shares (e.g. bracket filled off-book)."""
+    if not ibkr.is_connected():
+        return False
+
+    long_by_symbol = long_quantities_by_symbol(ibkr.get_positions())
+    closed_any = False
+
+    for trade in list(risk_manager.open_trades):
+        if trade.execution_mode != "ibkr":
+            continue
+        if long_by_symbol.get(trade.symbol, 0.0) >= 1:
+            continue
+
+        exit_price, reason = resolve_ibkr_already_flat_exit(
+            trade, ibkr, quotes_by_symbol
+        )
+        _record_ibkr_book_close(trade, exit_price, reason, risk_manager, db)
+        closed_any = True
+        logger.info(
+            "IBKR reconcile %s already flat @ $%.2f (%s)",
+            trade.symbol,
+            exit_price,
+            reason,
         )
 
     if closed_any:

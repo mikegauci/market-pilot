@@ -15,6 +15,7 @@ from broker.execution import (
     close_ibkr_signal_exits,
     collect_profit_take_trade_ids,
     force_eod_ibkr_exits,
+    reconcile_flat_ibkr_trades,
     sync_ibkr_exits,
 )
 from broker.manual_close import process_manual_close_commands
@@ -980,6 +981,14 @@ def run() -> int:
                         ibkr,
                         risk_manager,
                         db,
+                        ibkr_account_id=daily_pnl_account_id,
+                    ):
+                        portfolio_dirty = True
+                    if reconcile_flat_ibkr_trades(
+                        ibkr,
+                        risk_manager,
+                        db,
+                        quotes_by_symbol,
                         ibkr_account_id=daily_pnl_account_id,
                     ):
                         portfolio_dirty = True

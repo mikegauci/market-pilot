@@ -434,6 +434,14 @@ class IBKRClient:
 
         return result
 
+    @_ibkr_synchronized
+    def get_long_quantity(self, symbol: str) -> float:
+        """Whole long shares held at IBKR for this symbol (0 when flat or short)."""
+        for position in self.get_positions():
+            if position.symbol == symbol and position.quantity > 0:
+                return float(position.quantity)
+        return 0.0
+
     def _resolve_app_symbol(self, contract: object) -> str:
         con_id = getattr(contract, "conId", None)
         if con_id:
@@ -971,9 +979,22 @@ class IBKRClient:
             )
             self.ib.sleep(0.3)
 
+        long_qty = self.get_long_quantity(symbol)
+        sell_qty = min(int(quantity), int(long_qty))
+        if sell_qty < 1:
+            raise RuntimeError("no_long_position")
+
+        if sell_qty < int(quantity):
+            logger.warning(
+                "IBKR close %s: capping sell from %s to %s (broker long)",
+                symbol,
+                int(quantity),
+                sell_qty,
+            )
+
         account = self._resolve_account()
         contract = self._ensure_contract(symbol)
-        qty = int(quantity)
+        qty = sell_qty
 
         sell = MarketOrder("SELL", qty)
         sell.account = account

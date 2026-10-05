@@ -45,6 +45,7 @@ const EXIT_REASON_LABELS: Record<string, string> = {
   demotion_exit: "Demotion exit",
   eod_flatten: "EOD flatten (incl. losers)",
   manual: "Manual close",
+  broker_flat: "Already flat at broker",
   unknown: "Unknown",
 };
 
