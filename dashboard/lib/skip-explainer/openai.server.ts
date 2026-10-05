@@ -1,0 +1,64 @@
+import "server-only";
+
+import OpenAI from "openai";
+import { makeParseableTextFormat } from "openai/lib/parser";
+import { openAiBriefModel, requireOpenAiKey } from "@/lib/session-brief/openai.server";
+import type { SkipExplainPacket } from "@/lib/skip-explainer/packet";
+import {
+  parseSkipExplanationText,
+  SKIP_EXPLANATION_JSON_SCHEMA,
+  type SkipExplanation,
+} from "@/lib/skip-explainer/schema";
+
+const SYSTEM_PROMPT = `You explain why a paper day-trading bot skipped one prediction.
+
+Rules:
+- Use plain language for someone new to trading bots. Say "the bot" and "Jev".
+- Use the percents already in the JSON packet. Do not invent prices, headlines, counts, or other skips.
+- summary is 2–3 sentences. what_blocked_it is one sentence naming the stored skip reason.
+- closeness:
+  - near_miss: Jev was close to a buy (confidence, margin, or confirmation still counting) and a gate stopped it.
+  - hard_block: a filter, risk rule, broker check, or already-open position stopped it even if Jev liked it.
+  - not_a_signal: HOLD or SELL was dominant, or BUY was far below the record threshold.
+- This is an explanation only. Do not promise profit or say to enable live trading.`;
+
+const skipExplanationTextFormat = makeParseableTextFormat(
+  {
+    type: "json_schema",
+    name: "skip_explanation",
+    schema: SKIP_EXPLANATION_JSON_SCHEMA,
+    strict: true,
+  },
+  parseSkipExplanationText,
+);
+
+export async function generateSkipExplanation(
+  packet: SkipExplainPacket,
+): Promise<{ explanation: SkipExplanation; model: string }> {
+  const client = new OpenAI({ apiKey: requireOpenAiKey() });
+  const model = openAiBriefModel();
+
+  const response = await client.responses.parse({
+    model,
+    max_output_tokens: 600,
+    input: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: JSON.stringify(packet) },
+    ],
+    text: {
+      format: skipExplanationTextFormat,
+    },
+  });
+
+  if (response.error) {
+    throw new Error(response.error.message ?? "OpenAI request failed.");
+  }
+
+  const explanation = response.output_parsed;
+  if (!explanation) {
+    const status = "status" in response ? String(response.status) : "unknown";
+    throw new Error(`OpenAI did not return an explanation (status: ${status}). Try again.`);
+  }
+
+  return { explanation, model };
+}

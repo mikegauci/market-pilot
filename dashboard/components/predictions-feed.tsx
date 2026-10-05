@@ -3,6 +3,7 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PredictionIndicators } from "@/components/prediction-indicators";
+import { SkipExplanation } from "@/components/skip-explanation";
 import { SortableTh } from "@/components/sortable-th";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -73,12 +74,15 @@ function TradeCell({ prediction }: { prediction: Prediction }) {
 
   const isWaiting = label.startsWith("Awaiting confirmation");
   return (
-    <span
-      className={`text-xs leading-snug ${isWaiting ? "text-amber-400" : "text-zinc-500"}`}
-      title={prediction.trade_skip_reason ?? undefined}
-    >
-      {label}
-    </span>
+    <div>
+      <span
+        className={`text-xs leading-snug ${isWaiting ? "text-amber-400" : "text-zinc-500"}`}
+        title={prediction.trade_skip_reason ?? undefined}
+      >
+        {label}
+      </span>
+      <SkipExplanation predictionId={prediction.id} />
+    </div>
   );
 }
 
@@ -337,7 +341,7 @@ export function PredictionsFeed({
                       <td className="py-2 pr-3">
                         <NewsCell snapshot={snapshot} />
                       </td>
-                      <td className="py-2 max-w-[10rem]">
+                      <td className="py-2 align-top">
                         <TradeCell prediction={p} />
                       </td>
                     </tr>
