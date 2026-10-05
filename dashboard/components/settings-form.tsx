@@ -854,7 +854,7 @@ export function SettingsForm({
       <SettingsSection
         id="watchlist"
         title="Watchlist"
-        description="Symbols Jev monitors for entries, plus intraday charts."
+        description="Symbols Jev monitors for new trade entries."
       >
         <WatchlistSettingsSection settings={settings} />
       </SettingsSection>

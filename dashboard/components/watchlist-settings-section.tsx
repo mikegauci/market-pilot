@@ -1,7 +1,3 @@
-"use client";
-
-import { useState } from "react";
-import { WatchlistCharts } from "@/components/watchlist-charts";
 import { WatchlistPicker } from "@/components/watchlist-picker";
 import { FieldDescription } from "@/components/settings-section";
 import type { Settings } from "@/lib/types/database";
@@ -15,13 +11,8 @@ type Props = {
 };
 
 export function WatchlistSettingsSection({ settings }: Props) {
-  const [chartSymbol, setChartSymbol] = useState<string | undefined>(undefined);
   const effectiveWatchlist = resolveEffectiveWatchlist(settings);
   const headline = formatPredictingWatchlistHeadline(effectiveWatchlist.length);
-
-  function selectChartSymbol(symbol: string) {
-    setChartSymbol(symbol.toUpperCase());
-  }
 
   return (
     <div className="space-y-4">
@@ -35,14 +26,12 @@ export function WatchlistSettingsSection({ settings }: Props) {
         <div className="mt-3 flex flex-wrap gap-1.5">
           {effectiveWatchlist.length ? (
             effectiveWatchlist.map((symbol) => (
-              <button
+              <span
                 key={symbol}
-                type="button"
-                onClick={() => selectChartSymbol(symbol)}
-                className="rounded border border-zinc-700/80 bg-zinc-950/60 px-2 py-1 font-mono text-xs text-zinc-200 hover:border-emerald-700/60 hover:text-emerald-300"
+                className="rounded border border-zinc-700/80 bg-zinc-950/60 px-2 py-1 font-mono text-xs text-zinc-200"
               >
                 {symbol}
-              </button>
+              </span>
             ))
           ) : (
             <span className="text-xs text-zinc-500">—</span>
@@ -60,12 +49,6 @@ export function WatchlistSettingsSection({ settings }: Props) {
           Save to apply.
         </FieldDescription>
       </div>
-
-      <WatchlistCharts
-        symbols={effectiveWatchlist}
-        selectedSymbol={chartSymbol}
-        onSelectedSymbolChange={selectChartSymbol}
-      />
     </div>
   );
 }
