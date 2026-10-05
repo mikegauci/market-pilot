@@ -24,7 +24,7 @@ export function settingsFixture(overrides: Partial<Settings> = {}): Settings {
     account_capital: 1000,
     risk_sync_equity: 1000,
     watchlist: ["BABA", "VALE", "NVDA"],
-    benchmark_symbol: "EEM",
+    benchmark_symbol: "",
     profit_take_enabled: false,
     profit_take_min_fraction: 0.7,
     profit_take_max_fraction: 0.8,

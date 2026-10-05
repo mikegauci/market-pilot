@@ -54,7 +54,7 @@ export default async function StrategyPage() {
       )}
 
       <StrategyGuide
-        benchmarkSymbol={settings?.benchmark_symbol ?? "EEM"}
+        benchmarkSymbol={settings?.benchmark_symbol ?? ""}
         minVolumeRatio={settings?.min_volume_ratio ?? 0}
       />
     </div>

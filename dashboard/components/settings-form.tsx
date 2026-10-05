@@ -854,7 +854,7 @@ export function SettingsForm({
       <SettingsSection
         id="watchlist"
         title="Watchlist"
-        description="Symbols Jev monitors for entries, plus intraday charts. EEM is benchmark-only (not traded)."
+        description="Symbols Jev monitors for entries, plus intraday charts."
       >
         <WatchlistSettingsSection settings={settings} />
       </SettingsSection>

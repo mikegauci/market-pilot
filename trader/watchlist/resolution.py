@@ -6,12 +6,12 @@ from models.types import RiskSettings
 
 
 def effective_benchmark(risk_settings: RiskSettings) -> str:
-    """Benchmark for headwind checks and Jev context (never an entry symbol)."""
-    return (risk_settings.benchmark_symbol or "EEM").upper()
+    """Benchmark for headwind checks and Jev context (never an entry symbol). Empty = off."""
+    return (risk_settings.benchmark_symbol or "").strip().upper()
 
 
 def untradeable_benchmark_symbols(risk_settings: RiskSettings) -> set[str]:
-    configured = str(risk_settings.benchmark_symbol or "EEM").upper()
+    configured = str(risk_settings.benchmark_symbol or "").strip().upper()
     return {configured} if configured else set()
 
 

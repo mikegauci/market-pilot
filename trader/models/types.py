@@ -138,7 +138,7 @@ class RiskSettings:
     account_capital: float
     risk_sync_equity: Optional[float]
     watchlist: List[str]
-    benchmark_symbol: str = "EEM"
+    benchmark_symbol: str = ""
     min_volume_ratio: float = 0.5
     min_share_price: float = 20.0
     min_dollar_volume: float = 250_000.0

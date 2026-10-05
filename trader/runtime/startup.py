@@ -10,7 +10,7 @@ from database.supabase import SupabaseRepository
 from market.bars import BarStore
 from models.types import RiskSettings
 from watchlist.backfill import backfill_watchlist_symbols
-from watchlist.resolution import resolve_trading_watchlist
+from watchlist.resolution import effective_benchmark, resolve_trading_watchlist
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,9 @@ def run_ibkr_startup_backfill(
     priority_symbols = list(
         dict.fromkeys(resolve_trading_watchlist(risk_settings, open_symbols))
     )
+    benchmark = effective_benchmark(risk_settings)
+    if benchmark and benchmark not in priority_symbols:
+        priority_symbols.append(benchmark)
     backfill_watchlist_symbols(
         settings,
         bar_store,

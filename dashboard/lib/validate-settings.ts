@@ -259,10 +259,13 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   const watchlistRaw = String(formData.get("watchlist") ?? "");
   const watchlist = parseWatchlistSymbols(watchlistRaw);
 
-  const benchmark_symbol = String(formData.get("benchmark_symbol") ?? "EEM")
+  const benchmark_symbol = String(formData.get("benchmark_symbol") ?? "")
     .trim()
     .toUpperCase();
-  if (!/^[A-Z][A-Z0-9.]{0,9}$/.test(benchmark_symbol)) {
+  if (
+    benchmark_symbol &&
+    !/^[A-Z][A-Z0-9.]{0,9}$/.test(benchmark_symbol)
+  ) {
     throw new Error("Benchmark symbol is invalid");
   }
 

@@ -23,7 +23,7 @@ export function LiveStrategyGrid({ predictions, settings }: Props) {
 
   const watchlist = useMemo(() => resolveEffectiveWatchlist(settings), [settings]);
   const filterOptions = filterSummaryFromSettings(settings);
-  const benchmark = settings.benchmark_symbol ?? "EEM";
+  const benchmark = settings.benchmark_symbol ?? "";
 
   const bySymbol = useMemo(() => {
     const map = new Map<string, Prediction>();

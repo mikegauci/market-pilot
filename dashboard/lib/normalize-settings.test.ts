@@ -20,7 +20,7 @@ describe("normalizeSettings", () => {
       account_capital: 1000,
       risk_sync_equity: null,
       watchlist: ["NVDA"],
-      benchmark_symbol: "EEM",
+      benchmark_symbol: "",
       updated_at: "",
     } satisfies SettingsRow;
 

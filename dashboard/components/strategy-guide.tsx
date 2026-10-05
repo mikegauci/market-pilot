@@ -25,7 +25,7 @@ export function FilterThresholds({
   minVolumeRatio,
   settingsLink = true,
 }: FilterThresholdsProps) {
-  const benchmark = benchmarkSymbol ?? "EEM";
+  const benchmark = benchmarkSymbol?.trim() || "off";
   const volumeRatio = minVolumeRatio ?? STRATEGY_FILTER_THRESHOLDS.minVolumeRatio;
 
   return (
@@ -188,7 +188,7 @@ export function StrategyGuide({
           Jev reads: {jevIndicators.map((item) => item.headline).join(" · ")}
         </p>
         <p className="mt-1 text-[11px] text-zinc-600">
-          Safety checks after BUY: RSI, EMA-20, {benchmarkSymbol ?? "EEM"}, spread, news.
+          Safety checks after BUY: RSI, EMA-20, benchmark headwind (if set), spread, news.
         </p>
       </div>
     );

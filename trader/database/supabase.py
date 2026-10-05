@@ -609,7 +609,7 @@ class SupabaseRepository:
             account_capital=float(data.get("account_capital", 1000)),
             risk_sync_equity=risk_sync_equity,
             watchlist=[str(s).upper() for s in watchlist],
-            benchmark_symbol=str(data.get("benchmark_symbol") or "EEM").upper(),
+            benchmark_symbol=str(data.get("benchmark_symbol") or "").strip().upper(),
             profit_take_enabled=bool(data.get("profit_take_enabled", False)),
             profit_take_min_fraction=profit_min,
             profit_take_max_fraction=profit_max,

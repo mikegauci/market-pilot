@@ -25,7 +25,7 @@ def _settings(**overrides: object) -> RiskSettings:
         account_capital=1000.0,
         risk_sync_equity=None,
         watchlist=["NVDA", "AAPL"],
-        benchmark_symbol="EEM",
+        benchmark_symbol="",
     )
     defaults.update(overrides)
     return RiskSettings(**defaults)  # type: ignore[arg-type]
@@ -33,14 +33,14 @@ def _settings(**overrides: object) -> RiskSettings:
 
 class TestWatchlistResolution(unittest.TestCase):
     def test_effective_benchmark_uses_settings(self) -> None:
-        self.assertEqual(effective_benchmark(_settings()), "EEM")
+        self.assertEqual(effective_benchmark(_settings()), "")
         self.assertEqual(
             effective_benchmark(_settings(benchmark_symbol="SPY")),
             "SPY",
         )
 
     def test_strip_benchmark_symbol(self) -> None:
-        settings = _settings()
+        settings = _settings(benchmark_symbol="EEM")
         self.assertEqual(
             strip_benchmark_symbol(["NVDA", "EEM", "AAPL"], settings),
             ["NVDA", "AAPL"],

@@ -33,7 +33,7 @@ const baseFields = {
   min_share_price: "20",
   min_dollar_volume: "250000",
   watchlist: "AAPL, MSFT",
-  benchmark_symbol: "EEM",
+  benchmark_symbol: "",
 };
 
 describe("parseSettingsForm risk_profile", () => {

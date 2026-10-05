@@ -21,8 +21,10 @@ describe("resolveEffectiveWatchlist", () => {
 });
 
 describe("stripBenchmark", () => {
-  it("removes EEM when configured as benchmark", () => {
-    expect(stripBenchmark(settingsFixture(), ["BABA", "EEM"])).toEqual(["BABA"]);
+  it("removes benchmark symbol when configured", () => {
+    expect(
+      stripBenchmark(settingsFixture({ benchmark_symbol: "SPY" }), ["BABA", "SPY"]),
+    ).toEqual(["BABA"]);
   });
 });
 

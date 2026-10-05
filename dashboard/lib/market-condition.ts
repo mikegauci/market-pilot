@@ -48,7 +48,7 @@ export function median(values: number[]): number | null {
 export function mergeEvalScopeSymbols(
   watchlist: string[] = [],
   openSymbols: string[] = [],
-  benchmarkSymbol = "EEM",
+  benchmarkSymbol = "",
 ): string[] {
   const benchmark = benchmarkSymbol.toUpperCase();
   const merged: string[] = [];
@@ -62,7 +62,7 @@ export function mergeEvalScopeSymbols(
 
 export function extractBenchmarkChange5m(
   predictions: Prediction[],
-  benchmarkSymbol = "EEM",
+  benchmarkSymbol = "",
 ): number | null {
   const bench = benchmarkSymbol.toUpperCase();
   const preferred = predictions.find((p) => p.symbol.toUpperCase() === bench);
@@ -79,7 +79,7 @@ export function extractBenchmarkChange5m(
 export function watchlistMovesFromPredictions(
   predictions: Prediction[],
   scopeSymbols: string[] = [],
-  benchmarkSymbol = "EEM",
+  benchmarkSymbol = "",
 ): WatchlistMove[] {
   const allowed = new Set(mergeEvalScopeSymbols(scopeSymbols, [], benchmarkSymbol));
   if (allowed.size === 0) return [];

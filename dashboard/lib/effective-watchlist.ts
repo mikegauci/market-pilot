@@ -1,7 +1,7 @@
 import type { Settings } from "@/lib/types/database";
 
 function benchmarkSymbol(settings: Settings): string {
-  return (settings.benchmark_symbol || "EEM").toUpperCase();
+  return (settings.benchmark_symbol || "").trim().toUpperCase();
 }
 
 export function stripBenchmark(settings: Settings, symbols: string[]): string[] {

@@ -63,7 +63,7 @@ function useLiveMarketCondition(
         predictions: livePredictions,
         watchlist,
         openSymbols,
-        benchmarkSymbol: liveSettings?.benchmark_symbol ?? "EEM",
+        benchmarkSymbol: liveSettings?.benchmark_symbol ?? "",
       }),
     [isMarketOpen, livePredictions, watchlist, openSymbols, liveSettings?.benchmark_symbol],
   );

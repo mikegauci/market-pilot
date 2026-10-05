@@ -155,9 +155,12 @@ def _configure_logging(level: str) -> None:
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
-def _all_symbols(watchlist: list[str], benchmark: str = "SPY") -> list[str]:
-    benchmark_symbol = (benchmark or "SPY").upper()
-    return list(dict.fromkeys(watchlist + [benchmark_symbol]))
+def _all_symbols(watchlist: list[str], benchmark: str = "") -> list[str]:
+    merged = list(watchlist)
+    benchmark_symbol = (benchmark or "").strip().upper()
+    if benchmark_symbol:
+        merged = list(dict.fromkeys(merged + [benchmark_symbol]))
+    return merged
 
 
 def _apply_watchlist_update(
@@ -1006,12 +1009,16 @@ def run() -> int:
                 portfolio_dirty = False
 
             benchmark_symbol = (
-                effective_benchmark(risk_settings) if db and risk_settings else "EEM"
+                effective_benchmark(risk_settings) if db and risk_settings else ""
             )
-            benchmark_key = benchmark_symbol.upper()
-            benchmark_minute_bars = minute_bars.get(benchmark_key)
+            benchmark_key = benchmark_symbol.upper() if benchmark_symbol else ""
+            benchmark_minute_bars = (
+                minute_bars.get(benchmark_key) if benchmark_key else None
+            )
             benchmark_intraday_bars = (
-                bar_store.get_intraday_bars(benchmark_key) if bar_store else None
+                bar_store.get_intraday_bars(benchmark_key)
+                if bar_store and benchmark_key
+                else None
             )
             market_open = (
                 settings.data_source != DataSource.IBKR or is_us_regular_session_open()

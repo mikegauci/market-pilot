@@ -71,10 +71,10 @@ export const JEV_INDICATORS: StrategyIndicator[] = [
   {
     name: "Benchmark 5m change",
     headline: "Broad market mood",
-    detail: "5-minute move in your benchmark symbol (default EEM)",
-    usedFor: "Broad-market headwind context for Jev",
+    detail: "5-minute move in your benchmark ETF (optional; off by default)",
+    usedFor: "Broad-market headwind context for Jev when a benchmark is set",
     plainEnglish:
-      "Tracks how the overall emerging-markets benchmark is moving. A falling benchmark creates headwinds for individual names.",
+      "When configured, tracks how a broad-market ETF is moving. A falling benchmark creates headwinds for individual names.",
   },
   {
     name: "Bid–ask spread",
@@ -117,10 +117,10 @@ export const HARD_FILTER_RULES: StrategyIndicator[] = [
   {
     name: "Benchmark headwind",
     headline: "Market drag",
-    detail: "Benchmark 5m change (default EEM)",
-    usedFor: "Block entry when benchmark drops more than 0.3% in 5m",
+    detail: "Benchmark 5m change (only when a benchmark symbol is set in settings)",
+    usedFor: "Block entry when benchmark drops more than the configured 5m floor",
     plainEnglish:
-      "If the broad EM benchmark is falling sharply, individual stocks face headwinds — the bot waits for calmer conditions.",
+      "If a benchmark ETF is configured and falling sharply, the bot waits for calmer conditions before entering.",
   },
   {
     name: "Wide spread",
@@ -172,8 +172,11 @@ export function withBenchmarkSymbol(
     ) {
       return {
         ...item,
-        detail: item.detail.replace(/default EEM/g, benchmarkSymbol),
-        plainEnglish: item.plainEnglish.replace(/benchmark/g, benchmarkSymbol),
+        detail: item.detail.replace(/benchmark ETF \(optional[^)]*\)/i, benchmarkSymbol),
+        plainEnglish: item.plainEnglish.replace(
+          /benchmark ETF/gi,
+          `${benchmarkSymbol} ETF`,
+        ),
       };
     }
     return item;

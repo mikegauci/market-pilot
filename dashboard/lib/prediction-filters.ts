@@ -20,7 +20,7 @@ export function evaluateEntryFilters(
   const thresholds = STRATEGY_FILTER_THRESHOLDS;
   const minVolumeRatio = options.minVolumeRatio ?? thresholds.minVolumeRatio;
   const minSharePrice = options.minSharePrice ?? thresholds.minSharePrice;
-  const benchmark = options.benchmarkSymbol ?? "EEM";
+  const benchmark = (options.benchmarkSymbol ?? "").trim();
   const price = snapshot?.price ?? null;
 
   const spreadPct =
@@ -135,6 +135,6 @@ export function filterSummaryFromSettings(settings: Settings | null | undefined)
   return {
     minVolumeRatio: settings?.min_volume_ratio ?? STRATEGY_FILTER_THRESHOLDS.minVolumeRatio,
     minSharePrice: settings?.min_share_price ?? STRATEGY_FILTER_THRESHOLDS.minSharePrice,
-    benchmarkSymbol: settings?.benchmark_symbol ?? "EEM",
+    benchmarkSymbol: settings?.benchmark_symbol ?? "",
   };
 }

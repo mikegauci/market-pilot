@@ -57,7 +57,7 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     min_dollar_volume: raw.min_dollar_volume ?? 250_000,
     confirmation_cycles: raw.confirmation_cycles ?? 2,
     confirmation_seconds: raw.confirmation_seconds ?? 30,
-    benchmark_symbol: raw.benchmark_symbol ?? "EEM",
+    benchmark_symbol: raw.benchmark_symbol ?? "",
     watchlist: raw.watchlist ?? [],
   };
 }

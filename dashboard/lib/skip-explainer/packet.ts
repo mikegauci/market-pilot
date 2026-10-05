@@ -93,7 +93,7 @@ export function buildSkipExplainPacket(
       price_vs_ema20: priceVsEma,
       volume_ratio: snapshot.volume_ratio ?? null,
       share_price: price,
-      benchmark_symbol: settings.benchmark_symbol || "EEM",
+      benchmark_symbol: settings.benchmark_symbol || "",
       benchmark_change_5m_pct: benchmarkChange,
       news_sentiment: snapshot.news_sentiment ?? null,
       news_tags: snapshot.news_tags ?? [],

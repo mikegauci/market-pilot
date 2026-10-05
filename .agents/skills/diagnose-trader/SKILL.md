@@ -90,7 +90,7 @@ ELIGIBLE but still no trade → check open trades and risk logs in skip reason (
 | `rsi_overbought (...)` | filters |
 | `volume_too_low (...)` | filters / min_volume_ratio |
 | `price_below_ema20` | filters |
-| `benchmark_headwind (...)` | filters (SPY/EEM 5m) |
+| `benchmark_headwind (...)` | filters (benchmark 5m; skipped when no benchmark configured) |
 | `news_sentiment_bearish`, `news_block_tag`, `news_earnings_window` | filters |
 | `correlation_cap (...)` | `check_correlation_cap` |
 | `bot_disabled`, `invalid_price`, `already_open`, `max_open_positions`, `position_too_small`, `insufficient_capital`, `max_daily_loss` | `trader/risk/manager.py` |
@@ -119,7 +119,7 @@ FROM trades;
 ```sql
 SELECT symbol, price, bid, ask, updated_at
 FROM market_snapshots
-WHERE symbol IN ('EEM', 'NVDA')  -- benchmark + watchlist symbol
+WHERE symbol IN ('NVDA', 'AAPL')  -- watchlist symbols
 ORDER BY updated_at DESC;
 ```
 
@@ -127,7 +127,7 @@ Stale snapshots with fresh heartbeat → data path or symbol not subscribed.
 
 ## 7. Watchlist (manual)
 
-Entry eval uses the saved watchlist plus any open positions (for exits). The benchmark symbol (default **EEM**) is subscribed for headwind context but is not an entry candidate.
+Entry eval uses the saved watchlist plus any open positions (for exits). An optional **benchmark_symbol** (empty by default) is subscribed for headwind context but is not an entry candidate.
 
 ```sql
 SELECT watchlist, benchmark_symbol, updated_at

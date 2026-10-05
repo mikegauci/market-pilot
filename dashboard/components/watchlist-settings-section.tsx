@@ -25,7 +25,7 @@ export function WatchlistSettingsSection({ settings }: Props) {
 
   return (
     <div className="space-y-4">
-      <input type="hidden" name="benchmark_symbol" value="EEM" />
+      <input type="hidden" name="benchmark_symbol" value="" />
 
       <div className="rounded-lg border border-zinc-800/60 bg-zinc-950/30 p-3">
         <p className="text-sm font-medium text-zinc-100">{headline}</p>
@@ -57,17 +57,9 @@ export function WatchlistSettingsSection({ settings }: Props) {
           fieldLabel="Watchlist symbols"
         />
         <FieldDescription title="Comma-separated tickers the bot evaluates for new trades (plus any open positions for exits).">
-          Save to apply. EEM is used only as the market benchmark for headwind checks — it is not
-          traded.
+          Save to apply.
         </FieldDescription>
       </SettingsFieldGroup>
-
-      <p className="text-xs text-zinc-500">
-        Benchmark:{" "}
-        <span className="font-medium text-zinc-300">EEM</span>
-        {" — "}
-        used for broad-market headwind checks and Jev context only (not traded).
-      </p>
 
       <WatchlistCharts
         symbols={effectiveWatchlist}
