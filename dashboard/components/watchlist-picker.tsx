@@ -148,9 +148,11 @@ export function WatchlistPicker({
 
   const searchInputId = compact ? "overview-watchlist-search" : "watchlist-search";
   const customInputId = compact ? "overview-watchlist-custom" : "watchlist-custom";
+  const labelClassName = compact ? "text-xs font-medium text-zinc-400" : undefined;
+  const addFieldsClassName = compact ? "grid grid-cols-1 gap-3" : "grid gap-3 sm:grid-cols-2";
 
   return (
-    <div className="space-y-3">
+    <div className={compact ? "space-y-2" : "space-y-3"}>
       {!onChange ? (
         <input type="hidden" name={inputName} value={selected.join(", ")} required />
       ) : null}
@@ -189,14 +191,18 @@ export function WatchlistPicker({
         </>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <Label htmlFor={searchInputId}>Search S&amp;P 500</Label>
+      <div className={addFieldsClassName}>
+        <div className="min-w-0">
+          <Label htmlFor={searchInputId} className={labelClassName}>
+            {compact ? "S&P 500 search" : "Search S&P 500"}
+          </Label>
           <Input
             id={searchInputId}
             type="search"
-            className="mt-1.5"
-            placeholder="Search or paste comma-separated tickers…"
+            className="mt-1.5 w-full min-w-0"
+            placeholder={
+              compact ? "Name or ticker…" : "Search or paste comma-separated tickers…"
+            }
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {
@@ -216,12 +222,15 @@ export function WatchlistPicker({
           />
         </div>
 
-        <div>
-          <Label htmlFor={customInputId}>Custom ticker</Label>
-          <div className="mt-1.5 flex gap-2">
+        <div className="min-w-0">
+          <Label htmlFor={customInputId} className={labelClassName}>
+            Custom ticker
+          </Label>
+          <div className="mt-1.5 flex w-full min-w-0 items-center gap-2">
             <Input
               id={customInputId}
-              placeholder="e.g. SPY, QQQ"
+              className="min-w-0 flex-1"
+              placeholder={compact ? "SPY, QQQ" : "e.g. SPY, QQQ"}
               value={customSymbol}
               onChange={(e) => {
                 setCustomSymbol(e.target.value.toUpperCase());

@@ -47,7 +47,7 @@ export function OverviewWatchlistCard({ settings }: Props) {
   }
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
           <CardTitle>Your watchlist</CardTitle>
@@ -86,7 +86,9 @@ export function OverviewWatchlistCard({ settings }: Props) {
         )}
       </div>
 
-      <div className={`mt-3 ${pending ? "pointer-events-none opacity-60" : ""}`}>
+      <div
+        className={`mt-4 border-t border-zinc-800/70 pt-4 ${pending ? "pointer-events-none opacity-60" : ""}`}
+      >
         <WatchlistPicker
           defaultValue={symbols}
           value={symbols}
