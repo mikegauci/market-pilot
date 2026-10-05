@@ -81,6 +81,33 @@ export async function requestTraderShutdown() {
   revalidatePath("/");
 }
 
+export async function cancelTraderShutdown() {
+  const supabase = await createClient();
+  const { data: status, error: readError } = await supabase
+    .from("bot_status")
+    .select("last_heartbeat, shutdown_requested")
+    .eq("id", 1)
+    .single();
+  if (readError || !status) {
+    throw new Error(readError?.message ?? "Could not read bot status");
+  }
+  if (!status.shutdown_requested) {
+    return;
+  }
+  if (isTraderOnline(status.last_heartbeat)) {
+    throw new Error("Engine is still stopping — wait for it to go offline");
+  }
+  const { error } = await supabase
+    .from("bot_status")
+    .update({
+      shutdown_requested: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", 1);
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}
+
 export async function requestClosePosition(tradeId: string) {
   const supabase = await createClient();
 

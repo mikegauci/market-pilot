@@ -44,7 +44,6 @@ from market.indicators import build_market_state
 from market.mock import MockMarketProvider
 from notify.telegram import configure_telegram
 from models.types import (
-    BotControl,
     BotStatusUpdate,
     DataSource,
     ExecutionMode,
@@ -69,6 +68,10 @@ from runtime.entry_eval import process_ready_states
 from runtime.heartbeat import run_heartbeat_cycle
 from runtime.sim_close import persist_simulated_closes
 from runtime.periodic import periodic_callback
+from runtime.shutdown_control import (
+    StartupShutdownAction,
+    resolve_startup_shutdown_action,
+)
 from runtime.startup import connect_ibkr_with_retries, run_ibkr_startup_backfill
 from runtime.state import TraderRuntimeState
 from runtime.status_log import log_trader_running
@@ -472,18 +475,26 @@ def run() -> int:
         logger.info("News enrichment skipped in mock data mode")
 
     bot_control = db.get_bot_control(settings.execution_mode)
-    if bot_control.shutdown_requested:
-        db.clear_shutdown_requested()
+    startup_shutdown = resolve_startup_shutdown_action(
+        bot_control.shutdown_requested,
+        db.get_last_heartbeat(),
+    )
+    if startup_shutdown == StartupShutdownAction.EXIT_PENDING_STOP:
         logger.info(
-            "Cleared dashboard shutdown flag on startup "
-            "(Stop engine only stops a already-running trader)"
+            "Dashboard stop is still pending (fresh heartbeat) — exiting without starting"
         )
-        bot_control = BotControl(
-            enabled=bot_control.enabled,
-            trading_mode=bot_control.trading_mode,
-            execution_mode=bot_control.execution_mode,
-            shutdown_requested=False,
+        db.mark_shutdown_gate_offline(
+            bot_control.enabled,
+            bot_control.trading_mode,
+            bot_control.execution_mode,
         )
+        return 0
+    if startup_shutdown == StartupShutdownAction.BLOCK_UNTIL_CANCEL:
+        logger.error(
+            "Dashboard stop request is active — use Cancel stop in the dashboard, "
+            "then start the trader again"
+        )
+        return 1
     trading_mode = bot_control.trading_mode
     configured_execution_mode = bot_control.execution_mode
     _pulse_bot_status(
@@ -730,6 +741,12 @@ def run() -> int:
 
         try:
             if db:
+                if db.poll_shutdown_requested():
+                    logger.info(
+                        "Shutdown requested from dashboard — stopping trading engine"
+                    )
+                    runtime.shutdown_requested = True
+
                 now_mono = time.monotonic()
                 if should_refresh(
                     now_mono,
@@ -744,12 +761,6 @@ def run() -> int:
                         settings.data_source, configured_execution_mode
                     )
                     last_bot_control_sync = now_mono
-                    if bot_control.shutdown_requested:
-                        logger.info(
-                            "Shutdown requested from dashboard — stopping trading engine"
-                        )
-                        runtime.shutdown_requested = True
-                        continue
 
                 if (
                     news_client is not None

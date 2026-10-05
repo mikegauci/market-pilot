@@ -476,6 +476,27 @@ class SupabaseRepository:
         self.client.table("bot_status").update(payload).eq("id", 1).execute()
 
     @_db_synchronized
+    def mark_shutdown_gate_offline(
+        self,
+        enabled: bool,
+        trading_mode: TradingMode,
+        execution_mode: ExecutionMode,
+    ) -> None:
+        """Keep shutdown_requested set; clear heartbeat so the dashboard shows offline."""
+        payload = {
+            "enabled": enabled,
+            "trading_mode": trading_mode.value,
+            "execution_mode": execution_mode.value,
+            "ibkr_connected": False,
+            "jev_connected": False,
+            "last_heartbeat": None,
+            "last_error": None,
+            "shutdown_requested": True,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.client.table("bot_status").update(payload).eq("id", 1).execute()
+
+    @_db_synchronized
     def clear_shutdown_requested(self) -> None:
         """Drop a dashboard stop request when the trader was not running."""
         self.client.table("bot_status").update(
@@ -484,6 +505,37 @@ class SupabaseRepository:
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         ).eq("id", 1).execute()
+
+    @_db_synchronized
+    def get_last_heartbeat(self) -> Optional[str]:
+        try:
+            result = (
+                self.client.table("bot_status")
+                .select("last_heartbeat")
+                .eq("id", 1)
+                .single()
+                .execute()
+            )
+            raw = result.data.get("last_heartbeat")
+            return str(raw) if raw else None
+        except Exception as exc:
+            logger.warning("Could not read bot_status heartbeat: %s", exc)
+            return None
+
+    @_db_synchronized
+    def poll_shutdown_requested(self) -> bool:
+        try:
+            result = (
+                self.client.table("bot_status")
+                .select("shutdown_requested")
+                .eq("id", 1)
+                .single()
+                .execute()
+            )
+            return bool(result.data.get("shutdown_requested", False))
+        except Exception as exc:
+            logger.warning("Could not poll shutdown_requested: %s", exc)
+            return False
 
     @_db_synchronized
     def get_settings(self) -> StrategySettings:

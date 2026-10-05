@@ -48,6 +48,14 @@ export function getStableDisplayNow(lastHeartbeat: string | null): number {
   return Number.isNaN(ts) ? 0 : ts;
 }
 
+/** Stop was requested but the engine is not responding (stuck flag). */
+export function isStopRequestStale(
+  status: Pick<BotStatus, "shutdown_requested" | "last_heartbeat">,
+  now = Date.now(),
+): boolean {
+  return Boolean(status.shutdown_requested) && !isTraderOnline(status.last_heartbeat, now);
+}
+
 export function getDisplayStatus(status: BotStatus, now = Date.now()): DisplayStatus {
   const traderOnline = isTraderOnline(status.last_heartbeat, now);
 

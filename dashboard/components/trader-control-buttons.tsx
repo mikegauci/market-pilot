@@ -11,8 +11,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useLiveBotStatus } from "@/components/bot-status-provider";
-import { requestTraderShutdown, setAutoTradingEnabled } from "@/lib/actions";
-import { getDisplayStatus } from "@/lib/trader-status";
+import {
+  cancelTraderShutdown,
+  requestTraderShutdown,
+  setAutoTradingEnabled,
+} from "@/lib/actions";
+import { getDisplayStatus, isStopRequestStale } from "@/lib/trader-status";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -23,8 +27,10 @@ export function TraderControlButtons({ className }: { className?: string }) {
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const stopping = Boolean(status.shutdown_requested);
   const traderOnline = display.traderOnline;
+  const stopRequested = Boolean(status.shutdown_requested);
+  const stopStale = isStopRequestStale(status);
+  const stopping = stopRequested && traderOnline;
   const autoTradingOn = status.enabled;
 
   function toggleAutoTrading() {
@@ -50,7 +56,24 @@ export function TraderControlButtons({ className }: { className?: string }) {
     });
   }
 
-  const pauseLabel = isPending && autoTradingOn ? "Pausing…" : autoTradingOn ? "Pause new trades" : "Resume new trades";
+  function handleCancelStop() {
+    setActionError(null);
+    startTransition(async () => {
+      try {
+        await cancelTraderShutdown();
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : "Could not cancel stop");
+      }
+    });
+  }
+
+  const pauseLabel = isPending
+    ? autoTradingOn
+      ? "Pausing…"
+      : "Resuming…"
+    : autoTradingOn
+      ? "Pause new trades"
+      : "Resume new trades";
 
   return (
     <div className={cn("rounded-lg border border-zinc-800 bg-zinc-950/60 p-3", className)}>
@@ -70,25 +93,42 @@ export function TraderControlButtons({ className }: { className?: string }) {
           {pauseLabel}
         </Button>
 
-        <Button
-          type="button"
-          onClick={() => {
-            if (!traderOnline || stopping) return;
-            setActionError(null);
-            setStopDialogOpen(true);
-          }}
-          disabled={!traderOnline || stopping || isPending}
-          title={
-            !traderOnline
-              ? "Start python main.py in trader/ first"
-              : stopping
-                ? "Stop already requested"
-                : undefined
-          }
-          className="h-9 w-full bg-red-950/80 text-red-100 hover:bg-red-900 disabled:bg-zinc-800 disabled:text-zinc-500"
-        >
-          {stopping ? "Stopping engine…" : "Stop engine"}
-        </Button>
+        {stopStale ? (
+          <>
+            <p className="text-[11px] leading-snug text-amber-200/90">
+              Stop did not finish — the engine is offline but the stop request is still set. Cancel
+              it, then start the trader again.
+            </p>
+            <Button
+              type="button"
+              onClick={handleCancelStop}
+              disabled={isPending}
+              className="h-9 w-full bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+            >
+              {isPending ? "Canceling…" : "Cancel stop request"}
+            </Button>
+          </>
+        ) : (
+          <Button
+            type="button"
+            onClick={() => {
+              if (!traderOnline || stopping) return;
+              setActionError(null);
+              setStopDialogOpen(true);
+            }}
+            disabled={!traderOnline || stopping || isPending}
+            title={
+              !traderOnline
+                ? "Start python main.py in trader/ first"
+                : stopping
+                  ? "Stop already requested"
+                  : undefined
+            }
+            className="h-9 w-full bg-red-950/80 text-red-100 hover:bg-red-900 disabled:bg-zinc-800 disabled:text-zinc-500"
+          >
+            {stopping ? "Stopping engine…" : "Stop engine"}
+          </Button>
+        )}
       </div>
 
       {actionError ? (
