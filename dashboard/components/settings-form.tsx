@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { BriefSettingDiff } from "@/components/brief-setting-diff";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,10 @@ import {
   type StrategyHint,
 } from "@/lib/strategy-recommendations";
 import { confidencePercentFromDecimal } from "@/lib/settings-display";
+import {
+  dismissBriefSettings,
+  isBriefSettingsDismissed,
+} from "@/lib/session-brief/brief-dismiss";
 import { buildSettingDiffs } from "@/lib/session-brief/setting-diff";
 import type { SessionBriefSuggestion } from "@/lib/session-brief/schema";
 import type { Settings } from "@/lib/types/database";
@@ -329,7 +333,13 @@ export function SettingsForm({
     confidencePercentFromDecimal(settings.signal_record_threshold),
   );
   const [maxOpenPositions, setMaxOpenPositions] = useState(settings.max_open_positions);
-  const [briefApplied, setBriefApplied] = useState(false);
+  const [briefDismissed, setBriefDismissed] = useState(false);
+
+  useEffect(() => {
+    if (briefSessionDate && isBriefSettingsDismissed(briefSessionDate)) {
+      setBriefDismissed(true);
+    }
+  }, [briefSessionDate]);
   const maxHoldHints = getMaxHoldHints(maxHoldMinutes);
   const [selectedProfile, setSelectedProfile] = useState<RiskProfile>(
     resolveRiskProfile(settings.risk_profile),
@@ -370,8 +380,14 @@ export function SettingsForm({
           break;
       }
     }
-    setBriefApplied(true);
+    if (briefSessionDate) {
+      dismissBriefSettings(briefSessionDate);
+    }
+    setBriefDismissed(true);
   }
+
+  const showBriefDiffs =
+    briefSessionDate && !briefDismissed && briefDiffs.length > 0;
 
   const riskValues = {
     risk_per_trade: riskPerTrade,
@@ -420,11 +436,10 @@ export function SettingsForm({
     >
       <input type="hidden" name="risk_profile" value={selectedProfile} />
 
-      {briefSessionDate ? (
+      {showBriefDiffs ? (
         <BriefSettingDiff
           sessionDate={briefSessionDate}
           diffs={briefDiffs}
-          applied={briefApplied}
           onApply={applyBriefDiffs}
         />
       ) : null}

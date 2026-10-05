@@ -6,12 +6,10 @@ import type { SettingDiff } from "@/lib/session-brief/setting-diff";
 export function BriefSettingDiff({
   sessionDate,
   diffs,
-  applied,
   onApply,
 }: {
   sessionDate: string;
   diffs: SettingDiff[];
-  applied: boolean;
   onApply: () => void;
 }) {
   if (diffs.length === 0) return null;
@@ -39,15 +37,11 @@ export function BriefSettingDiff({
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <Button
           type="button"
-          disabled={applied}
-          className="border border-zinc-600 bg-transparent px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
+          className="border border-zinc-600 bg-transparent px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800"
           onClick={onApply}
         >
-          {applied ? "Applied to the form" : "Apply to form"}
+          Apply to form
         </Button>
-        {applied ? (
-          <p className="text-xs text-zinc-500">Press Save settings to keep these values.</p>
-        ) : null}
       </div>
     </section>
   );
