@@ -1,11 +1,16 @@
 "use server";
 
+import {
+  checkOpenAiActionCooldown,
+  OPENAI_COOLDOWN_MS,
+} from "@/lib/openai-action-cooldown";
 import { buildMorningBriefPacket, MORNING_BRIEF_WINDOW_HOURS } from "@/lib/morning-brief/packet";
 import { generateMorningBriefFromPacket } from "@/lib/morning-brief/openai.server";
 import { constrainMorningBrief, type MorningBrief } from "@/lib/morning-brief/schema";
+import { normalizeSettings, type SettingsRow } from "@/lib/normalize-settings";
 import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
 import { createClient } from "@/lib/supabase/server";
-import type { MarketNewsRow, Settings } from "@/lib/types/database";
+import type { MarketNewsRow } from "@/lib/types/database";
 
 export type GenerateMorningBriefResult =
   | { ok: true; brief: MorningBrief; generatedAt: string }
@@ -29,6 +34,15 @@ export async function generateMorningBrief(): Promise<GenerateMorningBriefResult
     return { ok: false, error: "Sign in to generate a morning brief." };
   }
 
+  const cooldownError = checkOpenAiActionCooldown(
+    user.id,
+    "morning-brief",
+    OPENAI_COOLDOWN_MS.morningBrief,
+  );
+  if (cooldownError) {
+    return { ok: false, error: cooldownError };
+  }
+
   const { data: settingsRow, error: settingsError } = await supabase
     .from("settings")
     .select("*")
@@ -36,6 +50,11 @@ export async function generateMorningBrief(): Promise<GenerateMorningBriefResult
     .single();
   if (settingsError || !settingsRow) {
     return { ok: false, error: settingsError?.message ?? "Settings not found." };
+  }
+
+  const settings = normalizeSettings(settingsRow as SettingsRow);
+  if (!settings) {
+    return { ok: false, error: "Settings not found." };
   }
 
   const since = new Date(Date.now() - MORNING_BRIEF_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
@@ -51,15 +70,23 @@ export async function generateMorningBrief(): Promise<GenerateMorningBriefResult
   }
 
   const now = new Date();
-  const packet = buildMorningBriefPacket({
-    settings: settingsRow as Settings,
-    articles: (newsRows ?? []) as MarketNewsRow[],
-    now,
-  });
+  let packet;
+  try {
+    packet = buildMorningBriefPacket({
+      settings,
+      articles: (newsRows ?? []) as MarketNewsRow[],
+      now,
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not build morning brief.",
+    };
+  }
 
   try {
     const result = await generateMorningBriefFromPacket(packet);
-    const allowed = new Set(packet.headlines.flatMap((row) => row.symbols));
+    const allowed = new Set(packet.watchlist.map((row) => row.symbol));
     return {
       ok: true,
       brief: constrainMorningBrief(result.brief, allowed),

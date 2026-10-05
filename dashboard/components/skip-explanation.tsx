@@ -49,7 +49,10 @@ export function SkipExplanation({ predictionId }: { predictionId: string }) {
           <p className="font-medium text-zinc-200">{CLOSENESS_LABEL[explanation.closeness]}</p>
           <p>{explanation.what_blocked_it}</p>
           <p className="text-zinc-400">{explanation.summary}</p>
-          <p className="text-zinc-500">Explanation only. This does not change trades.</p>
+          <p className="text-zinc-500">
+            Explanation only. Thresholds are from current settings, not necessarily when this row
+            was stored. This does not change trades.
+          </p>
         </div>
       ) : null}
     </div>

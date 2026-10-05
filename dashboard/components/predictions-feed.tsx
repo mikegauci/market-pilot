@@ -81,7 +81,10 @@ function TradeCell({ prediction }: { prediction: Prediction }) {
       >
         {label}
       </span>
-      <SkipExplanation predictionId={prediction.id} />
+      <SkipExplanation
+        key={`${prediction.id}:${prediction.trade_skip_reason ?? ""}:${prediction.trade_created}`}
+        predictionId={prediction.id}
+      />
     </div>
   );
 }

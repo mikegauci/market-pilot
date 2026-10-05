@@ -33,7 +33,9 @@ export function FilterThresholds({
       <p className="text-xs font-medium text-zinc-300">Active filter thresholds</p>
       <ul className="mt-2 space-y-1 text-xs text-zinc-400">
         <li>RSI max: {STRATEGY_FILTER_THRESHOLDS.maxRsi}</li>
-        <li>Spread max: {STRATEGY_FILTER_THRESHOLDS.maxSpreadPct}%</li>
+        <li>
+          Spread max: {(STRATEGY_FILTER_THRESHOLDS.maxSpreadPct * 100).toFixed(2)}%
+        </li>
         <li>
           Price above EMA-20:{" "}
           {STRATEGY_FILTER_THRESHOLDS.requirePriceAboveEma20 ? "required" : "off"}

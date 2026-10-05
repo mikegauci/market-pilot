@@ -117,7 +117,7 @@ describe("assessMarketCondition", () => {
   it("marks caution when soft but above floors", () => {
     const result = assessMarketCondition({
       isMarketOpen: true,
-      benchmarkChange5m: -0.15,
+      benchmarkChange5m: -0.08,
       newsSentiment: 0,
     });
     expect(result.level).toBe("caution");
@@ -135,7 +135,7 @@ describe("assessMarketCondition", () => {
     expect(result.summary).toMatch(/EEM too weak/i);
     expect(result.hint).toMatch(/blocks most new buys/i);
     expect(result.factors.find((f) => f.key === "benchmark")?.detail).toMatch(
-      /cutoff -0\.3%/,
+      /cutoff -0\.12%/,
     );
   });
 

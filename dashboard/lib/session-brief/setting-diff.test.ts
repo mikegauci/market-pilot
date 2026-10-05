@@ -47,4 +47,29 @@ describe("buildSettingDiffs", () => {
 
     expect(diffs).toEqual([]);
   });
+
+  it("drops a conflicting second diff so Apply would pass Save", () => {
+    const diffs = buildSettingDiffs(
+      settingsFixture({
+        stop_loss_percentage: 0.01,
+        take_profit_percentage: 0.012,
+      }),
+      [
+        { setting: "take_profit_percentage", direction: "lower", why: "Take sooner." },
+        { setting: "stop_loss_percentage", direction: "raise", why: "Wider stop." },
+      ],
+    );
+
+    expect(diffs.map((row) => row.key)).toEqual(["take_profit_percentage"]);
+  });
+
+  it("skips lowering max hold below min hold", () => {
+    const diffs = buildSettingDiffs(
+      settingsFixture({ max_hold_minutes: 20, min_hold_minutes: 15 }),
+      [{ setting: "max_hold_minutes", direction: "lower", why: "Shorter holds." }],
+    );
+
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0]?.proposed).toBe(15);
+  });
 });

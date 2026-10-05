@@ -1,5 +1,8 @@
-import { fractionToDisplayPercent } from "@/lib/strategy-recommendations";
-import { confidencePercentFromDecimal } from "@/lib/settings-display";
+import {
+  briefFormSliceFromSettings,
+  validateBriefFormSlice,
+  type BriefFormSlice,
+} from "@/lib/session-brief/brief-form-validation";
 import type { SessionBriefSuggestion } from "@/lib/session-brief/schema";
 import type { Settings } from "@/lib/types/database";
 
@@ -72,92 +75,146 @@ function minutesLabel(value: number): string {
   return value === 0 ? "off" : `${value} min`;
 }
 
+function currentValueForKey(slice: BriefFormSlice, key: SessionBriefSettingKey): number {
+  switch (key) {
+    case "minimum_jev_confidence":
+      return slice.minimum_jev_confidence_pct;
+    case "signal_record_threshold":
+      return slice.signal_record_threshold_pct;
+    case "stop_loss_percentage":
+      return slice.stop_loss_pct;
+    case "take_profit_percentage":
+      return slice.take_profit_pct;
+    case "max_hold_minutes":
+      return slice.max_hold_minutes;
+    case "max_open_positions":
+      return slice.max_open_positions;
+    case "min_volume_ratio":
+      return slice.min_volume_ratio;
+    case "reentry_cooldown_minutes":
+      return slice.reentry_cooldown_minutes;
+  }
+}
+
+function labelForValue(key: SessionBriefSettingKey, value: number): string {
+  switch (key) {
+    case "minimum_jev_confidence":
+    case "signal_record_threshold":
+    case "stop_loss_percentage":
+    case "take_profit_percentage":
+      return percentLabel(value);
+    case "max_hold_minutes":
+    case "reentry_cooldown_minutes":
+      return minutesLabel(value);
+    default:
+      return String(value);
+  }
+}
+
+function proposeStep(
+  working: BriefFormSlice,
+  key: SessionBriefSettingKey,
+  direction: "raise" | "lower",
+): number | null {
+  switch (key) {
+    case "minimum_jev_confidence":
+      return move(
+        working.minimum_jev_confidence_pct,
+        direction,
+        1,
+        Math.max(1, working.signal_record_threshold_pct),
+        99,
+        0,
+      );
+    case "signal_record_threshold":
+      return move(
+        working.signal_record_threshold_pct,
+        direction,
+        1,
+        1,
+        working.minimum_jev_confidence_pct,
+        0,
+      );
+    case "stop_loss_percentage":
+      return move(
+        working.stop_loss_pct,
+        direction,
+        0.1,
+        0.1,
+        Math.max(0.1, working.take_profit_pct - 0.1),
+        1,
+      );
+    case "take_profit_percentage":
+      return move(working.take_profit_pct, direction, 0.1, working.stop_loss_pct + 0.1, 20, 1);
+    case "max_hold_minutes": {
+      const minBound =
+        working.min_hold_minutes > 0 && working.max_hold_minutes > 0
+          ? working.min_hold_minutes
+          : 0;
+      return move(working.max_hold_minutes, direction, 5, minBound, 480, 0);
+    }
+    case "max_open_positions":
+      return move(working.max_open_positions, direction, 1, 1, 20, 0);
+    case "min_volume_ratio":
+      return move(working.min_volume_ratio, direction, 0.1, 0, 5, 1);
+    case "reentry_cooldown_minutes":
+      return move(working.reentry_cooldown_minutes, direction, 5, 0, 480, 0);
+  }
+}
+
+function applyToWorking(working: BriefFormSlice, key: SessionBriefSettingKey, value: number): BriefFormSlice {
+  switch (key) {
+    case "minimum_jev_confidence":
+      return { ...working, minimum_jev_confidence_pct: value };
+    case "signal_record_threshold":
+      return { ...working, signal_record_threshold_pct: value };
+    case "stop_loss_percentage":
+      return { ...working, stop_loss_pct: value };
+    case "take_profit_percentage":
+      return { ...working, take_profit_pct: value };
+    case "max_hold_minutes":
+      return { ...working, max_hold_minutes: value };
+    case "max_open_positions":
+      return { ...working, max_open_positions: value };
+    case "min_volume_ratio":
+      return { ...working, min_volume_ratio: value };
+    case "reentry_cooldown_minutes":
+      return { ...working, reentry_cooldown_minutes: value };
+  }
+}
+
 export function buildSettingDiffs(
   settings: Settings,
   suggestions: SessionBriefSuggestion[],
 ): SettingDiff[] {
-  const minConfidencePct = confidencePercentFromDecimal(settings.minimum_jev_confidence);
-  const recordPct = confidencePercentFromDecimal(settings.signal_record_threshold);
-  const stopPct = fractionToDisplayPercent(settings.stop_loss_percentage);
-  const takeProfitPct = fractionToDisplayPercent(settings.take_profit_percentage);
+  const saved = briefFormSliceFromSettings(settings);
+  let working = { ...saved };
   const diffs: SettingDiff[] = [];
   const seen = new Set<SessionBriefSettingKey>();
 
   for (const suggestion of suggestions) {
     if (suggestion.direction !== "raise" && suggestion.direction !== "lower") continue;
     if (!isSettingKey(suggestion.setting) || seen.has(suggestion.setting)) continue;
-    const direction = suggestion.direction;
     const key = suggestion.setting;
     seen.add(key);
 
-    let proposed: number | null = null;
-    let currentLabel = "";
-    let proposedLabel = "";
-
-    switch (key) {
-      case "minimum_jev_confidence": {
-        proposed = move(minConfidencePct, direction, 1, Math.max(1, recordPct), 99, 0);
-        currentLabel = percentLabel(minConfidencePct);
-        proposedLabel = proposed == null ? "" : percentLabel(proposed);
-        break;
-      }
-      case "signal_record_threshold": {
-        proposed = move(recordPct, direction, 1, 1, minConfidencePct, 0);
-        currentLabel = percentLabel(recordPct);
-        proposedLabel = proposed == null ? "" : percentLabel(proposed);
-        break;
-      }
-      case "stop_loss_percentage": {
-        proposed = move(stopPct, direction, 0.1, 0.1, Math.max(0.1, takeProfitPct - 0.1), 1);
-        currentLabel = percentLabel(stopPct);
-        proposedLabel = proposed == null ? "" : percentLabel(proposed);
-        break;
-      }
-      case "take_profit_percentage": {
-        proposed = move(takeProfitPct, direction, 0.1, stopPct + 0.1, 20, 1);
-        currentLabel = percentLabel(takeProfitPct);
-        proposedLabel = proposed == null ? "" : percentLabel(proposed);
-        break;
-      }
-      case "max_hold_minutes": {
-        const current = settings.max_hold_minutes ?? 0;
-        proposed = move(current, direction, 5, 0, 480, 0);
-        currentLabel = minutesLabel(current);
-        proposedLabel = proposed == null ? "" : minutesLabel(proposed);
-        break;
-      }
-      case "max_open_positions": {
-        proposed = move(settings.max_open_positions, direction, 1, 1, 20, 0);
-        currentLabel = String(settings.max_open_positions);
-        proposedLabel = proposed == null ? "" : String(proposed);
-        break;
-      }
-      case "min_volume_ratio": {
-        const current = settings.min_volume_ratio ?? 0;
-        proposed = move(current, direction, 0.1, 0, 5, 1);
-        currentLabel = String(current);
-        proposedLabel = proposed == null ? "" : String(proposed);
-        break;
-      }
-      case "reentry_cooldown_minutes": {
-        const current = settings.reentry_cooldown_minutes ?? 0;
-        proposed = move(current, direction, 5, 0, 480, 0);
-        currentLabel = minutesLabel(current);
-        proposedLabel = proposed == null ? "" : minutesLabel(proposed);
-        break;
-      }
-    }
-
+    const current = currentValueForKey(working, key);
+    const proposed = proposeStep(working, key, suggestion.direction);
     if (proposed == null) continue;
+
+    const nextWorking = applyToWorking(working, key, proposed);
+    if (validateBriefFormSlice(nextWorking) !== null) continue;
+
     diffs.push({
       key,
       label: SETTING_LABELS[key],
-      direction,
+      direction: suggestion.direction,
       why: suggestion.why,
-      currentLabel,
-      proposedLabel,
+      currentLabel: labelForValue(key, current),
+      proposedLabel: labelForValue(key, proposed),
       proposed,
     });
+    working = nextWorking;
   }
 
   return diffs;

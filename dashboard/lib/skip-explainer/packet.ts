@@ -1,27 +1,6 @@
 import { formatSkipReason } from "@/lib/prediction-skip-reason";
+import { traderBuiltInGatesForPacket } from "@/lib/trader-built-in-gates";
 import type { MarketSnapshot, Prediction, Settings } from "@/lib/types/database";
-
-/**
- * Built-in entry gates from trader/strategy/config.py StrategyConfig defaults.
- * Volume, share price, dollar volume, confirmation, and Jev confidence come from settings.
- */
-const BUILT_IN_GATES = {
-  max_spread_pct: 0.15,
-  max_rsi: 70,
-  max_benchmark_drop_5m_pct: -0.12,
-  min_news_sentiment: -0.3,
-  require_price_above_ema20: true,
-  min_buy_hold_margin_pct: 15,
-  min_buy_sell_margin_pct: 10,
-  news_block_tags: [
-    "downgrade",
-    "lawsuit",
-    "sec_investigation",
-    "guidance_cut",
-    "layoffs",
-  ],
-  block_on_earnings: false,
-} as const;
 
 function percentPoints(decimal: number): number {
   return Math.round(decimal * 1000) / 10;
@@ -57,7 +36,7 @@ export type SkipExplainPacket = {
     news_tags: string[];
     news_top_headline: string | null;
   };
-  gates: {
+  gates: ReturnType<typeof traderBuiltInGatesForPacket> & {
     minimum_jev_confidence_pct: number;
     signal_record_threshold_pct: number;
     max_open_positions: number;
@@ -66,15 +45,6 @@ export type SkipExplainPacket = {
     min_dollar_volume: number;
     confirmation_cycles: number;
     confirmation_seconds: number;
-    max_spread_pct: number;
-    max_rsi: number;
-    max_benchmark_drop_5m_pct: number;
-    min_news_sentiment: number;
-    require_price_above_ema20: boolean;
-    min_buy_hold_margin_pct: number;
-    min_buy_sell_margin_pct: number;
-    news_block_tags: string[];
-    block_on_earnings: boolean;
     gates_note: string;
   };
 };
@@ -83,6 +53,7 @@ export function buildSkipExplainPacket(
   prediction: Prediction,
   settings: Settings,
 ): SkipExplainPacket {
+  const builtIn = traderBuiltInGatesForPacket();
   const snapshot: MarketSnapshot = prediction.market_snapshot ?? {};
   const price = prediction.price;
   const spreadPct =
@@ -103,7 +74,7 @@ export function buildSkipExplainPacket(
 
   return {
     note:
-      "Percents are already in percent (85 means 85%). spread_pct and max_spread_pct are also percent of price (0.15 means 0.15%). Explain only this row. Do not invent prices, headlines, or other skips.",
+      "Percents are already in percent (85 means 85%). spread_pct and max_spread_pct are percent of price (0.15 means 0.15%). Explain only this row. Do not invent prices, headlines, or other skips. Gates under settings are the bot's current dashboard settings, not necessarily what applied when this prediction was stored.",
     symbol: prediction.symbol,
     timestamp: prediction.timestamp,
     price,
@@ -129,6 +100,7 @@ export function buildSkipExplainPacket(
       news_top_headline: snapshot.news_top_headline ?? null,
     },
     gates: {
+      ...builtIn,
       minimum_jev_confidence_pct: minConfidencePct,
       signal_record_threshold_pct: percentPoints(settings.signal_record_threshold),
       max_open_positions: settings.max_open_positions,
@@ -137,17 +109,8 @@ export function buildSkipExplainPacket(
       min_dollar_volume: settings.min_dollar_volume,
       confirmation_cycles: settings.confirmation_cycles,
       confirmation_seconds: settings.confirmation_seconds,
-      max_spread_pct: BUILT_IN_GATES.max_spread_pct,
-      max_rsi: BUILT_IN_GATES.max_rsi,
-      max_benchmark_drop_5m_pct: BUILT_IN_GATES.max_benchmark_drop_5m_pct,
-      min_news_sentiment: BUILT_IN_GATES.min_news_sentiment,
-      require_price_above_ema20: BUILT_IN_GATES.require_price_above_ema20,
-      min_buy_hold_margin_pct: BUILT_IN_GATES.min_buy_hold_margin_pct,
-      min_buy_sell_margin_pct: BUILT_IN_GATES.min_buy_sell_margin_pct,
-      news_block_tags: [...BUILT_IN_GATES.news_block_tags],
-      block_on_earnings: BUILT_IN_GATES.block_on_earnings,
       gates_note:
-        "Jev confidence, record threshold, max positions, volume, share price, dollar volume, and confirmation come from current settings. Spread, RSI, benchmark drop, news sentiment, EMA, buy margins, and news tags are the bot's built-in gates.",
+        "Jev confidence, record threshold, max positions, volume, share price, dollar volume, and confirmation are current settings. Spread, RSI, benchmark drop, news sentiment, EMA, buy margins, and news tags are the bot's built-in gates.",
     },
   };
 }

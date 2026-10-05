@@ -20,6 +20,7 @@ Rules:
   - near_miss: Jev was close to a buy (confidence, margin, or confirmation still counting) and a gate stopped it.
   - hard_block: a filter, risk rule, broker check, or already-open position stopped it even if Jev liked it.
   - not_a_signal: HOLD or SELL was dominant, or BUY was far below the record threshold.
+- gates.settings fields are the bot's current dashboard settings; they may differ from when this prediction was stored.
 - This is an explanation only. Do not promise profit or say to enable live trading.`;
 
 const skipExplanationTextFormat = makeParseableTextFormat(

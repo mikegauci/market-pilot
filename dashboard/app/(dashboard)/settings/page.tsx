@@ -2,7 +2,13 @@ import Link from "next/link";
 import { SettingsForm } from "@/components/settings-form";
 import { ScreenerRankingDelta } from "@/components/screener-ranking-delta";
 import { resolveBaselineEquity } from "@/lib/risk-recommendations";
-import { getEmUniverseStats, getLatestPortfolio, getLatestSessionBrief, getScreenerHistory, getSettings } from "@/lib/queries";
+import {
+  getEmUniverseStats,
+  getLatestPortfolio,
+  getLatestSessionBriefForUser,
+  getScreenerHistory,
+  getSettings,
+} from "@/lib/queries";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function SettingsPage() {
@@ -11,7 +17,7 @@ export default async function SettingsPage() {
     getLatestPortfolio(),
     getEmUniverseStats(),
     getScreenerHistory(5),
-    getLatestSessionBrief(),
+    getLatestSessionBriefForUser(),
   ]);
 
   if (!settings) {

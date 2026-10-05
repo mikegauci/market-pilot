@@ -57,7 +57,6 @@ describe("buildMorningBriefPacket", () => {
 
     expect(packet.watchlist.map((row) => row.symbol)).toEqual(["BABA", "VALE"]);
     expect(packet.watchlist[0]).toMatchObject({ pinned: true, locked: true });
-    expect(packet.dismissed).toEqual(["PDD"]);
     expect(packet.headlines).toHaveLength(1);
     expect(packet.headlines[0]?.symbols).toEqual(["BABA"]);
     expect(packet.headlines[0]?.headline).toBe("BABA faces a lawsuit");
@@ -65,6 +64,26 @@ describe("buildMorningBriefPacket", () => {
     expect(packet.gates.minimum_jev_confidence_pct).toBe(85);
     expect(packet.gates.min_volume_ratio).toBe(0.5);
     expect(packet.gates.max_spread_pct).toBe(0.15);
+  });
+
+  it("ignores headlines for dismissed symbols not on the watchlist", () => {
+    const packet = buildMorningBriefPacket({
+      settings: settingsFixture({
+        watchlist_dynamic_enabled: false,
+        watchlist: ["BABA"],
+        watchlist_core: ["BABA"],
+        watchlist_dismissed: ["PDD"],
+      }),
+      articles: [
+        article({
+          headline: "PDD lawsuit",
+          related_symbols: ["PDD"],
+        }),
+      ],
+      now,
+    });
+
+    expect(packet.headlines).toEqual([]);
   });
 
   it("leaves headlines empty when nothing in the window matches", () => {

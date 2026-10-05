@@ -159,11 +159,17 @@ export async function getSessionBriefHistory(): Promise<SessionBriefHistoryLoad>
   };
 }
 
-export async function getLatestSessionBrief(): Promise<SessionBriefRow | null> {
+export async function getLatestSessionBriefForUser(): Promise<SessionBriefRow | null> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
   const { data, error } = await supabase
     .from("session_briefs")
     .select("*")
+    .eq("created_by", user.id)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

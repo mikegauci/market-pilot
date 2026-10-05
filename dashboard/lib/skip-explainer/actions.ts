@@ -1,11 +1,16 @@
 "use server";
 
+import {
+  checkOpenAiActionCooldown,
+  OPENAI_COOLDOWN_MS,
+} from "@/lib/openai-action-cooldown";
+import { normalizeSettings, type SettingsRow } from "@/lib/normalize-settings";
 import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
 import { buildSkipExplainPacket } from "@/lib/skip-explainer/packet";
 import { generateSkipExplanation } from "@/lib/skip-explainer/openai.server";
 import type { SkipExplanation } from "@/lib/skip-explainer/schema";
 import { createClient } from "@/lib/supabase/server";
-import type { Prediction, Settings } from "@/lib/types/database";
+import type { Prediction } from "@/lib/types/database";
 
 export type ExplainSkipResult =
   | { ok: true; explanation: SkipExplanation }
@@ -34,6 +39,15 @@ export async function explainSkippedPrediction(
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, error: "Sign in to explain a skipped prediction." };
+  }
+
+  const cooldownError = checkOpenAiActionCooldown(
+    user.id,
+    `skip-explain:${id}`,
+    OPENAI_COOLDOWN_MS.skipExplain,
+  );
+  if (cooldownError) {
+    return { ok: false, error: cooldownError };
   }
 
   const { data: predictionRow, error: predictionError } = await supabase
@@ -66,7 +80,20 @@ export async function explainSkippedPrediction(
     return { ok: false, error: settingsError?.message ?? "Settings not found." };
   }
 
-  const packet = buildSkipExplainPacket(prediction, settingsRow as Settings);
+  const settings = normalizeSettings(settingsRow as SettingsRow);
+  if (!settings) {
+    return { ok: false, error: "Settings not found." };
+  }
+
+  let packet;
+  try {
+    packet = buildSkipExplainPacket(prediction, settings);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not build explanation.",
+    };
+  }
 
   try {
     const result = await generateSkipExplanation(packet);
