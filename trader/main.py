@@ -82,7 +82,6 @@ from runtime.timing import compute_loop_sleep_sec, should_refresh
 logger = logging.getLogger(__name__)
 
 _loop_runtime: Optional[TraderRuntimeState] = None
-_PREDICTION_BACKFILL_INTERVAL_SEC = 60.0
 _CLOSED_MARKET_LOG_INTERVAL_SEC = 300.0
 _MARKET_DATA_WARN_INTERVAL_SEC = 300.0
 _SHUTDOWN_SLEEP_CHUNK_SEC = 0.5
@@ -353,11 +352,6 @@ def run() -> int:
     configure_telegram(settings.telegram_bot_token, settings.telegram_chat_id)
     if settings.telegram_bot_token.strip() and settings.telegram_chat_id.strip():
         logger.info("Telegram trade alerts enabled")
-    if not settings.forward_return_backfill_enabled:
-        logger.info(
-            "15m forward-return backfill disabled (calibration analytics only)"
-        )
-
     db: Optional[SupabaseRepository] = None
     try:
         db = SupabaseRepository(settings.supabase_url, settings.supabase_service_role_key)
@@ -1142,14 +1136,6 @@ def run() -> int:
             if db and prediction_rows:
                 db.insert_predictions_batch(prediction_rows)
                 logger.info("Stored %s prediction(s)", len(prediction_rows))
-
-            if db and settings.forward_return_backfill_enabled:
-                backfill_now = time.monotonic()
-                if (
-                    backfill_now - runtime.last_prediction_backfill_mono
-                ) >= _PREDICTION_BACKFILL_INTERVAL_SEC:
-                    runtime.last_prediction_backfill_mono = backfill_now
-                    db.backfill_prediction_forward_returns(limit=400)
 
             if risk_manager and db:
                 closed_profit_take_sim = risk_manager.check_profit_take_exits(

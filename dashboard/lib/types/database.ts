@@ -123,10 +123,6 @@ export type Prediction = {
   trade_created: boolean;
   trade_skip_reason?: string | null;
   market_snapshot?: MarketSnapshot | null;
-  return_5m_pct?: number | null;
-  return_15m_pct?: number | null;
-  return_30m_pct?: number | null;
-  forward_returns_checked_at?: string | null;
   created_at: string;
 };
 

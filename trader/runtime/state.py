@@ -17,5 +17,4 @@ class TraderRuntimeState:
     ibkr_entry_blocked: Set[str] = field(default_factory=set)
     eod_sim_last_attempt_mono: float = 0.0
     eod_ibkr_last_attempt_mono: Dict[str, float] = field(default_factory=dict)
-    last_prediction_backfill_mono: float = 0.0
     last_trader_status_log_mono: float = 0.0

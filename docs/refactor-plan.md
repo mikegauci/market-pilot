@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Baseline revision | `f0d1349` |
-| Scope | `trader/` (+ small dashboard calibration fetch in `7edd594`) |
+| Scope | `trader/` |
 | Latest pytest | 208 passed (`.venv` Python 3.9.6) |
 | Updated | 2026-10-01 |
 
@@ -11,7 +11,7 @@
 
 | ID | Status | Notes |
 | --- | --- | --- |
-| A1 Forward-return backfill | done | Timer backfill, bar intervals, `forward_returns_checked_at` |
+| A1 Forward-return backfill | removed | Dropped 2026-10-05 (Jev calibration feature); DB via MCP `remove_jev_calibration` |
 | A2 Trade row hydration | done | `_trade_from_row` commission + `ibkr_account_id` |
 | A3 Account-scoped daily PnL | done | `daily_pnl_account_id` through close paths |
 

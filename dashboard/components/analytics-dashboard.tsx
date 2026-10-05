@@ -13,21 +13,17 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { JevCalibrationCard } from "@/components/jev-calibration-card";
 import { Card, CardTitle } from "@/components/ui/card";
 import {
   fetchClosedTrades,
   fetchPortfolioHistory,
-  fetchSettings,
 } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import {
   ANALYTICS_PAGE_POLL_MS,
   ANALYTICS_PORTFOLIO_HISTORY_LIMIT,
 } from "@/lib/analytics-data";
-import { LIVE_SETTINGS_POLL_MS } from "@/lib/live-data-config";
 import { perBarTooltipProps, renderPnlActiveBar } from "@/lib/recharts-bar-interaction";
-import { confidencePercentFromDecimal } from "@/lib/settings-display";
 import { buildEquityReconciliation } from "@/lib/equity-reconciliation";
 import {
   buildDailyEquitySeries,
@@ -42,14 +38,13 @@ import {
   filterTradesByRange,
   pnlBySymbol,
 } from "@/lib/trade-analytics";
-import type { PortfolioSnapshot, Settings, Trade } from "@/lib/types/database";
+import type { PortfolioSnapshot, Trade } from "@/lib/types/database";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 
 type Props = {
   portfolioHistory: PortfolioSnapshot[];
   closedTrades: Trade[];
   currency: string;
-  settings: Settings | null;
 };
 
 const RANGE_OPTIONS: { value: PortfolioRange; label: string }[] = [
@@ -114,7 +109,6 @@ export function AnalyticsDashboard({
   portfolioHistory,
   closedTrades,
   currency,
-  settings,
 }: Props) {
   const [range, setRange] = useState<PortfolioRange>("1d");
 
@@ -123,7 +117,6 @@ export function AnalyticsDashboard({
     [],
   );
   const loadTrades = useCallback(() => fetchClosedTrades(), []);
-  const loadSettings = useCallback(() => fetchSettings(), []);
 
   const liveHistory = useLiveQuery(
     portfolioHistory,
@@ -132,17 +125,6 @@ export function AnalyticsDashboard({
     ANALYTICS_PAGE_POLL_MS,
   );
   const liveTrades = useLiveQuery(closedTrades, loadTrades, ["trades"], ANALYTICS_PAGE_POLL_MS);
-  const liveSettings = useLiveQuery(
-    settings,
-    loadSettings,
-    ["settings"],
-    LIVE_SETTINGS_POLL_MS,
-    { keepPreviousOnNull: true },
-  );
-
-  const minJevConfidencePct = confidencePercentFromDecimal(
-    liveSettings?.minimum_jev_confidence ?? 0.85,
-  );
 
   const filteredHistory = useMemo(
     () => filterPortfolioByRange(liveHistory, range),
@@ -523,8 +505,6 @@ export function AnalyticsDashboard({
           )}
         </Card>
       </div>
-
-      <JevCalibrationCard minJevConfidencePct={minJevConfidencePct} />
     </div>
   );
 }

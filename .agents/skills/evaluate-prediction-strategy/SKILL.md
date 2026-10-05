@@ -1,6 +1,6 @@
 ---
 name: evaluate-prediction-strategy
-description: Compares market-pilot Jev predictions to trades over the last 24 hours using min confidence, BUY–HOLD/BUY–SELL margins, and exit thresholds to judge whether the entry/exit strategy is working. Use when the user asks if predictions vs trades are a good strategy, calibration sanity check, whether min threshold is too high/low, or hold/sell gates are blocking good or bad trades. Read-only Supabase MCP. Never restart the trader.
+description: Compares market-pilot Jev predictions to trades over the last 24 hours using min confidence, BUY–HOLD/BUY–SELL margins, and exit thresholds to judge whether the entry/exit strategy is working. Use when the user asks if predictions vs trades are a good strategy, whether min threshold is too high/low, or hold/sell gates are blocking good or bad trades. Read-only Supabase MCP. Never restart the trader.
 ---
 
 # Evaluate prediction vs trade strategy (24h)
@@ -15,7 +15,7 @@ Not the same as **review-trading-session** (pipeline health) or **diagnose-trade
 
 | Table | Use | Do not use |
 |-------|-----|------------|
-| `predictions` | `buy_probability`, `hold_probability`, `sell_probability`, `timestamp`, `created_at`, `trade_created`, `trade_skip_reason`, `return_15m_pct`, `price` | `buy`, `hold`, `sell` |
+| `predictions` | `buy_probability`, `hold_probability`, `sell_probability`, `timestamp`, `created_at`, `trade_created`, `trade_skip_reason`, `price` | `buy`, `hold`, `sell` |
 | `trades` | `entry_time`, `exit_time`, `status`, `net_pnl`, `exit_reason`, `symbol`, `entry_price`, `exit_price` | `opened_at`, `closed_at` |
 | `settings` | `minimum_jev_confidence`, `signal_record_threshold`, `jev_sell_exit_threshold`, `min_hold_minutes`, … | — |
 
@@ -79,8 +79,7 @@ Volume and trade linkage:
 ```sql
 SELECT
   count(*) AS predictions,
-  count(*) FILTER (WHERE trade_created) AS trade_created_count,
-  count(*) FILTER (WHERE return_15m_pct IS NOT NULL) AS matured_forward_returns
+  count(*) FILTER (WHERE trade_created) AS trade_created_count
 FROM predictions
 WHERE coalesce(timestamp, created_at) >= now() - interval '24 hours';
 ```
@@ -116,7 +115,6 @@ p AS (
     sell_probability,
     trade_created,
     trade_skip_reason,
-    return_15m_pct,
     coalesce(timestamp, created_at) AS t
   FROM predictions
   WHERE coalesce(timestamp, created_at) >= now() - interval '24 hours'
@@ -153,39 +151,14 @@ ORDER BY buy_probability DESC
 LIMIT 25;
 ```
 
-## Step 5 — Did high-confidence BUY predict 15m moves?
-
-Forward returns are **analytics only** (backfill in trader; dashboard calibration). They do not change live Jev calls.
-
-For the 24h window, among rows with `return_15m_pct` set:
-
-```sql
-WITH s AS (SELECT minimum_jev_confidence FROM settings WHERE id = 1)
-SELECT
-  count(*) AS n,
-  avg(return_15m_pct) AS avg_return_15m,
-  avg(buy_probability) AS avg_buy
-FROM predictions p
-CROSS JOIN s
-WHERE coalesce(p.timestamp, p.created_at) >= now() - interval '24 hours'
-  AND p.return_15m_pct IS NOT NULL
-  AND p.buy_probability >= s.minimum_jev_confidence;
-```
-
-Compare to BUY at or above threshold but **no trade** (same filter + `trade_created = false`) and to all matured rows below threshold. Optional: `SELECT * FROM get_jev_calibration_buckets(1)` for bucket view (defaults to ~1 day of matured rows in RPC window; dashboard uses 14 days — mention which you used).
-
-**Good calibration (sanity check):** buckets at/above min confidence show **higher average `return_15m_pct`** than lower buckets, and ELIGIBLE-tier rows that became trades are not systematically worse than ELIGIBLE rows that were skipped for non-Jev reasons.
-
-If almost no `return_15m_pct` in 24h, say predictions are still maturing (~15m after signal) and widen lookback to 48–72h for forward-return stats only (keep trades at 24h unless the user asks otherwise).
-
-## Step 6 — Match trades to predictions (by symbol + time)
+## Step 5 — Match trades to predictions (by symbol + time)
 
 There is no `prediction_id` on `trades`. For each closed trade in 24h, fetch the prediction closest to `entry_time`:
 
 ```sql
 SELECT t.symbol, t.entry_time, t.net_pnl, t.exit_reason,
        p.buy_probability, p.hold_probability, p.sell_probability,
-       p.trade_skip_reason, p.return_15m_pct,
+       p.trade_skip_reason,
        abs(extract(epoch FROM (p.timestamp - t.entry_time))) AS sec_from_entry
 FROM trades t
 LEFT JOIN LATERAL (
@@ -202,23 +175,22 @@ WHERE t.entry_time >= now() - interval '24 hours'
 ORDER BY t.entry_time DESC;
 ```
 
-Check: entry rows should look ELIGIBLE (high BUY, BUY-dominant); if `return_15m_pct` is negative on many entries while skips had better forward returns, min threshold or filters may be misaligned.
+Check: entry rows should look ELIGIBLE (high BUY, BUY-dominant). Compare `net_pnl` and skip reasons on near-miss symbols when judging threshold and filters.
 
 For exits driven by Jev SELL, scan predictions while trade was open for SELL-dominant rows above `jev_sell_exit_threshold`.
 
-## Step 7 — Verdict rubric
+## Step 6 — Verdict rubric
 
 State one of **looks aligned**, **mixed**, or **misaligned**, with evidence:
 
 | Evidence | Interpretation |
 |----------|----------------|
-| Closed trades net positive; ELIGIBLE matured returns ≥ below-threshold returns | Strategy gates match signal quality for the day |
+| Closed trades net positive; ELIGIBLE tier mostly became trades or skipped for non-Jev reasons | Strategy gates match signal quality for the day |
 | Many ELIGIBLE rows, few trades, skips are filters/confirmation/IBKR | Jev is fine; execution or filter stack is the bottleneck |
 | Dominant `hold_dominant` / `sell_dominant`; few BUY ≥ threshold | Lowering min confidence alone won’t help much |
 | High BUY but `buy_hold_margin` / `buy_sell_margin` skips | Margins may be too strict vs model spread |
-| Trades underperform ELIGIBLE non-traded forward returns | Entries may be worse than passively skipped names — review confirmation and filters |
-| `below_trade_threshold` dominates but 70–80% buckets beat 80–90% | `minimum_jev_confidence` may be too high |
-| Calibration flat or inverted above threshold | Jev BUY scores not sorting 15m returns — tuning threshold is secondary |
+| Many ELIGIBLE rows skipped with filter/confirmation reasons while traded names lose | Filters or confirmation may be too loose on entries that pass |
+| `below_trade_threshold` dominates with strong near-miss BUY scores | `minimum_jev_confidence` or margins may be too high |
 
 Recommend at most **three** concrete knobs (e.g. min confidence, margins, confirmation cycles, `jev_sell_exit_threshold`) only when counts support it. Do not change settings or code unless the user asks.
 
@@ -228,12 +200,10 @@ Recommend at most **three** concrete knobs (e.g. min confidence, margins, confir
 2. **24h trades** — count, P&amp;L, win rate, exits.
 3. **24h predictions** — volume, traded vs skipped, top skip reasons.
 4. **Jev tier vs fills** — eligible_by_jev_tier vs `trade_created`, notable near-misses.
-5. **Forward returns** — at/above threshold vs below (note maturation if sparse).
-6. **Per-trade spot checks** — 2–5 symbols: entry probabilities vs outcome.
-7. **Verdict** — aligned / mixed / misaligned + up to 3 evidence-backed suggestions.
+5. **Per-trade spot checks** — 2–5 symbols: entry probabilities vs outcome.
+6. **Verdict** — aligned / mixed / misaligned + up to 3 evidence-backed suggestions.
 
 ## Code references
 
 - Tier math: `trader/strategy/signals.py`
 - Live eval loop: `trader/runtime/entry_eval.py`
-- Dashboard calibration mirror: `dashboard/lib/jev-calibration.ts`, RPC `get_jev_calibration_buckets`

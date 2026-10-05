@@ -30,7 +30,7 @@ Open [http://localhost:3000](http://localhost:3000) and sign in.
 - **`lib/queries.ts`** — Server Components (RSC initial load via `createClient()` from `@/lib/supabase/server`).
 - **`lib/data-client.ts`** — Client Components (`"use client"`) polling and live refresh via the browser Supabase client.
 
-Analytics uses SSR for the first paint, then **slow** client refresh (120s) for equity/trades; Jev calibration is **on-demand** via RPC (`get_jev_calibration_buckets`). Skip-reason stats on Predictions load once per visit (48h window). See `lib/analytics-data.ts`.
+Analytics uses SSR for the first paint, then **slow** client refresh (120s) for equity/trades. Skip-reason stats on Predictions load once per visit (48h window). See `lib/analytics-data.ts`.
 
 Hosted Supabase Free tier: see [docs/supabase-quota.md](../docs/supabase-quota.md) for egress/log limits and `lib/live-data-config.ts` polling defaults.
 
@@ -43,7 +43,7 @@ Hosted Supabase Free tier: see [docs/supabase-quota.md](../docs/supabase-quota.m
 | `/trades` | Full trade history (open / closed) with expandable charts |
 | `/strategy` | Strategy guide — indicators, filters, and decision flow |
 | `/settings` | Risk and strategy settings |
-| `/analytics` | Equity, P&L, optional Jev calibration, day-by-day AI session briefs (from 2 Oct 2026) |
+| `/analytics` | Equity, P&L, day-by-day AI session briefs (from 2 Oct 2026) |
 
 **Confirmation cycles / seconds** (under Jev & signals) control how long an eligible BUY must persist before entry. When Supabase settings are available, these override `STRATEGY_CONFIRMATION_*` in `trader/.env`; the trader reloads them about every 15s without a restart.
 

@@ -1,16 +1,7 @@
 import {
-  ANALYTICS_CALIBRATION_COLUMNS,
-  ANALYTICS_CALIBRATION_LIMIT,
-  ANALYTICS_CALIBRATION_LOOKBACK_DAYS,
   ANALYTICS_SKIP_LOOKBACK_HOURS,
   ANALYTICS_SKIP_PREDICTION_COLUMNS,
   ANALYTICS_SKIP_REASON_LIMIT,
-} from "@/lib/analytics-data";
-import {
-  CalibrationFetchError,
-  mapCalibrationRpcRows,
-} from "@/lib/jev-calibration-rpc";
-import {
   LATEST_PREDICTIONS_PER_SYMBOL_LIMIT,
 } from "@/lib/analytics-data";
 import {
@@ -86,39 +77,6 @@ export async function fetchPredictionWithSnapshot(
     return null;
   }
   return (data ?? null) as Prediction | null;
-}
-
-/** Aggregated calibration buckets (~5 rows) — preferred over row downloads. */
-export async function fetchJevCalibrationBuckets(
-  lookbackDays = ANALYTICS_CALIBRATION_LOOKBACK_DAYS,
-) {
-  const supabase = createClient();
-  const { data, error } = await supabase.rpc("get_jev_calibration_buckets", {
-    lookback_days: lookbackDays,
-  });
-  if (error) {
-    logFetchError("predictions_calibration", error.message);
-    throw new CalibrationFetchError(error.message);
-  }
-  return mapCalibrationRpcRows(data);
-}
-
-/** Matured rows for Jev calibration — not the same as latest predictions feed. */
-export async function fetchPredictionsForCalibration(
-  limit = ANALYTICS_CALIBRATION_LIMIT,
-): Promise<Prediction[]> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("predictions")
-    .select(ANALYTICS_CALIBRATION_COLUMNS)
-    .not("return_15m_pct", "is", null)
-    .order("timestamp", { ascending: false })
-    .limit(limit);
-  if (error) {
-    logFetchError("predictions_calibration", error.message);
-    return [];
-  }
-  return (data ?? []) as Prediction[];
 }
 
 export async function fetchMarketNews(limit = 100): Promise<MarketNewsRow[]> {

@@ -8,16 +8,14 @@ import {
   getSessionBriefHistory,
   getSessionMarketConditionMix,
   getPortfolioHistory,
-  getSettings,
 } from "@/lib/queries";
 
 export default async function AnalyticsPage() {
-  const [portfolioHistory, closedTrades, portfolio, settings, sessionBriefLoad, conditionMix] =
+  const [portfolioHistory, closedTrades, portfolio, sessionBriefLoad, conditionMix] =
     await Promise.all([
       getPortfolioHistory(ANALYTICS_PORTFOLIO_HISTORY_LIMIT),
       getClosedTrades(),
       getLatestPortfolio(),
-      getSettings(),
       getSessionBriefHistory(),
       getSessionMarketConditionMix(),
     ]);
@@ -30,14 +28,13 @@ export default async function AnalyticsPage() {
         <h2 className="text-xl font-semibold sm:text-2xl">Analytics</h2>
         <p className="text-sm text-zinc-500">
           Daily equity, P&L, and trade performance refresh about every 2 minutes while this tab is
-          open. Jev calibration loads only when you expand it.
+          open.
         </p>
       </header>
       <AnalyticsDashboard
         portfolioHistory={portfolioHistory}
         closedTrades={closedTrades}
         currency={currency}
-        settings={settings}
       />
       <MorningBriefCard />
       <SessionBriefCard

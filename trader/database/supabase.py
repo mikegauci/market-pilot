@@ -6,7 +6,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-from typing import Callable, Dict, List, Optional, Sequence, TypeVar
+from typing import Callable, Dict, List, Optional, TypeVar
 
 import httpx
 from supabase import Client, ClientOptions, create_client
@@ -41,11 +41,6 @@ from news.market_news import dedupe_market_news_rows
 
 logger = logging.getLogger(__name__)
 
-
-_INTRADAY_BAR_DURATION = timedelta(minutes=5)
-# When the target falls in a gap (halt/overnight), allow the next bar if it opens soon after.
-_FORWARD_RETURN_BAR_SLOP = _INTRADAY_BAR_DURATION
-_FORWARD_RETURN_UPDATE_CHUNK = 100
 
 # Failure backoff so a bad Finnhub/DB cycle does not wait the full refresh interval.
 GENERAL_NEWS_FAILURE_BACKOFF_SEC = 60.0
@@ -142,58 +137,6 @@ def _parse_timestamp(value: object) -> datetime:
     text = _normalize_iso_timestamp(str(value))
     parsed = datetime.fromisoformat(text)
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-
-
-def _bar_close_at_offset(
-    bars: Sequence[Bar],
-    entry_ts: datetime,
-    minutes_ahead: int,
-) -> Optional[float]:
-    target = entry_ts + timedelta(minutes=minutes_ahead)
-    for bar in bars:
-        bar_ts = bar.ts
-        if bar_ts.tzinfo is None:
-            bar_ts = bar_ts.replace(tzinfo=timezone.utc)
-        bar_end = bar_ts + _INTRADAY_BAR_DURATION
-        if bar_ts <= target < bar_end:
-            return bar.close
-        if bar_ts > target:
-            if bar_ts - target <= _FORWARD_RETURN_BAR_SLOP:
-                return bar.close
-            return None
-    return None
-
-
-def _forward_return_payload(
-    *,
-    row_id: str,
-    bars: Sequence[Bar],
-    entry_ts: datetime,
-    entry_price: float,
-    checked_at: datetime,
-) -> dict:
-    def pct(minutes_ahead: int) -> Optional[float]:
-        future = _bar_close_at_offset(bars, entry_ts, minutes_ahead)
-        if future is None:
-            return None
-        return round((future - entry_price) / entry_price * 100, 4)
-
-    payload = {
-        "id": row_id,
-        "return_5m_pct": pct(5),
-        "return_15m_pct": pct(15),
-        "return_30m_pct": pct(30),
-        "forward_returns_checked_at": checked_at.isoformat(),
-    }
-    if all(
-        payload[key] is None
-        for key in ("return_5m_pct", "return_15m_pct", "return_30m_pct")
-    ):
-        return {
-            "id": row_id,
-            "forward_returns_checked_at": payload["forward_returns_checked_at"],
-        }
-    return payload
 
 
 def _trade_from_row(row: dict) -> TradeRecord:
@@ -1262,145 +1205,6 @@ class SupabaseRepository:
         if not rows:
             return
         self.client.table("predictions").insert(rows).execute()
-
-    @_db_synchronized
-    def count_predictions_with_return_15m(self) -> int:
-        try:
-            resp = (
-                self.client.table("predictions")
-                .select("id", count="exact")
-                .not_.is_("return_15m_pct", "null")
-                .limit(0)
-                .execute()
-            )
-            return int(resp.count or 0)
-        except Exception as exc:
-            logger.debug("Forward-return stored count skipped: %s", exc)
-            return 0
-
-    def _flush_forward_return_updates(self, updates: List[dict]) -> None:
-        if not updates:
-            return
-        chunk = _FORWARD_RETURN_UPDATE_CHUNK
-        for start in range(0, len(updates), chunk):
-            batch = updates[start : start + chunk]
-            try:
-                self.client.rpc(
-                    "patch_prediction_forward_returns",
-                    {"p_rows": batch},
-                ).execute()
-            except Exception as exc:
-                logger.warning(
-                    "Forward-return batch RPC failed (%s rows), falling back to row updates: %s",
-                    len(batch),
-                    exc,
-                )
-                for item in batch:
-                    row_id = item["id"]
-                    payload = {k: v for k, v in item.items() if k != "id"}
-                    self.client.table("predictions").update(payload).eq(
-                        "id", row_id
-                    ).execute()
-
-    def _intraday_bars_for_backfill_batch(
-        self,
-        rows: List[dict],
-        *,
-        bar_size: str,
-    ) -> Dict[str, List[Bar]]:
-        bounds: Dict[str, tuple[datetime, datetime]] = {}
-        for row in rows:
-            ts_raw = row.get("timestamp")
-            symbol = str(row.get("symbol", "")).upper()
-            if not symbol or not ts_raw:
-                continue
-            entry_ts = _parse_timestamp(ts_raw)
-            latest = entry_ts + timedelta(minutes=30) + _FORWARD_RETURN_BAR_SLOP
-            if symbol in bounds:
-                lo, hi = bounds[symbol]
-                bounds[symbol] = (min(lo, entry_ts), max(hi, latest))
-            else:
-                bounds[symbol] = (entry_ts, latest)
-
-        bars_by_symbol: Dict[str, List[Bar]] = {}
-        for symbol, (since, until) in bounds.items():
-            bars_by_symbol[symbol] = sorted(
-                self._query_bars(symbol, bar_size, since=since, until=until),
-                key=lambda bar: bar.ts,
-            )
-        return bars_by_symbol
-
-    @_db_synchronized
-    def backfill_prediction_forward_returns(self, *, limit: int = 400) -> int:
-        """Fill forward returns on mature predictions using cached 5-minute bars."""
-        from market.bars import BAR_SIZE_INTRADAY
-
-        now = datetime.now(timezone.utc)
-        mature_cutoff = (now - timedelta(minutes=15)).isoformat()
-        try:
-            pending = (
-                self.client.table("predictions")
-                .select("id, symbol, timestamp, price, return_15m_pct")
-                .is_("return_15m_pct", "null")
-                .is_("forward_returns_checked_at", "null")
-                .lte("timestamp", mature_cutoff)
-                .order("timestamp")
-                .limit(limit)
-                .execute()
-            )
-        except Exception as exc:
-            logger.debug("Forward-return backfill skipped: %s", exc)
-            return 0
-
-        rows = pending.data or []
-        if not rows:
-            return 0
-
-        bars_by_symbol = self._intraday_bars_for_backfill_batch(
-            rows, bar_size=BAR_SIZE_INTRADAY
-        )
-
-        updates: List[dict] = []
-        for row in rows:
-            ts_raw = row.get("timestamp")
-            symbol = str(row.get("symbol", "")).upper()
-            entry_price = float(row.get("price") or 0)
-            row_id = str(row.get("id", ""))
-            if not symbol or entry_price <= 0 or not ts_raw or not row_id:
-                continue
-            entry_ts = _parse_timestamp(ts_raw)
-
-            bars = bars_by_symbol.get(symbol) or []
-            if not bars:
-                updates.append(
-                    {"id": row_id, "forward_returns_checked_at": now.isoformat()}
-                )
-                continue
-
-            updates.append(
-                _forward_return_payload(
-                    row_id=row_id,
-                    bars=bars,
-                    entry_ts=entry_ts,
-                    entry_price=entry_price,
-                    checked_at=now,
-                )
-            )
-
-        if not updates:
-            return 0
-
-        self._flush_forward_return_updates(updates)
-        updated = len(updates)
-
-        stored = self.count_predictions_with_return_15m()
-        logger.info(
-            "Forward-return backfill: %s predictions with 15m return stored "
-            "(%s processed this batch)",
-            stored,
-            updated,
-        )
-        return updated
 
     @_db_synchronized
     def upsert_market_news(self, rows: List[dict], *, keep: int = 100) -> int:

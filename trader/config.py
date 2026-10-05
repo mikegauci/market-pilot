@@ -100,7 +100,6 @@ class Settings(BaseSettings):
     live_bar_flush_interval_sec: float = 60.0
     bar_daily_duration: str = "1 W"
     bar_intraday_duration: str = "3 D"
-    forward_return_backfill_enabled: bool = True
 
     # Optional Telegram alerts on trade open/close. Blank disables them.
     telegram_bot_token: str = ""
@@ -169,13 +168,6 @@ class Settings(BaseSettings):
     @field_validator("market_snapshots_enabled", mode="before")
     @classmethod
     def parse_market_snapshots_enabled(cls, value: object) -> bool:
-        if isinstance(value, bool):
-            return value
-        return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-    @field_validator("forward_return_backfill_enabled", mode="before")
-    @classmethod
-    def parse_forward_return_backfill_enabled(cls, value: object) -> bool:
         if isinstance(value, bool):
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "on"}

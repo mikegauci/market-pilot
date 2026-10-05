@@ -1,12 +1,10 @@
 import {
-  ANALYTICS_CALIBRATION_LOOKBACK_DAYS,
   ANALYTICS_PORTFOLIO_HISTORY_LIMIT,
   ANALYTICS_SKIP_LOOKBACK_HOURS,
   ANALYTICS_SKIP_PREDICTION_COLUMNS,
   ANALYTICS_SKIP_REASON_LIMIT,
 } from "@/lib/analytics-data";
 import { LATEST_PREDICTIONS_PER_SYMBOL_LIMIT } from "@/lib/analytics-data";
-import { mapCalibrationRpcRows } from "@/lib/jev-calibration-rpc";
 import { mapLatestPredictionRpcRows } from "@/lib/prediction-feed-normalize";
 import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
 import { filterTradesByActiveIbkrAccount } from "@/lib/ibkr-trade-scope";
@@ -196,19 +194,6 @@ export async function getLatestSessionBriefForUser(): Promise<SessionBriefRow | 
     .maybeSingle();
   if (error || !data) return null;
   return data as SessionBriefRow;
-}
-
-export async function getJevCalibrationBuckets(
-  lookbackDays = ANALYTICS_CALIBRATION_LOOKBACK_DAYS,
-) {
-  const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_jev_calibration_buckets", {
-    lookback_days: lookbackDays,
-  });
-  if (error) {
-    return { buckets: [], error: error.message };
-  }
-  return { buckets: mapCalibrationRpcRows(data), error: null };
 }
 
 export async function getLatestPredictionsBySymbol(

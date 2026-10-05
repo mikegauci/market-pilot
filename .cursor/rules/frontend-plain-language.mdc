@@ -14,8 +14,8 @@ Assume the reader is new to trading bots and Jev. Avoid jargon unless you define
 
 - Lead with **what it does for them**, not implementation (no PostgREST, backfill timers, etc. unless they ask).
 - Separate **live behavior** (“what the bot uses now”) from **analytics** (“what happened later”).
-- Use short paragraphs and tables for compare/contrast (e.g. calibration vs min confidence).
-- Say what the feature does **not** do (e.g. calibration does not retrain Jev or change trades by itself).
+- Use short paragraphs and tables for compare/contrast when helpful.
+- Say what a feature does **not** do when users might assume it affects live trading.
 
 ## When writing frontend descriptions
 
@@ -26,7 +26,7 @@ Match existing patterns in `dashboard/components/settings-form.tsx`:
 
 Rules for new copy:
 
-- Prefer **“the bot”** / **“Jev”** over internal names (`return_15m_pct`, `forward_returns_checked_at`).
+- Prefer **“the bot”** / **“Jev”** over internal column or env names unless debugging.
 - Use **percent** for probabilities users see in UI (85%), not decimals (0.85), unless the input is explicitly a decimal field.
 - Chart/helper text under titles: `text-xs text-zinc-500`, one idea per sentence, optional second sentence for “what to do if empty/wrong.”
 - Empty states: say **why** (e.g. “waiting for older predictions to mature”) and **what will appear**, not “no data.”
@@ -35,11 +35,10 @@ Rules for new copy:
 ## Trading terms (use consistently)
 
 - **Min Jev confidence** — lowest BUY % required before the bot may open a trade.
-- **Calibration** — after the fact: did higher BUY scores match better 15m price moves?
 - **Watchlist** — symbols Jev monitors; different threshold than trade entry (`watchlist_min_buy`).
 
 ## Do not
 
 - Wall of acronyms without definition.
 - Duplicate long paragraphs in both short and full description unless the full one adds real detail.
-- Imply backfilled returns feed back into live Jev API calls (they do not in this codebase).
+- Imply analytics or dashboard charts change live Jev calls or bot entries unless that is actually true.
