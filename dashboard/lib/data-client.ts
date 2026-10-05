@@ -67,7 +67,7 @@ export async function fetchPredictions(limit = 50, symbol?: string): Promise<Pre
   const { data, error } = await query;
   if (error) {
     logFetchError("predictions", error.message);
-    return [];
+    throw new Error(error.message);
   }
   return normalizePredictionFeedRows(data ?? []);
 }
@@ -337,7 +337,7 @@ export async function fetchRecentPredictions(
     .limit(limit);
   if (error) {
     logFetchError("predictions", error.message);
-    return [];
+    throw new Error(error.message);
   }
   return normalizePredictionFeedRows(data ?? []);
 }
@@ -351,7 +351,7 @@ export async function fetchLatestPredictionsBySymbol(
   });
   if (error) {
     logFetchError("predictions", error.message);
-    return [];
+    throw new Error(error.message);
   }
   return mapLatestPredictionRpcRows(data);
 }

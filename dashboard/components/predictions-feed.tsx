@@ -153,7 +153,9 @@ export function PredictionsFeed({
   const [loadingSnapshotId, setLoadingSnapshotId] = useState<string | null>(null);
 
   const loadPredictions = useCallback(() => fetchPredictions(limit), [limit]);
-  const livePredictions = useLiveQuery(predictions, loadPredictions, ["predictions"]);
+  const livePredictions = useLiveQuery(predictions, loadPredictions, ["predictions"], undefined, {
+    keepPreviousOnEmpty: true,
+  });
 
   const expandedSeed = initialExpandedId ?? null;
   if (prevExpandedSeed !== expandedSeed) {

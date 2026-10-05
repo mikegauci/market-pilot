@@ -28,7 +28,9 @@ type ProviderProps = {
 /** One poll for latest-per-symbol predictions (Overview + Strategy share this). */
 export function LatestPredictionsProvider({ initial, children }: ProviderProps) {
   const load = useCallback(() => fetchLatestPredictionsBySymbol(), []);
-  const predictions = useLiveQuery(initial, load, ["predictions"], LIVE_DATA_POLL_MS);
+  const predictions = useLiveQuery(initial, load, ["predictions"], LIVE_DATA_POLL_MS, {
+    keepPreviousOnEmpty: true,
+  });
 
   const value = useMemo(() => ({ predictions }), [predictions]);
 

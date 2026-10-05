@@ -29,32 +29,68 @@ export function initialDataChanged<T>(prev: T, next: T): boolean {
   return true;
 }
 
+/** Skip replacing good poll data with an empty list (transient auth/network failures). */
+export function shouldApplyLiveQueryUpdate<T>(
+  current: T,
+  next: T,
+  options: { keepPreviousOnNull?: boolean; keepPreviousOnEmpty?: boolean },
+): boolean {
+  if (options.keepPreviousOnNull && next === null) {
+    return false;
+  }
+  if (
+    options.keepPreviousOnEmpty &&
+    Array.isArray(current) &&
+    Array.isArray(next) &&
+    current.length > 0 &&
+    next.length === 0
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function useLiveQuery<T>(
   initial: T,
   fetchFn: () => Promise<T>,
   tables: string[],
   pollIntervalMs = LIVE_DATA_POLL_MS,
-  options?: { keepPreviousOnNull?: boolean; resetKey?: string | number | null },
+  options?: {
+    keepPreviousOnNull?: boolean;
+    keepPreviousOnEmpty?: boolean;
+    resetKey?: string | number | null;
+  },
 ): T {
   const [data, setData] = useState(initial);
   const syncedInitialRef = useRef(initial);
   const keepPreviousOnNull = options?.keepPreviousOnNull ?? false;
+  const keepPreviousOnEmpty = options?.keepPreviousOnEmpty ?? false;
   const resetKey = options?.resetKey ?? null;
   const resetKeyRef = useRef(resetKey);
 
   const refresh = useCallback(async () => {
     try {
       const next = await fetchFn();
-      if (keepPreviousOnNull && next === null && resetKeyRef.current === resetKey) {
+      if (resetKeyRef.current !== resetKey) {
         return;
       }
-      setData(next);
+      setData((current) => {
+        if (
+          !shouldApplyLiveQueryUpdate(current, next, {
+            keepPreviousOnNull,
+            keepPreviousOnEmpty,
+          })
+        ) {
+          return current;
+        }
+        return next;
+      });
     } catch (err) {
       if (process.env.NODE_ENV !== "production") {
         console.warn("Live data refresh failed:", err);
       }
     }
-  }, [fetchFn, keepPreviousOnNull, resetKey]);
+  }, [fetchFn, keepPreviousOnNull, keepPreviousOnEmpty, resetKey]);
 
   useEffect(() => {
     if (resetKeyRef.current === resetKey) {

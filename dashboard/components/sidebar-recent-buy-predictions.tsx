@@ -40,7 +40,9 @@ export function SidebarRecentBuyPredictions() {
     () => fetchRecentPredictions(WINDOW_MINUTES, ROW_LIMIT),
     [],
   );
-  const rows = useLiveQuery([] as Prediction[], load, ["predictions"]);
+  const rows = useLiveQuery([] as Prediction[], load, ["predictions"], undefined, {
+    keepPreviousOnEmpty: true,
+  });
 
   return (
     <div className="w-full rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">

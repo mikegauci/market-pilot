@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialDataChanged } from "@/lib/hooks/use-live-query";
+import { initialDataChanged, shouldApplyLiveQueryUpdate } from "@/lib/hooks/use-live-query";
 import { applyChartFetchResult } from "@/components/symbol-chart-panel";
 import type { SymbolBar } from "@/lib/types/database";
 
@@ -48,6 +48,29 @@ describe("initialDataChanged", () => {
     expect(initialDataChanged(1, 1)).toBe(false);
     expect(initialDataChanged(1, 2)).toBe(true);
     expect(initialDataChanged("a", "a")).toBe(false);
+  });
+});
+
+describe("shouldApplyLiveQueryUpdate", () => {
+  it("keeps prior rows when refresh returns an empty list", () => {
+    const current = [{ id: "1" }];
+    expect(
+      shouldApplyLiveQueryUpdate(current, [], { keepPreviousOnEmpty: true }),
+    ).toBe(false);
+  });
+
+  it("allows empty when there was no prior data", () => {
+    expect(shouldApplyLiveQueryUpdate([], [], { keepPreviousOnEmpty: true })).toBe(
+      true,
+    );
+  });
+
+  it("allows non-empty updates", () => {
+    const current = [{ id: "1" }];
+    const next = [{ id: "2" }];
+    expect(
+      shouldApplyLiveQueryUpdate(current, next, { keepPreviousOnEmpty: true }),
+    ).toBe(true);
   });
 });
 
