@@ -19,6 +19,7 @@ from broker.execution import (
     sync_ibkr_exits,
 )
 from broker.manual_close import process_manual_close_commands
+from broker.position_cover import process_position_cover_commands
 from broker.ibkr import IBKRClient, MARKET_DATA_COMPETING_SESSION_MSG
 from broker.reconcile import (
     nonzero_positions,
@@ -883,6 +884,16 @@ def run() -> int:
                         logger.info("IBKR market data mode restored: %s", recovered)
                         quotes = _get_quotes(settings, ibkr, mock, all_symbols)
                         quotes_by_symbol = {q.symbol: q for q in quotes}
+
+            if db:
+                if process_position_cover_commands(
+                    db,
+                    ibkr,
+                    execution_mode,
+                    quotes_by_symbol,
+                    fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                ):
+                    portfolio_dirty = True
 
             if risk_manager and db:
                 if process_manual_close_commands(

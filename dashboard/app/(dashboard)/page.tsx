@@ -6,6 +6,7 @@ import { PositionsGrid } from "@/components/positions-grid";
 import { TradesTable } from "@/components/trades-table";
 import { tradingDayStartUtc } from "@/lib/market-hours";
 import {
+  getActivePositionCommands,
   getActiveTradeCommands,
   getBotStatus,
   getLatestPortfolio,
@@ -25,6 +26,7 @@ export default async function OverviewPage() {
     positions,
     openTrades,
     tradeCommands,
+    positionCommands,
     trades,
     settings,
     predictions,
@@ -34,6 +36,7 @@ export default async function OverviewPage() {
     getPositions(),
     getOpenTrades(),
     getActiveTradeCommands(),
+    getActivePositionCommands(),
     getTradesForTradingDay(tradingDayStartIso),
     getSettings(),
     getLatestPredictionsBySymbol(),
@@ -60,6 +63,7 @@ export default async function OverviewPage() {
         positions={positions}
         openTrades={openTrades}
         tradeCommands={tradeCommands}
+        positionCommands={positionCommands}
         settings={settings}
         botStatus={
           botStatus ?? {

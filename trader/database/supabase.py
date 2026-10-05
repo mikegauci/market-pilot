@@ -1474,6 +1474,58 @@ class SupabaseRepository:
         ).eq("id", command_id).execute()
 
     @_db_synchronized
+    def reclaim_stale_position_commands(self, stale_after_sec: float = 120.0) -> int:
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(seconds=stale_after_sec)
+        ).isoformat()
+        result = (
+            self.client.table("position_commands")
+            .update({"status": "pending", "processed_at": None, "error": None})
+            .eq("status", "processing")
+            .lt("processed_at", cutoff)
+            .execute()
+        )
+        return len(result.data or [])
+
+    @_db_synchronized
+    def get_pending_position_commands(self) -> List[dict]:
+        result = (
+            self.client.table("position_commands")
+            .select("id, symbol, quantity, command, reason, requested_at")
+            .eq("status", "pending")
+            .order("requested_at")
+            .limit(10)
+            .execute()
+        )
+        return list(result.data or [])
+
+    @_db_synchronized
+    def claim_position_command(self, command_id: str) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        result = (
+            self.client.table("position_commands")
+            .update({"status": "processing", "processed_at": now})
+            .eq("id", command_id)
+            .eq("status", "pending")
+            .execute()
+        )
+        return bool(result.data)
+
+    @_db_synchronized
+    def complete_position_command(self, command_id: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("position_commands").update(
+            {"status": "completed", "processed_at": now, "error": None}
+        ).eq("id", command_id).execute()
+
+    @_db_synchronized
+    def fail_position_command(self, command_id: str, error: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("position_commands").update(
+            {"status": "failed", "processed_at": now, "error": error[:500]}
+        ).eq("id", command_id).execute()
+
+    @_db_synchronized
     def record_error(
         self,
         message: str,

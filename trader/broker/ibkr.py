@@ -1023,6 +1023,63 @@ class IBKRClient:
         return fill
 
     @_ibkr_synchronized
+    def cover_short_position(
+        self,
+        symbol: str,
+        quantity: float,
+        *,
+        fill_timeout_sec: float = 30.0,
+    ) -> OrderFill:
+        """Market-buy to cover a short position (untracked broker exposure)."""
+        if quantity < 1:
+            raise ValueError(f"Invalid cover quantity for {symbol}: {quantity}")
+
+        short_qty = 0.0
+        for position in self.get_positions():
+            if position.symbol == symbol and position.quantity < 0:
+                short_qty = abs(float(position.quantity))
+                break
+        buy_qty = min(int(quantity), int(short_qty))
+        if buy_qty < 1:
+            raise RuntimeError("no_short_position")
+
+        if buy_qty < int(quantity):
+            logger.warning(
+                "IBKR cover %s: capping buy from %s to %s (broker short)",
+                symbol,
+                int(quantity),
+                buy_qty,
+            )
+
+        account = self._resolve_account()
+        contract = self._ensure_contract(symbol)
+        buy = MarketOrder("BUY", buy_qty)
+        buy.account = account
+        buy.orderId = self.ib.client.getReqId()
+        buy.tif = "DAY"
+        buy.outsideRth = False
+
+        buy_trade = self.ib.placeOrder(contract, buy)
+        fill = self._wait_for_fill(buy_trade, fill_timeout_sec, symbol)
+        if fill is None:
+            status = buy_trade.orderStatus.status
+            detail = _describe_trade_state(buy_trade)
+            self._cancel_trade(buy_trade)
+            raise RuntimeError(
+                f"Market BUY cover for {symbol} did not fill within {fill_timeout_sec}s "
+                f"({status}, {detail})"
+            )
+
+        logger.info(
+            "IBKR market BUY cover %s x %s @ $%.2f (commission $%.2f)",
+            symbol,
+            fill.quantity,
+            fill.price,
+            fill.commission,
+        )
+        return fill
+
+    @_ibkr_synchronized
     def fetch_historical_bars(
         self,
         symbol: str,

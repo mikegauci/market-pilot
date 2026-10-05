@@ -2,21 +2,35 @@
 
 import { useCallback, useMemo } from "react";
 import { ClosePositionButton } from "@/components/close-position-button";
+import { CoverShortButton } from "@/components/cover-short-button";
 import { PositionRiskGauge } from "@/components/position-risk-gauge";
 import { SymbolChartPanel } from "@/components/symbol-chart-panel";
 import { Card, CardTitle } from "@/components/ui/card";
 import { overlaysForPosition } from "@/lib/chart-overlays";
-import { fetchActiveTradeCommands, fetchOpenTrades, fetchPositions } from "@/lib/data-client";
+import {
+  fetchActivePositionCommands,
+  fetchActiveTradeCommands,
+  fetchOpenTrades,
+  fetchPositions,
+} from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import { useTraderOnline } from "@/lib/hooks/use-trader-online";
 import { tradeForPosition } from "@/lib/trade-matching";
-import type { BotStatus, Position, Settings, Trade, TradeCommand } from "@/lib/types/database";
+import type {
+  BotStatus,
+  Position,
+  PositionCommand,
+  Settings,
+  Trade,
+  TradeCommand,
+} from "@/lib/types/database";
 import { formatCurrency } from "@/lib/utils";
 
 type Props = {
   positions: Position[];
   openTrades: Trade[];
   tradeCommands: TradeCommand[];
+  positionCommands: PositionCommand[];
   botStatus: BotStatus;
   settings?: Settings | null;
 };
@@ -25,6 +39,7 @@ export function PositionsGrid({
   positions,
   openTrades,
   tradeCommands,
+  positionCommands,
   botStatus,
   settings,
 }: Props) {
@@ -32,10 +47,16 @@ export function PositionsGrid({
   const fetchList = useCallback(() => fetchPositions(), []);
   const fetchTrades = useCallback(() => fetchOpenTrades(), []);
   const fetchCommands = useCallback(() => fetchActiveTradeCommands(), []);
+  const fetchPositionCommands = useCallback(() => fetchActivePositionCommands(), []);
 
   const livePositions = useLiveQuery(positions, fetchList, ["positions"]);
   const liveOpenTrades = useLiveQuery(openTrades, fetchTrades, ["trades"]);
   const liveCommands = useLiveQuery(tradeCommands, fetchCommands, ["trade_commands"]);
+  const livePositionCommands = useLiveQuery(
+    positionCommands,
+    fetchPositionCommands,
+    ["position_commands"],
+  );
 
   const commandByTradeId = useMemo(() => {
     const map = new Map<string, TradeCommand>();
@@ -47,6 +68,16 @@ export function PositionsGrid({
     return map;
   }, [liveCommands]);
 
+  const coverCommandBySymbol = useMemo(() => {
+    const map = new Map<string, PositionCommand>();
+    for (const command of livePositionCommands) {
+      if (!map.has(command.symbol)) {
+        map.set(command.symbol, command);
+      }
+    }
+    return map;
+  }, [livePositionCommands]);
+
   return (
     <div>
       <CardTitle>Open Positions ({livePositions.length})</CardTitle>
@@ -57,9 +88,13 @@ export function PositionsGrid({
           {livePositions.map((p) => {
             const trade = tradeForPosition(p, liveOpenTrades);
             const command = trade ? commandByTradeId.get(trade.id) : undefined;
+            const coverCommand = coverCommandBySymbol.get(p.symbol);
             const pending =
-              command?.status === "pending" || command?.status === "processing";
-            const failed = command?.status === "failed";
+              command?.status === "pending" ||
+              command?.status === "processing" ||
+              coverCommand?.status === "pending" ||
+              coverCommand?.status === "processing";
+            const failed = command?.status === "failed" || coverCommand?.status === "failed";
             const pnl = p.unrealized_pnl ?? 0;
 
             return (
@@ -72,7 +107,7 @@ export function PositionsGrid({
                         {p.quantity < 0 ? (
                           <span
                             className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-400"
-                            title="Short at the broker. Cover in IBKR — the bot does not manage short exposure."
+                            title="Short at the broker. Use Cover short below (or IBKR) to flatten."
                           >
                             Short
                           </span>
@@ -121,6 +156,15 @@ export function PositionsGrid({
                       pending={pending}
                       failed={failed}
                       errorMessage={command?.error}
+                    />
+                  ) : p.quantity < 0 ? (
+                    <CoverShortButton
+                      symbol={p.symbol}
+                      quantity={p.quantity}
+                      traderOnline={traderOnline}
+                      pending={pending}
+                      failed={failed}
+                      errorMessage={coverCommand?.error}
                     />
                   ) : (
                     <span className="text-xs text-zinc-600">No linked trade</span>

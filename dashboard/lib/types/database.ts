@@ -164,6 +164,18 @@ export type TradeCommand = {
   error: string | null;
 };
 
+export type PositionCommand = {
+  id: string;
+  symbol: string;
+  quantity: number;
+  command: "cover_short";
+  status: "pending" | "processing" | "completed" | "failed";
+  reason: string | null;
+  requested_at: string;
+  processed_at: string | null;
+  error: string | null;
+};
+
 export type Position = {
   id: string;
   symbol: string;

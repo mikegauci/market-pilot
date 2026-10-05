@@ -31,6 +31,7 @@ import type {
   IbkrAccountProfile,
   PortfolioSnapshot,
   Position,
+  PositionCommand,
   Prediction,
   Settings,
   SymbolBar,
@@ -253,6 +254,16 @@ export async function getActiveTradeCommands(): Promise<TradeCommand[]> {
     .in("status", ["pending", "processing", "failed"])
     .order("requested_at", { ascending: false });
   return (data ?? []) as TradeCommand[];
+}
+
+export async function getActivePositionCommands(): Promise<PositionCommand[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("position_commands")
+    .select("*")
+    .in("status", ["pending", "processing", "failed"])
+    .order("requested_at", { ascending: false });
+  return (data ?? []) as PositionCommand[];
 }
 
 /**

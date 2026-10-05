@@ -34,6 +34,7 @@ import type {
   Settings,
   SymbolBar,
   Trade,
+  PositionCommand,
   TradeCommand,
 } from "@/lib/types/database";
 
@@ -181,6 +182,20 @@ export async function fetchActiveTradeCommands(): Promise<TradeCommand[]> {
     return [];
   }
   return (data ?? []) as TradeCommand[];
+}
+
+export async function fetchActivePositionCommands(): Promise<PositionCommand[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("position_commands")
+    .select("*")
+    .in("status", ["pending", "processing", "failed"])
+    .order("requested_at", { ascending: false });
+  if (error) {
+    logFetchError("position_commands", error.message);
+    return [];
+  }
+  return (data ?? []) as PositionCommand[];
 }
 
 export async function fetchTradesForTradingDay(

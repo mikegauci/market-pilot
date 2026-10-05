@@ -147,6 +147,41 @@ export async function requestClosePosition(tradeId: string) {
   revalidatePath("/trades");
 }
 
+export async function requestCoverShort(symbol: string, quantity: number) {
+  const supabase = await createClient();
+  const normalized = symbol.trim().toUpperCase();
+  const qty = Math.trunc(quantity);
+
+  if (!normalized) {
+    throw new Error("Symbol is required");
+  }
+  if (!Number.isFinite(qty) || qty < 1) {
+    throw new Error("Cover quantity must be at least 1 share");
+  }
+
+  const { data: existing } = await supabase
+    .from("position_commands")
+    .select("id")
+    .eq("symbol", normalized)
+    .in("status", ["pending", "processing"])
+    .maybeSingle();
+
+  if (existing) {
+    throw new Error("Cover already requested for this symbol");
+  }
+
+  const { error } = await supabase.from("position_commands").insert({
+    symbol: normalized,
+    quantity: qty,
+    command: "cover_short",
+    reason: "manual_dashboard",
+  });
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/");
+}
+
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
