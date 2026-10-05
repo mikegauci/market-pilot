@@ -35,7 +35,6 @@ import type {
   SymbolBar,
   Trade,
   TradeCommand,
-  WatchlistScreenerHistory,
 } from "@/lib/types/database";
 
 function logFetchError(table: string, message: string) {
@@ -340,20 +339,6 @@ export async function fetchLatestPredictionsBySymbol(
     return [];
   }
   return mapLatestPredictionRpcRows(data);
-}
-
-export async function fetchScreenerHistory(limit = 10): Promise<WatchlistScreenerHistory[]> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("watchlist_screener_history")
-    .select("*")
-    .order("ran_at", { ascending: false })
-    .limit(limit);
-  if (error) {
-    logFetchError("watchlist_screener_history", error.message);
-    return [];
-  }
-  return (data ?? []) as WatchlistScreenerHistory[];
 }
 
 export async function fetchSettings(): Promise<Settings | null> {

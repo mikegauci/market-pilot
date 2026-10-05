@@ -6,7 +6,6 @@ import { PositionRiskGauge } from "@/components/position-risk-gauge";
 import { SymbolChartPanel } from "@/components/symbol-chart-panel";
 import { Card, CardTitle } from "@/components/ui/card";
 import { overlaysForPosition } from "@/lib/chart-overlays";
-import { isOffEffectiveWatchlist } from "@/lib/demotion";
 import { fetchActiveTradeCommands, fetchOpenTrades, fetchPositions } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import { useTraderOnline } from "@/lib/hooks/use-trader-online";
@@ -70,14 +69,6 @@ export function PositionsGrid({
                     <p className="text-base font-semibold text-zinc-100">
                       <span className="inline-flex items-center gap-2">
                         {p.symbol}
-                        {trade && settings && isOffEffectiveWatchlist(p.symbol, settings) && (
-                          <span
-                            className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-400"
-                            title="Open position no longer on the effective top-N watchlist; tighter exit rules apply"
-                          >
-                            Demoted
-                          </span>
-                        )}
                         {!trade && (
                           <span
                             className="rounded bg-zinc-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400"

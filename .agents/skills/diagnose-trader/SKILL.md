@@ -1,6 +1,6 @@
 ---
 name: diagnose-trader
-description: Read-only investigation of market-pilot trader health and missed trades using Supabase MCP execute_sql on project gbprapqifrvhylfazjvs. Use when the user asks why a symbol did not trade, bot offline, heartbeat stale, skip reasons, risk rejections, or screener warnings — without restarting the trader.
+description: Read-only investigation of market-pilot trader health and missed trades using Supabase MCP execute_sql on project gbprapqifrvhylfazjvs. Use when the user asks why a symbol did not trade, bot offline, heartbeat stale, skip reasons, or risk rejections — without restarting the trader.
 ---
 
 # Diagnose trader (read-only)
@@ -119,37 +119,23 @@ FROM trades;
 ```sql
 SELECT symbol, price, bid, ask, updated_at
 FROM market_snapshots
-WHERE symbol IN ('SPY', 'NVDA')  -- adjust
+WHERE symbol IN ('EEM', 'NVDA')  -- benchmark + watchlist symbol
 ORDER BY updated_at DESC;
 ```
 
 Stale snapshots with fresh heartbeat → data path or symbol not subscribed.
 
-## 7. EM screener (watchlist rotation)
+## 7. Watchlist (manual)
 
-Log line format (when few symbols score):
-
-```text
-Jev scan scored too few symbols (6/38) (no_bars=0, below_price=7, wide_spread=1, low_volume=24, no_quote=0)
-```
-
-| Counter | Meaning |
-|---------|---------|
-| `below_price` | Under `min_share_price` |
-| `low_volume` | Volume ratio filter |
-| `wide_spread` | Spread filter |
-| `no_bars` | Missing bar history |
-| `no_quote` | No quote from data source |
-
-Inspect rankings in settings:
+Entry eval uses the saved watchlist plus any open positions (for exits). The benchmark symbol (default **EEM**) is subscribed for headwind context but is not an entry candidate.
 
 ```sql
-SELECT watchlist, watchlist_core, watchlist_dynamic_enabled,
-       watchlist_min_buy, watchlist_screener_ran_at,
-       jsonb_array_length(watchlist_jev_rankings::jsonb) AS ranking_count
+SELECT watchlist, benchmark_symbol, updated_at
 FROM settings
 WHERE id = 1;
 ```
+
+If a symbol never appears in recent predictions, it is not on `watchlist` and has no open position. After a settings change in the dashboard, the trader picks up the new list on the next settings refresh (no restart required).
 
 ## 8. Report back
 

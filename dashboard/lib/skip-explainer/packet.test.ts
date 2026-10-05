@@ -31,7 +31,10 @@ function prediction(overrides: Partial<Prediction> = {}): Prediction {
 
 describe("buildSkipExplainPacket", () => {
   it("turns the skip and snapshot into percents the model can quote", () => {
-    const packet = buildSkipExplainPacket(prediction(), settingsFixture());
+    const packet = buildSkipExplainPacket(
+      prediction(),
+      settingsFixture({ minimum_jev_confidence: 0.8 }),
+    );
 
     expect(packet.symbol).toBe("BABA");
     expect(packet.buy_pct).toBe(86);

@@ -3,7 +3,7 @@ import { normalizeSettings } from "@/lib/normalize-settings";
 import type { SettingsRow } from "@/lib/normalize-settings";
 
 describe("normalizeSettings", () => {
-  it("fills demotion defaults for partial rows", () => {
+  it("fills defaults for partial rows", () => {
     const raw = {
       id: 1,
       trading_mode: "paper",
@@ -19,16 +19,8 @@ describe("normalizeSettings", () => {
       min_volume_ratio: 0,
       account_capital: 1000,
       risk_sync_equity: null,
-      watchlist: ["EEM"],
-      watchlist_core: ["EEM"],
-      watchlist_dynamic_enabled: true,
-      watchlist_dynamic_size: 5,
-      watchlist_refresh_minutes: 30,
+      watchlist: ["NVDA"],
       benchmark_symbol: "EEM",
-      watchlist_jev_rankings: [],
-      watchlist_screener_ran_at: null,
-      em_universe_synced_at: null,
-      em_universe_source: null,
       updated_at: "",
     } satisfies SettingsRow;
 
@@ -38,14 +30,9 @@ describe("normalizeSettings", () => {
     expect(normalized?.min_hold_minutes).toBe(15);
     expect(normalized?.jev_sell_exit_threshold).toBe(0.95);
     expect(normalized?.reentry_cooldown_minutes).toBe(45);
-    expect(normalized?.demotion_exits_enabled).toBe(true);
-    expect(normalized?.demotion_max_hold_ratio).toBe(0.5);
-    expect(normalized?.demotion_jev_sell_on_loss).toBe(true);
-    expect(normalized?.demotion_force_exit).toBe(false);
     expect(normalized?.profit_take_enabled).toBe(false);
     expect(normalized?.profit_take_min_fraction).toBe(0.7);
     expect(normalized?.profit_take_max_fraction).toBe(0.8);
-    expect(normalized?.watchlist_min_buy).toBe(0.6);
     expect(normalized?.confirmation_cycles).toBe(2);
     expect(normalized?.confirmation_seconds).toBe(30);
   });

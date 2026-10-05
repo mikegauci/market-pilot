@@ -44,9 +44,8 @@ FROM bot_status WHERE id = 1;
 
 ```sql
 SELECT minimum_jev_confidence, signal_record_threshold, max_open_positions,
-       min_share_price, min_volume_ratio, watchlist_min_buy,
-       watchlist_refresh_minutes, watchlist_screener_ran_at,
-       watchlist_dynamic_enabled
+       min_share_price, min_volume_ratio, min_dollar_volume,
+       watchlist, benchmark_symbol
 FROM settings WHERE id = 1;
 ```
 
@@ -98,7 +97,7 @@ Check each item. Say **working**, **expected idle**, or **drift**.
 5. **Filters and risk.** Prefixes must match emitters in current source: `trader/strategy/filters.py`, `trader/strategy/signals.py`, `trader/risk/manager.py`, `trader/main.py` (`ibkr_order_failed`, `ibkr_cooldown`, `ibkr_ineligible`, `ibkr_not_connected`, `entry_window_closed`).
 6. **Code drift.** If a prefix appears in the database and `rg` finds no emitter in `trader/`, the **running process is older than the repo** (or the string was removed). Do not treat that prefix as current behavior. Tell the user a restart is required before judging the new code. Known stale prefix from 2026-09-30: `entry_kill` (including `market_data_type_3` and `reconcile_mismatch`) — not in current `trader/`.
 7. **IBKR path.** A row with `ibkr_order_failed` or `ibkr_cooldown` after a high BUY means risk approved and the broker rejected or cancelled. That is an execution problem, not a confidence problem.
-8. **Screener.** `watchlist_screener_ran_at` older than `watchlist_refresh_minutes` during the regular session means rotation did not run. Log line `Jev scan scored too few symbols` with `low_volume` / `below_price` means the scan ran and the universe failed quality gates (`trader/watchlist/screener_scheduler.py`).
+8. **Watchlist.** Predictions during the session should be mostly symbols on `settings.watchlist` (plus open positions and the benchmark for context). A high-BUY symbol with zero predictions is usually not on the watchlist.
 9. **Fills match predictions.** `trade_created = true` should have a `trades` row. Open count must be ≤ `max_open_positions`.
 
 ## What to recommend
@@ -107,12 +106,12 @@ Rank at most five changes. Only recommend a change the data supports. Do not edi
 
 | Evidence | Recommendation |
 |----------|----------------|
-| `hold_dominant` + `sell_dominant` are most skips, few BUY ≥ threshold | Leave filters alone. Universe or Jev is not producing ELIGIBLE buys. |
-| Same symbols repeat `spread_too_wide` or `volume_too_low` on high BUY | Those names fail liquidity. Screener quality, not a lower confidence. |
+| `hold_dominant` + `sell_dominant` are most skips, few BUY ≥ threshold | Leave filters alone. Watchlist names or Jev are not producing ELIGIBLE buys. |
+| Same symbols repeat `spread_too_wide` or `volume_too_low` on high BUY | Those names fail liquidity filters at entry time, not a lower confidence. |
 | Many `awaiting_confirmation (1/2)` and no later fill | Signal does not persist. Do not lower confirmation until a symbol shows 2/2 and then a bad fill. |
 | `ibkr_order_failed` then `ibkr_cooldown` | Broker cancel. Inspect Gateway; cooldown is working if the next row is `ibkr_cooldown`. |
 | `entry_kill` or any prefix missing from source | Restart after pulling current code before tuning settings. |
-| Screener timestamp stale through the session | Scheduler did not complete; check the warning counters, not `minimum_jev_confidence`. |
+| Symbol never predicted but user expected it | Add it to `watchlist` in Settings (trader refreshes settings periodically). |
 | Predictions stop at 16:00 ET while heartbeat stays fresh | Market-hours gate is working. No overnight entries expected. |
 
 ## Report

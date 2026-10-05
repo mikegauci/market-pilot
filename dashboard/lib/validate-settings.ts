@@ -1,10 +1,4 @@
-import {
-  holdPolicyToRatio,
-  type DemotionHoldPolicy,
-} from "@/lib/demotion-presets";
 import { isRiskProfile, type RiskProfile } from "@/lib/risk-recommendations";
-
-const DEMOTION_HOLD_POLICIES: DemotionHoldPolicy[] = ["exit_now", "tighten", "keep"];
 
 function parseRequiredNumber(formData: FormData, name: string): number {
   const value = Number(formData.get(name));
@@ -35,8 +29,7 @@ function labelFor(name: string): string {
     reentry_cooldown_minutes: "Re-entry cooldown (minutes)",
     confirmation_cycles: "Confirmation cycles",
     confirmation_seconds: "Confirmation seconds",
-    watchlist_dynamic_size: "Dynamic top-N",
-    watchlist_min_buy: "Watchlist min BUY (%)",
+    watchlist: "Watchlist",
     min_volume_ratio: "Min volume ratio",
     min_share_price: "Min share price ($)",
     min_dollar_volume: "Min dollar volume ($)",
@@ -64,17 +57,7 @@ export type ParsedSettings = {
   min_dollar_volume: number;
   risk_profile: RiskProfile;
   watchlist: string[];
-  watchlist_core: string[];
-  watchlist_dynamic_enabled: boolean;
-  watchlist_dynamic_size: number;
-  watchlist_min_buy: number;
-  watchlist_refresh_minutes: number;
   benchmark_symbol: string;
-  demotion_exits_enabled: boolean;
-  demotion_max_hold_ratio: number;
-  demotion_jev_sell_on_loss: boolean;
-  demotion_jev_sell_max_loss_pct: number;
-  demotion_force_exit: boolean;
   profit_take_enabled: boolean;
   profit_take_min_fraction: number;
   profit_take_max_fraction: number;
@@ -251,76 +234,29 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     throw new Error("Min dollar volume must be between 0 (off) and 1,000,000,000");
   }
 
-  const watchlistCoreRaw = String(formData.get("watchlist_core") ?? "");
-  const watchlist_core = [
+  const watchlistRaw = String(formData.get("watchlist") ?? "");
+  const watchlist = [
     ...new Set(
-      watchlistCoreRaw
+      watchlistRaw
         .split(",")
         .map((s) => s.trim().toUpperCase())
         .filter(Boolean),
     ),
   ];
-  if (watchlist_core.length === 0) {
-    throw new Error("Core watchlist must include at least one symbol");
+  if (watchlist.length === 0) {
+    throw new Error("Watchlist must include at least one symbol");
   }
-  const invalidCore = watchlist_core.filter((s) => !/^[A-Z][A-Z0-9.]{0,9}$/.test(s));
-  if (invalidCore.length > 0) {
-    throw new Error(`Invalid core ticker(s): ${invalidCore.join(", ")}`);
+  const invalidWatchlist = watchlist.filter((s) => !/^[A-Z][A-Z0-9.]{0,9}$/.test(s));
+  if (invalidWatchlist.length > 0) {
+    throw new Error(`Invalid ticker(s): ${invalidWatchlist.join(", ")}`);
   }
 
-  const watchlist_dynamic_enabled =
-    String(formData.get("watchlist_dynamic_enabled") ?? "") === "on";
-  const watchlist_dynamic_size = Number(formData.get("watchlist_dynamic_size") ?? 5);
-  if (
-    !Number.isInteger(watchlist_dynamic_size) ||
-    watchlist_dynamic_size < 0 ||
-    watchlist_dynamic_size > 20
-  ) {
-    throw new Error("Dynamic watchlist size must be a whole number from 0 to 20");
-  }
-  const watchlist_min_buy = parseConfidencePercent(formData, "watchlist_min_buy");
-  if (watchlist_min_buy > minimum_jev_confidence) {
-    throw new Error("Watchlist min BUY (%) must be at or below Min Jev confidence (%)");
-  }
-  const watchlist_refresh_minutes = Number(formData.get("watchlist_refresh_minutes") ?? 30);
-  if (
-    !Number.isInteger(watchlist_refresh_minutes) ||
-    watchlist_refresh_minutes < 5 ||
-    watchlist_refresh_minutes > 240
-  ) {
-    throw new Error("Jev scan interval must be a whole number from 5 to 240 minutes");
-  }
   const benchmark_symbol = String(formData.get("benchmark_symbol") ?? "EEM")
     .trim()
     .toUpperCase();
   if (!/^[A-Z][A-Z0-9.]{0,9}$/.test(benchmark_symbol)) {
     throw new Error("Benchmark symbol is invalid");
   }
-
-  const effectiveWatchlist = watchlist_dynamic_enabled ? undefined : watchlist_core;
-
-  const demotion_exits_enabled =
-    String(formData.get("demotion_exits_enabled") ?? "") === "on";
-  const demotion_force_exit = String(formData.get("demotion_force_exit") ?? "") === "on";
-  const holdPolicyRaw = String(formData.get("demotion_hold_policy") ?? "");
-  let demotion_max_hold_ratio: number;
-  if (DEMOTION_HOLD_POLICIES.includes(holdPolicyRaw as DemotionHoldPolicy)) {
-    demotion_max_hold_ratio = holdPolicyToRatio(holdPolicyRaw as DemotionHoldPolicy);
-  } else {
-    demotion_max_hold_ratio = Number(formData.get("demotion_max_hold_ratio") ?? 0.5);
-    if (
-      !Number.isFinite(demotion_max_hold_ratio) ||
-      demotion_max_hold_ratio < 0 ||
-      demotion_max_hold_ratio > 1
-    ) {
-      throw new Error("Demotion max-hold ratio must be between 0 and 1");
-    }
-  }
-  const demotion_jev_sell_on_loss =
-    demotion_force_exit
-      ? false
-      : String(formData.get("demotion_jev_sell_on_loss") ?? "") === "on";
-  const demotion_jev_sell_max_loss_pct = stop_loss_percentage;
 
   return {
     minimum_jev_confidence,
@@ -341,18 +277,8 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     min_share_price,
     min_dollar_volume,
     risk_profile: parseRiskProfile(formData),
-    watchlist: effectiveWatchlist ?? watchlist_core,
-    watchlist_core,
-    watchlist_dynamic_enabled,
-    watchlist_dynamic_size,
-    watchlist_min_buy,
-    watchlist_refresh_minutes,
+    watchlist,
     benchmark_symbol,
-    demotion_exits_enabled,
-    demotion_max_hold_ratio,
-    demotion_jev_sell_on_loss,
-    demotion_jev_sell_max_loss_pct,
-    demotion_force_exit,
     profit_take_enabled,
     profit_take_min_fraction,
     profit_take_max_fraction,

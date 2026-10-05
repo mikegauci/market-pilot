@@ -48,26 +48,6 @@ TRADE_ACTION_QUESTION = {
     },
 }
 
-UNIVERSE_ACTION_QUESTION = {
-    "type": "choice",
-    "instructions": (
-        "Evaluate whether this US-listed emerging markets ADR or single-name stock "
-        "deserves a near-term long watchlist slot. Do not treat broad EM ETFs as "
-        "candidates — only individual names. Return calibrated buy, hold, or sell "
-        "probabilities reflecting short-term intraday edge. Favor higher BUY when "
-        "momentum, volume, and trend (price vs EMA-9/20 on 1-minute bars, RSI-14 on "
-        "1-minute bars not overbought) align and change_1d/change_5d/change_1w support "
-        "the move versus a weak EM benchmark. "
-        "Penalize BUY for wide spreads, thin volume, benchmark headwinds, or bearish "
-        "news. This ranking selects which symbols to monitor — prefer calibrated "
-        "differentiation across candidates."
-    ),
-    "criteria": TRADE_ACTION_QUESTION["criteria"],
-}
-
-ACTION_QUESTION = TRADE_ACTION_QUESTION
-
-
 class JevClient:
     """TypeSafe Jev API client for buy/hold/sell predictions."""
 
@@ -85,8 +65,8 @@ class JevClient:
         self.timeout_sec = timeout_sec
         self.max_retries = max_retries
 
-    def predict(self, state: MarketState, *, universe_scan: bool = False) -> JevPrediction:
-        question = UNIVERSE_ACTION_QUESTION if universe_scan else TRADE_ACTION_QUESTION
+    def predict(self, state: MarketState) -> JevPrediction:
+        question = TRADE_ACTION_QUESTION
         payload = {
             "model": self.model,
             "state": state.to_dict(),

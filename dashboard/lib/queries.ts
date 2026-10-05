@@ -27,7 +27,6 @@ import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
 import { createClient } from "@/lib/supabase/server";
 import type {
   BotStatus,
-  EmUniverseRow,
   MarketNewsRow,
   IbkrAccountProfile,
   PortfolioSnapshot,
@@ -38,7 +37,6 @@ import type {
   SessionBriefRow,
   Trade,
   TradeCommand,
-  WatchlistScreenerHistory,
 } from "@/lib/types/database";
 
 export async function getBotStatus(): Promise<BotStatus | null> {
@@ -225,16 +223,6 @@ export async function getLatestPredictionsBySymbol(
   return mapLatestPredictionRpcRows(data);
 }
 
-export async function getScreenerHistory(limit = 10): Promise<WatchlistScreenerHistory[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("watchlist_screener_history")
-    .select("*")
-    .order("ran_at", { ascending: false })
-    .limit(limit);
-  return (data ?? []) as WatchlistScreenerHistory[];
-}
-
 export async function getPositions(): Promise<Position[]> {
   const supabase = await createClient();
   const { data } = await supabase.from("positions").select("*").order("symbol");
@@ -330,33 +318,6 @@ export async function getMarketNews(limit = 100): Promise<MarketNewsRow[]> {
     .order("published_at", { ascending: false })
     .limit(limit);
   return (data ?? []) as MarketNewsRow[];
-}
-
-export async function getEmUniverseStats(): Promise<{
-  count: number;
-  tradableCount: number;
-  topHoldings: EmUniverseRow[];
-}> {
-  const supabase = await createClient();
-  const { count } = await supabase
-    .from("em_universe")
-    .select("*", { count: "exact", head: true });
-  const { count: tradableCount } = await supabase
-    .from("em_universe")
-    .select("*", { count: "exact", head: true })
-    .eq("tradable", true);
-  const { data } = await supabase
-    .from("em_universe")
-    .select("symbol, name, source_etfs, weight_bps, country, tradable, updated_at")
-    .eq("tradable", true)
-    .order("weight_bps", { ascending: false })
-    .limit(20);
-
-  return {
-    count: count ?? 0,
-    tradableCount: tradableCount ?? 0,
-    topHoldings: (data ?? []) as EmUniverseRow[],
-  };
 }
 
 export async function getTradedPredictions(limit = 10): Promise<Prediction[]> {

@@ -74,6 +74,8 @@ class IndicatorTests(unittest.TestCase):
         base = datetime(2026, 1, 10, 14, 0, tzinfo=timezone.utc)
         cached = [
             Bar(
+                symbol="AAPL",
+                bar_size="5 mins",
                 ts=base + timedelta(minutes=5 * index),
                 open=100.0 + index,
                 high=101.0 + index,

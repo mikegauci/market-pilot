@@ -1,7 +1,6 @@
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
 import { traderBuiltInGatesForPacket } from "@/lib/trader-built-in-gates";
 import type { MarketNewsRow, Settings } from "@/lib/types/database";
-import { parseWatchlistPins } from "@/lib/watchlist-curation";
 
 export const MORNING_BRIEF_WINDOW_HOURS = 18;
 export const MORNING_BRIEF_HEADLINE_CAP = 24;
@@ -47,16 +46,8 @@ export function buildMorningBriefPacket(input: {
   const builtIn = traderBuiltInGatesForPacket();
   const now = input.now ?? new Date();
   const windowStart = now.getTime() - MORNING_BRIEF_WINDOW_HOURS * 60 * 60 * 1000;
-  const pins = parseWatchlistPins(input.settings.watchlist_pins);
-  const pinBySymbol = new Map(pins.map((pin) => [pin.symbol.toUpperCase(), pin]));
   const watchlist = resolveEffectiveWatchlist(input.settings);
   const watchlistSet = new Set(watchlist);
-  const buyBySymbol = new Map(
-    (input.settings.watchlist_jev_rankings ?? []).map((row) => [
-      row.symbol.toUpperCase(),
-      percentPoints(row.buy),
-    ]),
-  );
 
   const headlines: MorningBriefPacket["headlines"] = [];
   for (const article of input.articles) {
@@ -89,15 +80,12 @@ export function buildMorningBriefPacket(input: {
     generated_at: now.toISOString(),
     window_hours: MORNING_BRIEF_WINDOW_HOURS,
     fresh_headline_count: headlines.length,
-    watchlist: watchlist.map((symbol) => {
-      const pin = pinBySymbol.get(symbol);
-      return {
-        symbol,
-        pinned: pin != null,
-        locked: pin?.locked ?? false,
-        jev_buy_pct: buyBySymbol.get(symbol) ?? null,
-      };
-    }),
+    watchlist: watchlist.map((symbol) => ({
+      symbol,
+      pinned: false,
+      locked: false,
+      jev_buy_pct: null,
+    })),
     gates: {
       ...builtIn,
       minimum_jev_confidence_pct: percentPoints(input.settings.minimum_jev_confidence),

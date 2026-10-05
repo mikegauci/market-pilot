@@ -28,11 +28,7 @@ describe("buildMorningBriefPacket", () => {
   it("keeps fresh headlines for watchlist names and records picky gates", () => {
     const packet = buildMorningBriefPacket({
       settings: settingsFixture({
-        watchlist_dynamic_enabled: false,
         watchlist: ["BABA", "VALE"],
-        watchlist_core: ["BABA", "VALE"],
-        watchlist_pins: [{ symbol: "BABA", locked: true, protect_demotion: true }],
-        watchlist_dismissed: ["PDD"],
         minimum_jev_confidence: 0.85,
         min_volume_ratio: 0.5,
       }),
@@ -56,7 +52,6 @@ describe("buildMorningBriefPacket", () => {
     });
 
     expect(packet.watchlist.map((row) => row.symbol)).toEqual(["BABA", "VALE"]);
-    expect(packet.watchlist[0]).toMatchObject({ pinned: true, locked: true });
     expect(packet.headlines).toHaveLength(1);
     expect(packet.headlines[0]?.symbols).toEqual(["BABA"]);
     expect(packet.headlines[0]?.headline).toBe("BABA faces a lawsuit");
@@ -66,14 +61,9 @@ describe("buildMorningBriefPacket", () => {
     expect(packet.gates.max_spread_pct).toBe(0.15);
   });
 
-  it("ignores headlines for dismissed symbols not on the watchlist", () => {
+  it("ignores headlines for symbols not on the watchlist", () => {
     const packet = buildMorningBriefPacket({
-      settings: settingsFixture({
-        watchlist_dynamic_enabled: false,
-        watchlist: ["BABA"],
-        watchlist_core: ["BABA"],
-        watchlist_dismissed: ["PDD"],
-      }),
+      settings: settingsFixture({ watchlist: ["BABA"] }),
       articles: [
         article({
           headline: "PDD lawsuit",
@@ -88,7 +78,7 @@ describe("buildMorningBriefPacket", () => {
 
   it("leaves headlines empty when nothing in the window matches", () => {
     const packet = buildMorningBriefPacket({
-      settings: settingsFixture({ watchlist_dynamic_enabled: false }),
+      settings: settingsFixture(),
       articles: [],
       now,
     });

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, Set
 
-# EM single-name buckets — keep membership aligned with em_universe (ADR/stock only).
+# Correlated single-name buckets for entry concentration limits.
 CORRELATION_GROUPS: Dict[str, Set[str]] = {
     "china_internet": {
         "PDD",

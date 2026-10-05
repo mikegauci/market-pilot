@@ -19,10 +19,16 @@ export type ConditionShare = {
   percent: number | null;
 };
 
+type SessionConditionMinuteKey =
+  | "favorable_minutes"
+  | "caution_minutes"
+  | "headwind_minutes"
+  | "unknown_minutes";
+
 const SHARE_ORDER: {
   level: ConditionShare["level"];
   label: string;
-  key: keyof SessionConditionMinutes;
+  key: SessionConditionMinuteKey;
 }[] = [
   { level: "favorable", label: "Favorable", key: "favorable_minutes" },
   { level: "caution", label: "Caution", key: "caution_minutes" },

@@ -6,8 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, List, Optional
 
-from watchlist.demotion import (
-    is_demoted_symbol,
+from strategy.exits import (
     jev_sell_exit_allowed,
     min_hold_remaining_minutes,
     price_between_entry_and_take_profit,
@@ -406,34 +405,6 @@ class RiskManager:
         open_ids = {t.id for t in remaining}
         band_tracker.prune(open_ids)
         self.open_trades = remaining
-        return closed
-
-    def check_demotion_exits(
-        self,
-        quotes_by_symbol: Dict[str, Quote],
-    ) -> List[ClosedTrade]:
-        """Market-close simulated trades when demotion force-exit is enabled."""
-        if not self.settings.demotion_exits_enabled or not self.settings.demotion_force_exit:
-            return []
-
-        closed: List[ClosedTrade] = []
-        closed_ids: set[str] = set()
-
-        for trade in self.open_trades:
-            if trade.execution_mode == "ibkr":
-                continue
-            if not is_demoted_symbol(trade.symbol, self.settings):
-                continue
-
-            quote = quotes_by_symbol.get(trade.symbol)
-            if quote is None or quote.price is None:
-                continue
-
-            closed.append(self._build_closed_trade(trade, quote.price, "demotion_exit"))
-            closed_ids.add(trade.id)
-
-        if closed_ids:
-            self.open_trades = [t for t in self.open_trades if t.id not in closed_ids]
         return closed
 
     def can_jev_sell_exit(

@@ -96,12 +96,10 @@ class Settings(BaseSettings):
     news_llm_model: str = "gpt-4o-mini"
     news_llm_timeout_sec: float = 8.0
 
-    em_universe_path: str = ""
     bar_backfill_pacing_sec: float = 12.0
     live_bar_flush_interval_sec: float = 60.0
     bar_daily_duration: str = "1 W"
     bar_intraday_duration: str = "3 D"
-    em_backfill_on_startup: bool = True
     forward_return_backfill_enabled: bool = True
 
     # Optional Telegram alerts on trade open/close. Blank disables them.
@@ -171,13 +169,6 @@ class Settings(BaseSettings):
     @field_validator("market_snapshots_enabled", mode="before")
     @classmethod
     def parse_market_snapshots_enabled(cls, value: object) -> bool:
-        if isinstance(value, bool):
-            return value
-        return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-    @field_validator("em_backfill_on_startup", mode="before")
-    @classmethod
-    def parse_em_backfill_on_startup(cls, value: object) -> bool:
         if isinstance(value, bool):
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
@@ -256,13 +247,6 @@ class Settings(BaseSettings):
     @property
     def watchlist_symbols(self) -> List[str]:
         return [s.strip().upper() for s in self.watchlist.split(",") if s.strip()]
-
-    @property
-    def resolved_em_universe_path(self) -> Path:
-        if self.em_universe_path.strip():
-            return Path(self.em_universe_path.strip())
-        trader_root = Path(__file__).resolve().parent
-        return trader_root.parent / "dashboard" / "data" / "em-us-listed.json"
 
     @property
     def strategy_config(self) -> StrategyConfig:

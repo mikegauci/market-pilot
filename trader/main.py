@@ -13,7 +13,6 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 from broker.execution import (
     EOD_RETRY_SEC,
     close_ibkr_signal_exits,
-    collect_demotion_exit_symbols,
     collect_profit_take_trade_ids,
     force_eod_ibkr_exits,
     sync_ibkr_exits,
@@ -58,22 +57,12 @@ from risk.manager import RiskManager
 from strategy.confirmation import ConfirmationTracker
 from strategy.profit_take_tracker import ProfitTakeBandTracker
 from strategy.config import strategy_config_with_risk_overrides
-from watchlist.demotion import effective_max_hold_minutes
-from watchlist.jev_screener import (
-    apply_screener_result_to_risk_settings,
+from watchlist.backfill import backfill_watchlist_symbols
+from watchlist.resolution import (
     effective_benchmark,
-    merge_core_watchlist,
     resolve_runtime_watchlist,
-    resolve_trading_watchlist,
-    screener_due,
     strip_benchmark_symbol,
 )
-from watchlist.screener_scheduler import (
-    EMWatchlistScheduler,
-    ScreenerJobContext,
-    backfill_watchlist_symbols,
-)
-from watchlist.universe import load_em_universe
 from runtime.capital import resolve_effective_capital, sync_risk_manager_capital
 from runtime.entry_eval import process_ready_states
 from runtime.heartbeat import run_heartbeat_cycle
@@ -163,29 +152,6 @@ def _configure_logging(level: str) -> None:
 def _all_symbols(watchlist: list[str], benchmark: str = "SPY") -> list[str]:
     benchmark_symbol = (benchmark or "SPY").upper()
     return list(dict.fromkeys(watchlist + [benchmark_symbol]))
-
-
-def _load_em_universe(settings: Settings, db: SupabaseRepository) -> List[str]:
-    return load_em_universe(db=db, path=Path(settings.resolved_em_universe_path))
-
-
-def _seed_universe_minute_bars_mock(
-    universe: List[str],
-    mock: MockMarketProvider,
-    minute_bars: MinuteBarStore,
-) -> None:
-    mock.ensure_symbols(universe)
-    for symbol in universe:
-        mock.seed_symbol_minute_bars(minute_bars, symbol)
-
-
-def _seed_universe_minute_bars_from_cache(
-    universe: List[str],
-    bar_store: BarStore,
-    minute_bars: MinuteBarStore,
-) -> None:
-    for symbol in universe:
-        bar_store.seed_minute_aggregator(minute_bars.get(symbol), symbol)
 
 
 def _apply_watchlist_update(
@@ -399,8 +365,6 @@ def run() -> int:
     )
     benchmark_symbol = effective_benchmark(risk_settings)
     all_symbols = _all_symbols(watchlist, benchmark_symbol)
-    em_scheduler = EMWatchlistScheduler()
-
     bar_store = BarStore(
         db,
         daily_duration=settings.bar_daily_duration,
@@ -548,24 +512,18 @@ def run() -> int:
                         jev_connected=False,
                     )
 
-            open_symbols = [trade.symbol for trade in db.get_open_trades()]
-            priority_symbols = list(
-                dict.fromkeys(
-                    merge_core_watchlist(risk_settings, open_symbols)
-                    + resolve_trading_watchlist(risk_settings, open_symbols)
-                )
-            )
             run_ibkr_startup_backfill(
                 settings=settings,
                 db=db,
                 bar_store=bar_store,
                 ibkr=ibkr,
                 risk_settings=risk_settings,
-                em_scheduler=em_scheduler,
-                load_em_universe_fn=lambda: _load_em_universe(settings, db),
                 on_progress=_on_backfill_progress,
             )
-            for symbol in priority_symbols:
+            open_symbols = [trade.symbol for trade in db.get_open_trades()]
+            for symbol in resolve_runtime_watchlist(
+                risk_settings, open_symbols, env_fallback=settings.watchlist_symbols
+            ):
                 bar_store.seed_minute_aggregator(
                     minute_bars.get(symbol), symbol
                 )
@@ -810,75 +768,10 @@ def run() -> int:
                     open_symbols,
                     env_fallback=settings.watchlist_symbols,
                 )
-                screener_result = em_scheduler.take_completed_screener_result()
-                if screener_result is not None:
-                    watchlist = strip_benchmark_symbol(
-                        screener_result.watchlist, risk_settings
-                    )
-                    apply_screener_result_to_risk_settings(
-                        risk_settings,
-                        watchlist=screener_result.watchlist,
-                        rankings=screener_result.rankings,
-                        screener_ran_at=screener_result.screener_ran_at,
-                    )
-                if jev is not None and risk_settings.watchlist_dynamic_enabled:
-                    quote_snapshot = None
-                    # Capture live spreads only when a scan is about to start —
-                    # worker thread cannot call IBKR safely.
-                    if screener_due(risk_settings) and (
-                        settings.data_source != DataSource.IBKR
-                        or is_us_regular_session_open()
-                    ):
-                        try:
-                            snapshot_symbols = list(
-                                dict.fromkeys(
-                                    merge_core_watchlist(risk_settings, open_symbols)
-                                    + [benchmark_symbol]
-                                    + open_symbols
-                                )
-                            )
-                            quote_snapshot = {
-                                quote.symbol.upper(): quote
-                                for quote in _get_quotes(
-                                    settings, ibkr, mock, snapshot_symbols
-                                )
-                            }
-                        except Exception as exc:
-                            logger.warning(
-                                "Could not capture screener quote snapshot: %s",
-                                exc,
-                            )
-                    em_scheduler.maybe_start_screener(
-                        ScreenerJobContext(
-                            settings=settings,
-                            risk_settings=risk_settings,
-                            db=db,
-                            jev=jev,
-                            minute_bars=minute_bars,
-                            bar_store=bar_store,
-                            mock=mock,
-                            ibkr=ibkr,
-                            open_symbols=open_symbols,
-                            strategy_config=strategy_config,
-                            news_service=news_service,
-                            get_quotes=lambda symbols: _get_quotes(
-                                settings, ibkr, mock, symbols
-                            ),
-                            quote_snapshot=quote_snapshot,
-                        )
-                    )
                 all_symbols = _all_symbols(
                     list(dict.fromkeys(watchlist + open_symbols)),
                     benchmark_symbol,
                 )
-                if screener_result is not None:
-                    all_symbols = _apply_watchlist_update(
-                        watchlist,
-                        benchmark_symbol,
-                        mock,
-                        ibkr,
-                        settings,
-                    )
                 new_watchlist_symbols = _sync_watchlist_symbols(
                     all_symbols,
                     mock,
@@ -986,8 +879,10 @@ def run() -> int:
                 last_live_bar_flush = now_mono
 
             if risk_manager and db:
+                max_hold = float(risk_settings.max_hold_minutes)
+
                 def _max_hold_for_symbol(symbol: str) -> float:
-                    return effective_max_hold_minutes(symbol, risk_settings)
+                    return max_hold
 
                 closed = risk_manager.check_exits(
                     quotes_by_symbol,
@@ -997,15 +892,6 @@ def run() -> int:
                     db,
                     risk_manager,
                     closed,
-                    daily_pnl_account_id=daily_pnl_account_id,
-                ):
-                    portfolio_dirty = True
-
-                closed_demotion = risk_manager.check_demotion_exits(quotes_by_symbol)
-                if persist_simulated_closes(
-                    db,
-                    risk_manager,
-                    closed_demotion,
                     daily_pnl_account_id=daily_pnl_account_id,
                 ):
                     portfolio_dirty = True
@@ -1052,23 +938,7 @@ def run() -> int:
                         ibkr_account_id=daily_pnl_account_id,
                     ):
                         portfolio_dirty = True
-                    demotion_exit_symbols = collect_demotion_exit_symbols(
-                        risk_manager.open_trades,
-                        risk_settings,
-                    )
                     refresh_ibkr_bracket_targets(ibkr, risk_manager, db)
-                    if demotion_exit_symbols:
-                        demotion_closed, _ = close_ibkr_signal_exits(
-                            ibkr,
-                            risk_manager,
-                            db,
-                            max_hold_for_symbol=_max_hold_for_symbol,
-                            demotion_exit_symbols=demotion_exit_symbols,
-                            fill_timeout_sec=settings.ibkr_fill_timeout_sec,
-                            ibkr_account_id=daily_pnl_account_id,
-                        )
-                        if demotion_closed:
-                            portfolio_dirty = True
 
             if portfolio_dirty and db:
                 _sync_portfolio_state(
@@ -1077,7 +947,7 @@ def run() -> int:
                 portfolio_dirty = False
 
             benchmark_symbol = (
-                effective_benchmark(risk_settings) if db and risk_settings else "SPY"
+                effective_benchmark(risk_settings) if db and risk_settings else "EEM"
             )
             benchmark_key = benchmark_symbol.upper()
             benchmark_minute_bars = minute_bars.get(benchmark_key)
@@ -1248,9 +1118,7 @@ def run() -> int:
                     risk_manager,
                     db,
                     max_hold_minutes=0,
-                    max_hold_for_symbol=lambda sym: effective_max_hold_minutes(
-                        sym, risk_settings
-                    ),
+                    max_hold_for_symbol=lambda sym: float(risk_settings.max_hold_minutes),
                     jev_sell_symbols=jev_sell_symbols,
                     profit_take_trade_ids=profit_take_trade_ids,
                     fill_timeout_sec=settings.ibkr_fill_timeout_sec,

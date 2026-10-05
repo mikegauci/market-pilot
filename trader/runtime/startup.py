@@ -7,11 +7,10 @@ from typing import Callable, List, Optional
 from broker.ibkr import IBKRClient
 from config import Settings
 from database.supabase import SupabaseRepository
-from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
 from models.types import RiskSettings
-from watchlist.jev_screener import merge_core_watchlist, resolve_trading_watchlist
-from watchlist.screener_scheduler import EMWatchlistScheduler, backfill_watchlist_symbols
+from watchlist.backfill import backfill_watchlist_symbols
+from watchlist.resolution import resolve_trading_watchlist
 
 logger = logging.getLogger(__name__)
 
@@ -42,17 +41,12 @@ def run_ibkr_startup_backfill(
     bar_store: BarStore,
     ibkr: IBKRClient,
     risk_settings: RiskSettings,
-    em_scheduler: EMWatchlistScheduler,
-    load_em_universe_fn: Callable[[], List[str]],
     on_progress: Optional[Callable[[object, int, int], None]] = None,
 ) -> None:
-    """Watchlist bar backfill and optional EM universe backfill after IBKR connect."""
+    """Watchlist bar backfill after IBKR connect."""
     open_symbols = [trade.symbol for trade in db.get_open_trades()]
     priority_symbols = list(
-        dict.fromkeys(
-            merge_core_watchlist(risk_settings, open_symbols)
-            + resolve_trading_watchlist(risk_settings, open_symbols)
-        )
+        dict.fromkeys(resolve_trading_watchlist(risk_settings, open_symbols))
     )
     backfill_watchlist_symbols(
         settings,
@@ -62,18 +56,3 @@ def run_ibkr_startup_backfill(
         open_symbols=open_symbols,
         on_progress=on_progress,
     )
-    if risk_settings.watchlist_dynamic_enabled:
-        try:
-            em_universe = load_em_universe_fn()
-            em_scheduler.start_em_backfill(
-                settings,
-                bar_store,
-                ibkr,
-                em_universe,
-                exclude_symbols=priority_symbols,
-            )
-        except (FileNotFoundError, ValueError) as exc:
-            logger.warning("EM backfill skipped: %s", exc)
-            em_scheduler.mark_backfill_unavailable()
-    else:
-        em_scheduler.mark_backfill_unavailable()

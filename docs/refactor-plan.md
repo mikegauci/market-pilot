@@ -27,7 +27,7 @@ Runtime extraction (`runtime/*`), `process_ready_states`, heartbeat/startup modu
 | C2 `insert_trade` retry | done | Idempotent by trade id before insert + post-error existence check |
 | C3 NLV vs buying power | done | `set_ibkr_buying_power` + `sync_risk_manager_capital` |
 | C4 Legacy untagged cache | done | Per-account cache on `SupabaseRepository`; invalidate on tagged insert |
-| C5 Screener quote churn | done | Snapshot = core watchlist + benchmark + open (not full EM universe) |
+| C5 Screener quote churn | done | Snapshot = manual watchlist + benchmark + open positions |
 | C6 Dead `HistoryStore` | done | Removed `market/history.py` and unused seed paths |
 | C7 Packaging | done | `httpx` in pyproject deps; optional `dev` pytest; `apply_schema.py` deprecation note |
 

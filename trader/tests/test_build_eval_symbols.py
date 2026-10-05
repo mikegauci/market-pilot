@@ -21,9 +21,6 @@ def _settings(**overrides: object) -> RiskSettings:
         account_capital=1000.0,
         risk_sync_equity=None,
         watchlist=["BABA", "VALE"],
-        watchlist_core=["NVDA", "AAPL"],
-        watchlist_dynamic_enabled=True,
-        watchlist_screener_ran_at=datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc),
         benchmark_symbol="EEM",
     )
     defaults.update(overrides)

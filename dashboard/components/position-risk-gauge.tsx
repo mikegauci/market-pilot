@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { effectiveMaxHoldMinutes, isDemotedSymbol } from "@/lib/demotion";
 import type { Position, Settings, Trade } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
@@ -94,7 +93,7 @@ export function PositionRiskGauge({ position, trade, settings }: Props) {
       ? tpProgressPct(trade.entry_price, trade.take_profit, price)
       : null;
 
-  const maxHold = settings ? effectiveMaxHoldMinutes(position.symbol, settings) : 0;
+  const maxHold = settings ? settings.max_hold_minutes : 0;
   let holdDetail: string | undefined;
   let holdProgress: number | null = null;
 
@@ -104,9 +103,6 @@ export function PositionRiskGauge({ position, trade, settings }: Props) {
     const remaining = limitMs - elapsed;
     holdProgress = Math.max(0, Math.min(100, (elapsed / limitMs) * 100));
     holdDetail = formatCountdown(remaining);
-    if (settings && isDemotedSymbol(position.symbol, settings)) {
-      holdDetail += " · demoted hold";
-    }
   }
 
   const hasAny = slProximity != null || tpProgress != null || holdProgress != null;

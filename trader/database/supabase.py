@@ -17,13 +17,11 @@ from market.bars import BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, Bar
 from market.hours import trading_day_start_utc
 from strategy.exits import normalize_profit_take_fractions
 from models.types import (
-    WatchlistPin,
     AccountSummary,
     BotControl,
     BotStatusUpdate,
     ExecutionMode,
     JevPrediction,
-    JevRankedSymbol,
     MarketState,
     Position,
     Quote,
@@ -43,7 +41,6 @@ from news.market_news import dedupe_market_news_rows
 
 logger = logging.getLogger(__name__)
 
-MAX_EM_UNIVERSE_SIZE = 80
 
 _INTRADAY_BAR_DURATION = timedelta(minutes=5)
 # When the target falls in a gap (halt/overnight), allow the next bar if it opens soon after.
@@ -484,70 +481,13 @@ class SupabaseRepository:
             watchlist=risk.watchlist,
         )
 
-    def _parse_watchlist_pins(self, raw: object) -> List[WatchlistPin]:
-        if not isinstance(raw, list):
-            return []
-        pins: List[WatchlistPin] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            symbol = str(item.get("symbol", "")).upper()
-            if not symbol:
-                continue
-            pins.append(
-                WatchlistPin(
-                    symbol=symbol,
-                    locked=bool(item.get("locked", False)),
-                    protect_demotion=bool(item.get("protect_demotion", False)),
-                )
-            )
-        return pins
-
-    def _watchlist_pins_payload(self, pins: Sequence[WatchlistPin]) -> List[dict]:
-        return [
-            {
-                "symbol": pin.symbol.upper(),
-                "locked": bool(pin.locked),
-                "protect_demotion": bool(pin.protect_demotion),
-            }
-            for pin in pins
-            if str(pin.symbol).strip()
-        ]
-
-    def _parse_jev_rankings(self, raw: object) -> List[JevRankedSymbol]:
-        if not isinstance(raw, list):
-            return []
-        rankings: List[JevRankedSymbol] = []
-        for index, item in enumerate(raw):
-            if not isinstance(item, dict):
-                continue
-            symbol = str(item.get("symbol", "")).upper()
-            if not symbol:
-                continue
-            rankings.append(
-                JevRankedSymbol(
-                    symbol=symbol,
-                    buy=float(item.get("buy", 0)),
-                    hold=float(item.get("hold", 0)),
-                    sell=float(item.get("sell", 0)),
-                    rank=int(item.get("rank", index + 1)),
-                )
-            )
-        return rankings
-
     _SETTINGS_SELECT_CORE = (
         "minimum_jev_confidence, signal_record_threshold, risk_per_trade, "
         "max_position_size, max_daily_loss, max_open_positions, "
         "stop_loss_percentage, take_profit_percentage, max_hold_minutes, "
         "min_hold_minutes, jev_sell_exit_threshold, reentry_cooldown_minutes, "
         "min_volume_ratio, min_share_price, "
-        "account_capital, risk_sync_equity, watchlist, watchlist_core, "
-        "watchlist_dynamic_enabled, watchlist_dynamic_size, "
-        "watchlist_min_buy, "
-        "watchlist_refresh_minutes, benchmark_symbol, watchlist_jev_rankings, "
-        "watchlist_pins, watchlist_dismissed, "
-        "watchlist_screener_ran_at, demotion_exits_enabled, demotion_max_hold_ratio, "
-        "demotion_jev_sell_on_loss, demotion_jev_sell_max_loss_pct, demotion_force_exit"
+        "account_capital, risk_sync_equity, watchlist, benchmark_symbol"
     )
     _SETTINGS_SELECT_WITH_PROFIT_TAKE = (
         f"{_SETTINGS_SELECT_CORE}, "
@@ -629,16 +569,12 @@ class SupabaseRepository:
     def get_risk_settings(self) -> RiskSettings:
         data = self._load_settings_row()
         watchlist = data.get("watchlist") or []
-        watchlist_core = data.get("watchlist_core") or []
-        if not watchlist_core and watchlist:
-            watchlist_core = list(watchlist)
         risk_sync_equity = (
             float(data["risk_sync_equity"])
             if data.get("risk_sync_equity") is not None
             else None
         )
         self._cached_risk_sync_equity = risk_sync_equity
-        screener_ran_at = data.get("watchlist_screener_ran_at")
         profit_min, profit_max = normalize_profit_take_fractions(
             float(data.get("profit_take_min_fraction", 0.70)),
             float(data.get("profit_take_max_fraction", 0.80)),
@@ -664,31 +600,7 @@ class SupabaseRepository:
             account_capital=float(data.get("account_capital", 1000)),
             risk_sync_equity=risk_sync_equity,
             watchlist=[str(s).upper() for s in watchlist],
-            watchlist_core=[str(s).upper() for s in watchlist_core],
-            watchlist_dynamic_enabled=bool(data.get("watchlist_dynamic_enabled", True)),
-            watchlist_dynamic_size=int(data.get("watchlist_dynamic_size", 5)),
-            watchlist_min_buy=float(data.get("watchlist_min_buy", 0.6)),
-            watchlist_refresh_minutes=int(data.get("watchlist_refresh_minutes", 30)),
             benchmark_symbol=str(data.get("benchmark_symbol") or "EEM").upper(),
-            watchlist_jev_rankings=self._parse_jev_rankings(
-                data.get("watchlist_jev_rankings")
-            ),
-            watchlist_screener_ran_at=(
-                _parse_timestamp(screener_ran_at) if screener_ran_at else None
-            ),
-            watchlist_pins=self._parse_watchlist_pins(data.get("watchlist_pins")),
-            watchlist_dismissed=[
-                str(s).upper()
-                for s in (data.get("watchlist_dismissed") or [])
-                if str(s).strip()
-            ],
-            demotion_exits_enabled=bool(data.get("demotion_exits_enabled", True)),
-            demotion_max_hold_ratio=float(data.get("demotion_max_hold_ratio", 0.5)),
-            demotion_jev_sell_on_loss=bool(data.get("demotion_jev_sell_on_loss", True)),
-            demotion_jev_sell_max_loss_pct=float(
-                data.get("demotion_jev_sell_max_loss_pct", 0.02)
-            ),
-            demotion_force_exit=bool(data.get("demotion_force_exit", False)),
             profit_take_enabled=bool(data.get("profit_take_enabled", False)),
             profit_take_min_fraction=profit_min,
             profit_take_max_fraction=profit_max,
@@ -700,105 +612,6 @@ class SupabaseRepository:
                 data.get("profit_take_jev_sell_threshold", 0.70)
             ),
         )
-
-    @_db_synchronized
-    def update_effective_watchlist(
-        self,
-        watchlist: List[str],
-        rankings: List[JevRankedSymbol],
-        *,
-        watchlist_pins: Optional[List[WatchlistPin]] = None,
-    ) -> None:
-        now = datetime.now(timezone.utc).isoformat()
-        rankings_payload = [
-            {
-                "symbol": item.symbol,
-                "buy": item.buy,
-                "hold": item.hold,
-                "sell": item.sell,
-                "rank": item.rank,
-            }
-            for item in rankings
-        ]
-        payload: Dict[str, object] = {
-            "watchlist": watchlist,
-            "watchlist_jev_rankings": rankings_payload,
-            "watchlist_screener_ran_at": now,
-            "updated_at": now,
-        }
-        if watchlist_pins is not None:
-            payload["watchlist_pins"] = self._watchlist_pins_payload(watchlist_pins)
-        self.client.table("settings").update(payload).eq("id", 1).execute()
-        try:
-            self.client.table("watchlist_screener_history").insert(
-                {
-                    "ran_at": now,
-                    "rankings": rankings_payload,
-                    "watchlist": watchlist,
-                }
-            ).execute()
-        except Exception as exc:
-            logger.warning("Failed to log screener history: %s", exc)
-
-    @_db_synchronized
-    def update_effective_watchlist_fallback(self, watchlist: List[str]) -> None:
-        """Persist always-on core fallback after a failed dynamic scan."""
-        now = datetime.now(timezone.utc).isoformat()
-        payload = {
-            "watchlist": watchlist,
-            "watchlist_jev_rankings": [],
-            "watchlist_screener_ran_at": None,
-            "updated_at": now,
-        }
-        self.client.table("settings").update(payload).eq("id", 1).execute()
-
-    @_db_synchronized
-    def get_em_universe_symbols(self, tradable_only: bool = True) -> List[str]:
-        from watchlist.universe import infer_instrument_type
-
-        query = (
-            self.client.table("em_universe")
-            .select("symbol, name, instrument_type")
-            .order("weight_bps", desc=True)
-            .limit(MAX_EM_UNIVERSE_SIZE)
-        )
-        if tradable_only:
-            query = query.eq("tradable", True)
-        result = query.execute()
-        symbols: List[str] = []
-        for row in result.data or []:
-            symbol = str(row.get("symbol", "")).strip().upper()
-            if not symbol:
-                continue
-            name = str(row.get("name", "") or "")
-            raw_type = row.get("instrument_type")
-            kind = (
-                str(raw_type).strip().lower()
-                if raw_type
-                else infer_instrument_type(symbol, name)
-            )
-            # Defense in depth: never return ETFs for dynamic single-name ranking.
-            if kind == "etf":
-                continue
-            if symbol not in symbols:
-                symbols.append(symbol)
-        return symbols
-
-    @_db_synchronized
-    def set_em_universe_tradable(self, symbol: str, tradable: bool) -> bool:
-        """Update tradable flag. Returns True when at least one em_universe row changed."""
-        result = (
-            self.client.table("em_universe")
-            .update(
-                {
-                    "tradable": tradable,
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-            .eq("symbol", symbol.upper())
-            .execute()
-        )
-        return bool(result.data)
 
     def _query_bars(
         self,

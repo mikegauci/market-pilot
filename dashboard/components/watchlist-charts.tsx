@@ -64,12 +64,12 @@ export function WatchlistCharts({
         <>
           <CardTitle>Watchlist charts</CardTitle>
           <p className="mt-1 text-xs text-zinc-500">
-            Intraday price action for watchlist and EM universe symbols.
+            Intraday price action for your watchlist symbols.
           </p>
         </>
       ) : (
         <p className="text-xs text-zinc-500">
-          Pick a watchlist or EM holding symbol to preview intraday price action.
+          Pick a watchlist symbol to preview intraday price action.
         </p>
       )}
 

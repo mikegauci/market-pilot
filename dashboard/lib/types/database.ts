@@ -36,30 +36,15 @@ export type Settings = {
   confirmation_seconds: number;
   /** 0 = off; block entries when 1m volume ratio is below this vs 10-bar average */
   min_volume_ratio: number;
-  /** 0 = off; block entries / EM scan picks below this USD share price */
+  /** 0 = off; block entries below this USD share price */
   min_share_price: number;
-  /** Minimum avg dollar volume per 5m bar for EM screener and entries (0 = off). */
+  /** Minimum avg dollar volume per 5m bar for entries (0 = off). */
   min_dollar_volume: number;
   account_capital: number;
   risk_sync_equity: number | null;
   risk_profile?: "low" | "medium" | "high" | null;
   watchlist: string[];
-  watchlist_core: string[];
-  watchlist_dynamic_enabled: boolean;
-  watchlist_dynamic_size: number;
-  /** Minimum Jev BUY (0–1) required to earn a dynamic watchlist slot. */
-  watchlist_min_buy: number;
-  watchlist_refresh_minutes: number;
   benchmark_symbol: string;
-  watchlist_jev_rankings: JevRanking[];
-  watchlist_screener_ran_at: string | null;
-  watchlist_pins: WatchlistPin[];
-  watchlist_dismissed: string[];
-  demotion_exits_enabled: boolean;
-  demotion_max_hold_ratio: number;
-  demotion_jev_sell_on_loss: boolean;
-  demotion_jev_sell_max_loss_pct: number;
-  demotion_force_exit: boolean;
   /** Market-sell when price is in the entry→TP path band (fractions 0–1). */
   profit_take_enabled: boolean;
   profit_take_min_fraction: number;
@@ -68,50 +53,7 @@ export type Settings = {
   profit_take_band_window_cycles: number;
   /** 0 = off; otherwise min SELL % (fraction 0–1) for optional early exit with progress ≥ min band. */
   profit_take_jev_sell_threshold: number;
-  em_universe_synced_at: string | null;
-  em_universe_source: string | null;
   updated_at: string;
-};
-
-export type EmUniverseRow = {
-  symbol: string;
-  name: string;
-  source_etfs: string[];
-  weight_bps: number;
-  country: string | null;
-  tradable: boolean;
-  instrument_type?: "adr" | "stock" | "etf" | null;
-  updated_at: string;
-};
-
-export type JevRanking = {
-  symbol: string;
-  buy: number;
-  hold: number;
-  sell: number;
-  rank: number;
-};
-
-export type WatchlistPin = {
-  symbol: string;
-  locked: boolean;
-  protect_demotion: boolean;
-};
-
-export type WatchlistScreenerHistory = {
-  id: string;
-  ran_at: string;
-  rankings: JevRanking[];
-  watchlist: string[];
-  created_at: string;
-};
-
-export type RankingDelta = {
-  symbol: string;
-  previousRank: number | null;
-  currentRank: number;
-  delta: number | null;
-  buy: number;
 };
 
 export type NewsArticleSnapshot = {

@@ -273,30 +273,6 @@ def process_ready_states(
                                     blocked,
                                     exc,
                                 )
-                                if is_kid_document_rejection(exc):
-                                    try:
-                                        updated = db.set_em_universe_tradable(
-                                            blocked, False
-                                        )
-                                        if updated:
-                                            logger.info(
-                                                "Marked %s untradable in "
-                                                "em_universe (KID rejection)",
-                                                blocked,
-                                            )
-                                        else:
-                                            logger.debug(
-                                                "%s not in em_universe — "
-                                                "session block only",
-                                                blocked,
-                                            )
-                                    except Exception as db_exc:
-                                        logger.warning(
-                                            "Could not mark %s untradable in "
-                                            "em_universe: %s",
-                                            blocked,
-                                            db_exc,
-                                        )
                             else:
                                 trade_skip_reason = f"ibkr_order_failed ({exc})"
                                 runtime.ibkr_entry_cooldown_until[symbol] = (

@@ -123,22 +123,6 @@ class StrategySettings:
 
 
 @dataclass
-class JevRankedSymbol:
-    symbol: str
-    buy: float
-    hold: float
-    sell: float
-    rank: int
-
-
-@dataclass
-class WatchlistPin:
-    symbol: str
-    locked: bool = False
-    protect_demotion: bool = False
-
-
-@dataclass
 class RiskSettings:
     minimum_jev_confidence: float
     signal_record_threshold: float
@@ -152,24 +136,10 @@ class RiskSettings:
     account_capital: float
     risk_sync_equity: Optional[float]
     watchlist: List[str]
-    watchlist_core: List[str] = field(default_factory=list)
-    watchlist_dynamic_enabled: bool = True
-    watchlist_dynamic_size: int = 5
-    watchlist_min_buy: float = 0.6
-    watchlist_refresh_minutes: int = 30
     benchmark_symbol: str = "EEM"
-    watchlist_jev_rankings: List[JevRankedSymbol] = field(default_factory=list)
-    watchlist_screener_ran_at: Optional[datetime] = None
-    watchlist_pins: List[WatchlistPin] = field(default_factory=list)
-    watchlist_dismissed: List[str] = field(default_factory=list)
     min_volume_ratio: float = 0.5
     min_share_price: float = 20.0
     min_dollar_volume: float = 250_000.0
-    demotion_exits_enabled: bool = True
-    demotion_max_hold_ratio: float = 0.5
-    demotion_jev_sell_on_loss: bool = True
-    demotion_jev_sell_max_loss_pct: float = 0.02
-    demotion_force_exit: bool = False
     # Block Jev SELL soft-exits until the trade has been open this many minutes.
     min_hold_minutes: float = 15.0
     # Minimum Jev SELL probability to soft-exit (must also be sell-dominant).

@@ -37,7 +37,7 @@ import {
 import { confidencePercentFromDecimal } from "@/lib/settings-display";
 import { buildSettingDiffs } from "@/lib/session-brief/setting-diff";
 import type { SessionBriefSuggestion } from "@/lib/session-brief/schema";
-import type { EmUniverseRow, Settings } from "@/lib/types/database";
+import type { Settings } from "@/lib/types/database";
 import { cn, formatCurrency } from "@/lib/utils";
 
 const SETTING_DESCRIPTIONS_FULL = {
@@ -83,17 +83,10 @@ const SETTING_DESCRIPTIONS_FULL = {
   min_volume_ratio:
     "Block new entries when latest 1-min volume is below this fraction of the 10-bar average (0 = off). Example: 0.5 requires at least half the recent average volume.",
   min_share_price:
-    "Block entries and drop EM scan candidates below this USD share price (0 = off). Filters out thin/low-priced names such as sub-$5 ADRs.",
+    "Block entries below this USD share price (0 = off). Filters out thin/low-priced names.",
   min_dollar_volume:
-    "Minimum average dollar volume per 5-minute bar for EM scan picks and new entries (0 = off). Example: 250000 filters illiquid ADRs.",
-  watchlist: "Effective symbols the bot watches right now (updated by Jev when dynamic mode is on).",
-  watchlist_core:
-    "Fallback symbols until the first successful scan (or when dynamic mode is off).",
-  watchlist_dynamic_size:
-    "Maximum EM ADR/stock names kept after each scan that clear the min BUY floor (not a fill quota).",
-  watchlist_min_buy:
-    "Minimum Jev BUY (%) required to earn a dynamic watchlist slot. Trade entries still use Min Jev confidence.",
-  watchlist_refresh_minutes: "How often Jev re-scores the full EM universe.",
+    "Minimum average dollar volume per 5-minute bar for new entries (0 = off). Example: 250000 filters illiquid names.",
+  watchlist: "Symbols Jev monitors for entries (plus open positions at runtime).",
 } as const;
 
 const SETTING_DESCRIPTIONS = {
@@ -118,13 +111,9 @@ const SETTING_DESCRIPTIONS = {
   jev_sell_exit_threshold: "Min Jev SELL % required to soft-exit.",
   reentry_cooldown_minutes: "No re-entry in same symbol for N minutes (0 = off).",
   min_volume_ratio: "Block entries when volume is below this fraction of average (0 = off).",
-  min_share_price: "Block entries / EM picks below this USD price (0 = off).",
-  min_dollar_volume: "Min avg $ volume per 5m bar for scan + entries (0 = off).",
-  watchlist: "Live symbols the trader evaluates each cycle.",
-  watchlist_core: "Fallback until first scan; always-on when dynamic mode is off.",
-  watchlist_dynamic_size: "Max symbols from each Jev scan that clear min BUY.",
-  watchlist_min_buy: "Min Jev BUY % for a dynamic watchlist slot.",
-  watchlist_refresh_minutes: "Minutes between full EM universe rescans.",
+  min_share_price: "Block entries below this USD price (0 = off).",
+  min_dollar_volume: "Min avg $ volume per 5m bar for entries (0 = off).",
+  watchlist: "Symbols the trader evaluates each cycle.",
 } as const;
 
 function StrategyHintLine({ hint }: { hint: StrategyHint }) {
@@ -278,24 +267,16 @@ function StrategyPercentField({
   );
 }
 
-type EmUniverseStats = {
-  count: number;
-  tradableCount: number;
-  topHoldings: EmUniverseRow[];
-};
-
 export function SettingsForm({
   settings,
   baselineEquity,
   currency,
-  emUniverse,
   briefSessionDate = null,
   briefSuggestions = [],
 }: {
   settings: Settings;
   baselineEquity: number;
   currency: string;
-  emUniverse: EmUniverseStats;
   briefSessionDate?: string | null;
   briefSuggestions?: SessionBriefSuggestion[];
 }) {
@@ -873,9 +854,9 @@ export function SettingsForm({
       <SettingsSection
         id="watchlist"
         title="Watchlist"
-        description="Fallback symbols or dynamic EM top-N after each successful Jev scan, plus intraday charts."
+        description="Symbols Jev monitors for entries, plus intraday charts. EEM is benchmark-only (not traded)."
       >
-        <WatchlistSettingsSection settings={settings} emUniverse={emUniverse} />
+        <WatchlistSettingsSection settings={settings} />
       </SettingsSection>
 
       <div className="sticky bottom-0 z-10 border-t border-zinc-800 bg-zinc-950/95 py-3 backdrop-blur">

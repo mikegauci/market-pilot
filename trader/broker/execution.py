@@ -184,19 +184,17 @@ def close_ibkr_signal_exits(
     max_hold_minutes: float = 0.0,
     max_hold_for_symbol: Optional[Callable[[str], float]] = None,
     jev_sell_symbols: Optional[set[str]] = None,
-    demotion_exit_symbols: Optional[set[str]] = None,
     profit_take_trade_ids: Optional[set[str]] = None,
     fill_timeout_sec: float = 30.0,
     ibkr_account_id: Optional[str] = None,
 ) -> tuple[bool, set[str]]:
-    """Close IBKR positions on time limit, demotion, profit take, or Jev SELL.
+    """Close IBKR positions on time limit, profit take, or Jev SELL.
 
     Returns (any_closed, trade_ids_successfully_closed).
     """
     closed_any = False
     closed_trade_ids: set[str] = set()
     jev_sell_symbols = jev_sell_symbols or set()
-    demotion_exit_symbols = demotion_exit_symbols or set()
     profit_take_trade_ids = profit_take_trade_ids or set()
 
     for trade in list(risk_manager.open_trades):
@@ -210,14 +208,11 @@ def close_ibkr_signal_exits(
         )
         time_exit = _trade_hold_expired(trade, hold_minutes)
         jev_exit = trade.symbol in jev_sell_symbols
-        demotion_exit = trade.symbol in demotion_exit_symbols
         profit_take_exit = trade.id in profit_take_trade_ids
-        if not time_exit and not jev_exit and not demotion_exit and not profit_take_exit:
+        if not time_exit and not jev_exit and not profit_take_exit:
             continue
 
-        if demotion_exit:
-            reason = "demotion_exit"
-        elif profit_take_exit:
+        if profit_take_exit:
             reason = "profit_take"
         elif time_exit:
             reason = "time_exit"
@@ -318,18 +313,3 @@ def collect_profit_take_trade_ids(
     open_ids = {t.id for t in open_trades}
     band_tracker.prune(open_ids)
     return trade_ids
-
-
-def collect_demotion_exit_symbols(
-    open_trades: List[TradeRecord],
-    risk_settings,
-) -> set[str]:
-    from watchlist.demotion import is_demoted_symbol
-
-    if not risk_settings.demotion_exits_enabled or not risk_settings.demotion_force_exit:
-        return set()
-    return {
-        trade.symbol
-        for trade in open_trades
-        if trade.execution_mode == "ibkr" and is_demoted_symbol(trade.symbol, risk_settings)
-    }

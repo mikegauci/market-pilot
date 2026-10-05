@@ -114,7 +114,7 @@ _ELIGIBILITY_REJECTION_MARKERS = (
     "appropriate kid is available",
 )
 
-# Stronger product-document signals — safe to persist as untradable in em_universe.
+# Stronger product-document signals for IBKR eligibility rejections.
 _KID_REJECTION_MARKERS = (
     "does not have a kid",
     "appropriate kid is available",
