@@ -130,6 +130,10 @@ describe("trade-analytics", () => {
     expect(exitReasonLabel("eod_flatten")).toBe("EOD flatten (incl. losers)");
   });
 
+  it("labels profit_take exits as Soft Sell", () => {
+    expect(exitReasonLabel("profit_take")).toBe("Soft Sell");
+  });
+
   it("sums pnl by exit reason", () => {
     const breakdown = exitReasonBreakdown([closedWin, closedLoss]);
     expect(breakdown.find((r) => r.reason === "take_profit")?.pnl).toBe(5);

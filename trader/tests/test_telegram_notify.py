@@ -66,7 +66,7 @@ class MessageFormatTests(unittest.TestCase):
         )
         self.assertEqual(
             format_close_message("AAPL", "profit_take", 12.5),
-            "CLOSED AAPL — JEV soft sell / early take\nNet PnL +$12.50",
+            "CLOSED AAPL — Soft Sell\nNet PnL +$12.50",
         )
         self.assertEqual(
             format_close_message("AAPL", "jev_sell", 0),
@@ -77,7 +77,7 @@ class MessageFormatTests(unittest.TestCase):
         expected = {
             "stop_loss": "Stop loss",
             "take_profit": "Top profit take",
-            "profit_take": "JEV soft sell / early take",
+            "profit_take": "Soft Sell",
             "time_exit": "Max hold",
             "jev_sell": "JEV hard sell",
             "demotion_exit": "Demotion exit",
