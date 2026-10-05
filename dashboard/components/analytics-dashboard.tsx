@@ -28,6 +28,7 @@ import {
 import { LIVE_SETTINGS_POLL_MS } from "@/lib/live-data-config";
 import { perBarTooltipProps, renderPnlActiveBar } from "@/lib/recharts-bar-interaction";
 import { confidencePercentFromDecimal } from "@/lib/settings-display";
+import { buildEquityReconciliation } from "@/lib/equity-reconciliation";
 import {
   buildDailyEquitySeries,
   buildDailyPnlSeries,
@@ -183,6 +184,10 @@ export function AnalyticsDashboard({
   );
 
   const stats = useMemo(() => computeTradeStats(filteredTrades), [filteredTrades]);
+  const equityRecon = useMemo(
+    () => buildEquityReconciliation(liveHistory, liveTrades, range),
+    [liveHistory, liveTrades, range],
+  );
   const symbolPnl = useMemo(() => pnlBySymbol(filteredTrades).slice(0, 12), [filteredTrades]);
   const exitReasons = useMemo(
     () =>
@@ -251,6 +256,95 @@ export function AnalyticsDashboard({
           />
         </div>
       </Card>
+
+      {equityRecon && (
+        <Card>
+          <CardTitle>Equity reconciliation</CardTitle>
+          <p className="mt-1 text-xs text-zinc-500">
+            Equity ≈ cash balance + accrued cash + open positions. Accrued is IBKR{" "}
+            <span className="text-zinc-400">AccruedCash</span> (interest, dividends, etc.). Closed
+            trades are for the bot; P&amp;L is already in cash balance Δ. Use{" "}
+            <span className="text-zinc-400">1W</span> or{" "}
+            <span className="text-zinc-400">All</span> to see multi-day offline gaps (1D is rolling
+            24h).
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <StatFigure
+              label="Equity change"
+              value={formatCurrency(equityRecon.equityChange, currency)}
+              valueClassName={
+                equityRecon.equityChange >= 0 ? "text-emerald-400" : "text-red-400"
+              }
+            />
+            <StatFigure
+              label="Closed trades"
+              value={formatCurrency(equityRecon.closedTradePnl, currency)}
+              valueClassName={
+                equityRecon.closedTradePnl >= 0 ? "text-emerald-400" : "text-red-400"
+              }
+            />
+            <StatFigure
+              label="Accrued cash Δ"
+              value={
+                equityRecon.accruedCashChange == null
+                  ? "—"
+                  : formatCurrency(equityRecon.accruedCashChange, currency)
+              }
+              valueClassName={
+                equityRecon.accruedCashChange == null
+                  ? "text-zinc-500"
+                  : equityRecon.accruedCashChange >= 0
+                    ? "text-emerald-400"
+                    : "text-red-400"
+              }
+              sub={
+                equityRecon.accruedCashChange == null
+                  ? "Needs trader AccruedCash snapshots"
+                  : "IBKR accruals"
+              }
+            />
+            <StatFigure
+              label="Cash balance Δ"
+              value={formatCurrency(equityRecon.balanceChange, currency)}
+              valueClassName={
+                equityRecon.balanceChange >= 0 ? "text-emerald-400" : "text-red-400"
+              }
+            />
+            <StatFigure
+              label="Open / other"
+              value={formatCurrency(equityRecon.unexplained, currency)}
+              sub="Mostly open-position marks"
+            />
+          </div>
+          {equityRecon.offlineGaps.length > 0 && (
+            <ul className="mt-4 space-y-2 border-t border-zinc-800 pt-4 text-xs text-zinc-400">
+              {equityRecon.offlineGaps.map((gap) => (
+                <li key={gap.fromTimestamp}>
+                  Bot offline ~{Math.round(gap.gapHours)}h (
+                  {new Date(gap.fromTimestamp).toLocaleString("en-GB", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}{" "}
+                  →{" "}
+                  {new Date(gap.toTimestamp).toLocaleString("en-GB", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                  ): equity {formatCurrency(gap.equityChange, currency)}, accrued{" "}
+                  {gap.accruedCashChange == null
+                    ? "—"
+                    : formatCurrency(gap.accruedCashChange, currency)}
+                  , trades {formatCurrency(gap.closedTradePnl, currency)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>

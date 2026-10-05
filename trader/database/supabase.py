@@ -365,6 +365,7 @@ class SupabaseRepository:
             "total_pnl": total_pnl,
             "currency": account.currency,
             "ibkr_account_id": account.account_id,
+            "ibkr_accrued_cash": account.ibkr_accrued_cash,
         }
         self.client.table("portfolio_history").insert(payload).execute()
 

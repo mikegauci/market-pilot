@@ -31,6 +31,7 @@ class AccountSummary:
     ibkr_daily_pnl: Optional[float] = None
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0
+    ibkr_accrued_cash: Optional[float] = None
 
 
 @dataclass

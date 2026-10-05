@@ -397,6 +397,7 @@ class IBKRClient:
             ibkr_daily_pnl=optional_value("DailyPnL"),
             unrealized_pnl=unrealized,
             realized_pnl=realized,
+            ibkr_accrued_cash=optional_value("AccruedCash"),
         )
 
     @_ibkr_synchronized

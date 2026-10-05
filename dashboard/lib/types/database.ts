@@ -197,6 +197,8 @@ export type PortfolioSnapshot = {
   total_pnl: number;
   currency: string;
   ibkr_account_id: string | null;
+  /** IBKR AccruedCash (simulated interest on paper); often ≈ equity − balance. */
+  ibkr_accrued_cash: number | null;
   created_at: string;
 };
 
