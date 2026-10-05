@@ -83,7 +83,7 @@ export function MarketConditionCard({
         <div>
           <CardTitle>Watchlist condition</CardTitle>
           <p className="mt-1 text-xs text-zinc-500">
-            Median 5-minute move of your watchlist and open positions.
+            How your watchlist and open positions moved in the last 5 minutes.
           </p>
         </div>
         <Link href="/strategy" className="shrink-0 text-xs text-emerald-400 hover:text-emerald-300">

@@ -119,7 +119,7 @@ function breadthDetail(moves: WatchlistMove[], floor: number): string {
     else if (move.change5m < 0) down += 1;
     else up += 1;
   }
-  return `${up} flat or up · ${down} down · ${downHard} down hard`;
+  return `${up} steady or up · ${down} down a little · ${downHard} down a lot`;
 }
 
 function breadthTone(moves: WatchlistMove[], floor: number): MarketConditionFactor["tone"] {
@@ -163,17 +163,17 @@ export function assessMarketCondition(options: {
     },
     {
       key: "watchlist",
-      label: "Watchlist, 5 min",
+      label: "Typical move (5 min)",
       detail:
         medianChange == null
-          ? "No 5-minute readings"
-          : `${formatSignedPct(medianChange)} median · ${nameCount} ${nameCount === 1 ? "name" : "names"}`,
+          ? "No data yet"
+          : `${formatSignedPct(medianChange)} · ${nameCount} ${nameCount === 1 ? "stock" : "stocks"}`,
       tone: moveTone(medianChange, floor),
     },
     {
       key: "names",
-      label: "Names",
-      detail: nameCount === 0 ? "No names yet" : breadthDetail(moves, floor),
+      label: "Each stock",
+      detail: nameCount === 0 ? "Waiting for data" : breadthDetail(moves, floor),
       tone: breadthTone(moves, floor),
     },
   ];
@@ -190,8 +190,8 @@ export function assessMarketCondition(options: {
       ...base,
       level: "closed",
       label: "Closed",
-      summary: "US market is closed. The figures below are the last watchlist readings.",
-      hint: "The bot will not open new trades until the US session reopens. Open positions are still managed.",
+      summary: "The US market is closed. The numbers below are the last readings we had.",
+      hint: "The bot will not open new trades until the US session reopens. It still manages open positions.",
     };
   }
 
@@ -202,8 +202,8 @@ export function assessMarketCondition(options: {
       ...base,
       level,
       label: "Unknown",
-      summary: "Waiting for 5-minute moves from the watchlist.",
-      hint: "No reading yet. Check again once the bot has evaluated these names.",
+      summary: "Waiting for 5-minute price moves from your watchlist.",
+      hint: "Nothing to show yet. Check back after the bot has scanned your stocks.",
     };
   }
 
@@ -212,8 +212,8 @@ export function assessMarketCondition(options: {
       ...base,
       level,
       label: "Headwind",
-      summary: `The middle of the watchlist is down more than ${Math.abs(floor)}% over the last 5 minutes.`,
-      hint: "These names are weak together. A weak benchmark print can still block new buys on its own.",
+      summary: `Your watchlist is down more than ${Math.abs(floor)}% on a typical stock over the last 5 minutes.`,
+      hint: "Many stocks are weak at once. A falling market benchmark can still block new buys by itself.",
     };
   }
 
@@ -222,8 +222,8 @@ export function assessMarketCondition(options: {
       ...base,
       level,
       label: "Caution",
-      summary: "The middle of the watchlist is down a little over the last 5 minutes.",
-      hint: "The book is soft. Other filters may still skip names, and a weak benchmark print can still block new buys.",
+      summary: "Your watchlist is down slightly over the last 5 minutes.",
+      hint: "Conditions are a bit weak. The bot may still skip individual stocks, and a weak benchmark can block new buys.",
     };
   }
 
@@ -231,8 +231,8 @@ export function assessMarketCondition(options: {
     ...base,
     level: "favorable",
     label: "Favorable",
-    summary: "The middle of the watchlist is flat or up over the last 5 minutes.",
-    hint: "This is the watchlist tape. A weak benchmark print or bearish headlines can still block new buys.",
+    summary: "Your watchlist is flat or up over the last 5 minutes.",
+    hint: "This only reflects your watchlist. A weak benchmark or bad news can still stop new buys.",
   };
 }
 

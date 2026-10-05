@@ -114,9 +114,9 @@ describe("assessMarketCondition", () => {
     });
     expect(result.level).toBe("favorable");
     expect(result.summary).toMatch(/flat or up/i);
-    expect(result.hint).toMatch(/watchlist tape/i);
+    expect(result.hint).toMatch(/only reflects your watchlist/i);
     expect(result.factors.find((factor) => factor.key === "watchlist")?.detail).toMatch(
-      /\+0\.20% median · 3 names/,
+      /\+0\.20% · 3 stocks/,
     );
   });
 
@@ -130,7 +130,7 @@ describe("assessMarketCondition", () => {
     });
     expect(result.level).toBe("caution");
     expect(result.medianChange5m).toBeCloseTo(-0.05);
-    expect(result.hint).toMatch(/book is soft/i);
+    expect(result.hint).toMatch(/conditions are a bit weak/i);
   });
 
   it("marks headwind when the median is below the floor", () => {
@@ -145,14 +145,14 @@ describe("assessMarketCondition", () => {
     expect(result.level).toBe("headwind");
     expect(result.summary).toMatch(/more than 0\.12%/i);
     expect(result.factors.find((factor) => factor.key === "names")?.detail).toBe(
-      "1 flat or up · 0 down · 2 down hard",
+      "1 steady or up · 0 down a little · 2 down a lot",
     );
   });
 
   it("marks unknown when no name has a 5-minute reading", () => {
     const result = assessMarketCondition({ isMarketOpen: true, moves: [] });
     expect(result.level).toBe("unknown");
-    expect(result.hint).toMatch(/no reading yet/i);
+    expect(result.hint).toMatch(/nothing to show yet/i);
   });
 });
 
