@@ -38,7 +38,7 @@ export function filterTradesByRange(trades: Trade[], range: PortfolioRange): Tra
 const EXIT_REASON_LABELS: Record<string, string> = {
   stop_loss: "Stop loss",
   take_profit: "Top profit take",
-  profit_take: "JEV soft sell / early take",
+  profit_take: "Soft Sell",
   time_exit: "Max hold",
   jev_sell: "JEV hard sell",
   demotion_exit: "Demotion exit",
