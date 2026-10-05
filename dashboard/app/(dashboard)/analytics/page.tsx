@@ -1,4 +1,5 @@
 import { AnalyticsDashboard } from "@/components/analytics-dashboard";
+import { MorningBriefCard } from "@/components/morning-brief-card";
 import { SessionBriefCard } from "@/components/session-brief-card";
 import { ANALYTICS_PORTFOLIO_HISTORY_LIMIT } from "@/lib/analytics-data";
 import {
@@ -36,6 +37,7 @@ export default async function AnalyticsPage() {
         currency={currency}
         settings={settings}
       />
+      <MorningBriefCard />
       <SessionBriefCard
         initialHistory={sessionBriefLoad.history}
         initialLoadError={sessionBriefLoad.loadError}
