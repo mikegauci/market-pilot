@@ -16,7 +16,11 @@ export function WatchlistSettingsSection({ settings }: Props) {
 
   return (
     <div className="space-y-4">
-      <input type="hidden" name="benchmark_symbol" value="" />
+      <input
+        type="hidden"
+        name="benchmark_symbol"
+        value={settings.benchmark_symbol ?? ""}
+      />
 
       <div className="rounded-lg border border-zinc-800/60 bg-zinc-950/30 p-3">
         <p className="text-sm font-medium text-zinc-100">{headline}</p>

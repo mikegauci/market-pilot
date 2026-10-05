@@ -70,6 +70,29 @@ class IndicatorTests(unittest.TestCase):
         self.assertIsNotNone(state.rsi)
         self.assertIsNotNone(state.benchmark_change_5m)
 
+    def test_build_market_state_without_benchmark(self) -> None:
+        symbol_agg = MinuteBarAggregator()
+        base = datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc)
+        for index in range(16):
+            symbol_agg.record_point(
+                base + timedelta(minutes=index),
+                100.0 + index,
+                1000,
+            )
+        quote = Quote(
+            symbol="NVDA", price=110.0, bid=109.9, ask=110.1, spread=0.2, volume=1000
+        )
+        state = build_market_state(
+            quote,
+            symbol_agg,
+            None,
+            warmup_min_1m_bars=15,
+        )
+        self.assertIsNotNone(state)
+        assert state is not None
+        self.assertIsNone(state.benchmark_change_5m)
+        self.assertIsNone(state.spy_change_5m)
+
     def test_build_market_state_uses_cached_five_min_without_live_tape(self) -> None:
         base = datetime(2026, 1, 10, 14, 0, tzinfo=timezone.utc)
         cached = [

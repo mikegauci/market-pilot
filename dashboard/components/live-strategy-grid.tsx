@@ -23,7 +23,8 @@ export function LiveStrategyGrid({ predictions, settings }: Props) {
 
   const watchlist = useMemo(() => resolveEffectiveWatchlist(settings), [settings]);
   const filterOptions = filterSummaryFromSettings(settings);
-  const benchmark = settings.benchmark_symbol ?? "";
+  const benchmark = (settings.benchmark_symbol ?? "").trim();
+  const benchmarkEnabled = benchmark.length > 0;
 
   const bySymbol = useMemo(() => {
     const map = new Map<string, Prediction>();
@@ -43,36 +44,38 @@ export function LiveStrategyGrid({ predictions, settings }: Props) {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardTitle>Benchmark strip</CardTitle>
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-          <span className="font-medium text-zinc-200">{benchmark}</span>
-          {benchmarkChange != null ? (
-            <span
-              className={cn(
-                "tabular-nums",
-                benchmarkChange >= STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct
-                  ? "text-emerald-400"
-                  : "text-red-400",
-              )}
-            >
-              5m {benchmarkChange.toFixed(2)}%
-            </span>
-          ) : (
-            <span className="text-zinc-600">No recent data</span>
-          )}
-          <span className="text-xs text-zinc-600">
-            Floor {STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct}% · headwind blocks entries
-          </span>
-          {benchmarkPrediction ? (
+      {benchmarkEnabled ? (
+        <Card>
+          <CardTitle>Benchmark strip</CardTitle>
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+            <span className="font-medium text-zinc-200">{benchmark}</span>
+            {benchmarkChange != null ? (
+              <span
+                className={cn(
+                  "tabular-nums",
+                  benchmarkChange >= STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct
+                    ? "text-emerald-400"
+                    : "text-red-400",
+                )}
+              >
+                5m {benchmarkChange.toFixed(2)}%
+              </span>
+            ) : (
+              <span className="text-zinc-600">No recent data</span>
+            )}
             <span className="text-xs text-zinc-600">
-              Updated {formatDateTime(benchmarkPrediction.timestamp)}
+              Floor {STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct}% · headwind blocks entries
             </span>
-          ) : benchmarkChange != null ? (
-            <span className="text-xs text-zinc-600">From latest watchlist eval</span>
-          ) : null}
-        </div>
-      </Card>
+            {benchmarkPrediction ? (
+              <span className="text-xs text-zinc-600">
+                Updated {formatDateTime(benchmarkPrediction.timestamp)}
+              </span>
+            ) : benchmarkChange != null ? (
+              <span className="text-xs text-zinc-600">From latest watchlist eval</span>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
 
       {recentSkips.length > 0 && (
         <Card>

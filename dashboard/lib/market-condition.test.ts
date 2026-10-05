@@ -47,6 +47,15 @@ describe("mergeEvalScopeSymbols", () => {
 });
 
 describe("extractBenchmarkChange5m", () => {
+  it("returns null when no benchmark symbol is configured", () => {
+    expect(
+      extractBenchmarkChange5m(
+        [prediction("BABA", { benchmark_change_5m: -0.1 })],
+        "",
+      ),
+    ).toBeNull();
+  });
+
   it("prefers the benchmark row then falls back to any snapshot", () => {
     expect(
       extractBenchmarkChange5m(

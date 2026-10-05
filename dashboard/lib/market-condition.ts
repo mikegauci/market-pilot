@@ -64,7 +64,9 @@ export function extractBenchmarkChange5m(
   predictions: Prediction[],
   benchmarkSymbol = "",
 ): number | null {
-  const bench = benchmarkSymbol.toUpperCase();
+  const bench = benchmarkSymbol.trim().toUpperCase();
+  if (!bench) return null;
+
   const preferred = predictions.find((p) => p.symbol.toUpperCase() === bench);
   const ordered = preferred ? [preferred, ...predictions] : predictions;
 
@@ -213,7 +215,7 @@ export function assessMarketCondition(options: {
       level,
       label: "Headwind",
       summary: `Your watchlist is down more than ${Math.abs(floor)}% on a typical stock over the last 5 minutes.`,
-      hint: "Many stocks are weak at once. A falling market benchmark can still block new buys by itself.",
+      hint: "Many stocks are weak at once. If you set a benchmark ETF in settings, a sharp drop there can also block new buys.",
     };
   }
 
@@ -223,7 +225,7 @@ export function assessMarketCondition(options: {
       level,
       label: "Caution",
       summary: "Your watchlist is down slightly over the last 5 minutes.",
-      hint: "Conditions are a bit weak. The bot may still skip individual stocks, and a weak benchmark can block new buys.",
+      hint: "Conditions are a bit weak. The bot may still skip individual stocks; a configured benchmark drop can block entries too.",
     };
   }
 
@@ -232,7 +234,7 @@ export function assessMarketCondition(options: {
     level: "favorable",
     label: "Favorable",
     summary: "Your watchlist is flat or up over the last 5 minutes.",
-    hint: "This only reflects your watchlist. A weak benchmark or bad news can still stop new buys.",
+    hint: "This only reflects your watchlist. Bad news, spread, or a configured benchmark headwind can still stop new buys.",
   };
 }
 

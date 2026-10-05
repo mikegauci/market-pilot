@@ -110,6 +110,21 @@ class TestFilters(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertIn("price_too_low", result.reason)
 
+    def test_skips_benchmark_headwind_when_no_benchmark_data(self) -> None:
+        result = check_entry_filters(
+            _state(spy_change_5m=None, benchmark_change_5m=None),
+            StrategyConfig(require_price_above_ema20=False),
+        )
+        self.assertTrue(result.passed)
+
+    def test_rejects_benchmark_headwind_when_change_too_low(self) -> None:
+        result = check_entry_filters(
+            _state(benchmark_change_5m=-0.5, spy_change_5m=-0.5),
+            StrategyConfig(require_price_above_ema20=False),
+        )
+        self.assertFalse(result.passed)
+        self.assertIn("benchmark_headwind", result.reason)
+
     def test_correlation_cap(self) -> None:
         trades = [
             TradeRecord(

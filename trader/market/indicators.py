@@ -211,7 +211,7 @@ def benchmark_change_from_five_min(bars: Sequence[Bar]) -> Optional[float]:
 def build_market_state(
     quote: Quote,
     minute_bars: MinuteBarAggregator,
-    benchmark_minute_bars: MinuteBarAggregator,
+    benchmark_minute_bars: Optional[MinuteBarAggregator],
     *,
     trend_changes: Optional[TrendChanges] = None,
     warmup_min_1m_bars: int = 15,
@@ -239,8 +239,10 @@ def build_market_state(
         benchmark_change_5m = benchmark_change_5m_override
     elif benchmark_intraday_bars:
         benchmark_change_5m = benchmark_change_from_five_min(benchmark_intraday_bars)
-    else:
+    elif benchmark_minute_bars is not None:
         benchmark_change_5m = benchmark_minute_bars.change_pct(5)
+    else:
+        benchmark_change_5m = None
 
     avg_dv = average_dollar_volume(cached_bars) if cached_bars else None
     trends = trend_changes or TrendChanges()

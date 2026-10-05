@@ -28,8 +28,9 @@ export function evaluateEntryFilters(
       ? snapshot.spread / price
       : null;
 
-  const benchmarkChange =
-    snapshot?.benchmark_change_5m ?? snapshot?.spy_change_5m ?? null;
+  const benchmarkChange = benchmark
+    ? (snapshot?.benchmark_change_5m ?? snapshot?.spy_change_5m ?? null)
+    : null;
 
   const checks: FilterCheck[] = [
     {
@@ -89,17 +90,21 @@ export function evaluateEntryFilters(
             ? "—"
             : "off",
     },
-    {
-      name: `${benchmark} 5m`,
-      pass:
-        benchmarkChange == null
-          ? null
-          : benchmarkChange >= thresholds.maxBenchmarkDrop5mPct,
-      detail:
-        benchmarkChange != null
-          ? `${benchmarkChange.toFixed(2)}% / floor ${thresholds.maxBenchmarkDrop5mPct}%`
-          : "—",
-    },
+    ...(benchmark
+      ? [
+          {
+            name: `${benchmark} 5m`,
+            pass:
+              benchmarkChange == null
+                ? null
+                : benchmarkChange >= thresholds.maxBenchmarkDrop5mPct,
+            detail:
+              benchmarkChange != null
+                ? `${benchmarkChange.toFixed(2)}% / floor ${thresholds.maxBenchmarkDrop5mPct}%`
+                : "—",
+          } satisfies FilterCheck,
+        ]
+      : []),
     {
       name: "News",
       pass:

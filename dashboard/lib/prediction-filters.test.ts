@@ -23,4 +23,12 @@ describe("evaluateEntryFilters spread gate", () => {
     const spread = checks.find((row) => row.name === "Spread");
     expect(spread?.pass).toBe(true);
   });
+
+  it("omits benchmark headwind row when benchmark is not configured", () => {
+    const checks = evaluateEntryFilters(
+      { price: 100, benchmark_change_5m: -0.5 },
+      { benchmarkSymbol: "" },
+    );
+    expect(checks.some((row) => row.name.endsWith(" 5m"))).toBe(false);
+  });
 });
