@@ -1,17 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
 import { PredictionIndicatorSummary } from "@/components/prediction-indicators";
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
 import { useLatestPredictions } from "@/lib/latest-predictions-context";
-import { getMarketStatus } from "@/lib/market-hours";
-import {
-  assessMarketCondition,
-  marketConditionDotClass,
-  marketConditionToneClass,
-} from "@/lib/market-condition";
+import { extractBenchmarkChange5m } from "@/lib/market-condition";
 import { filterSummaryFromSettings } from "@/lib/prediction-filters";
 import { aggregateSkipReasons } from "@/lib/skip-reason-stats";
 import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
@@ -25,14 +20,6 @@ type Props = {
 
 export function LiveStrategyGrid({ predictions, settings }: Props) {
   const live = useLatestPredictions(predictions);
-  const [isMarketOpen, setIsMarketOpen] = useState(true);
-
-  useEffect(() => {
-    const tick = () => setIsMarketOpen(getMarketStatus().isOpen);
-    tick();
-    const id = setInterval(tick, 30_000);
-    return () => clearInterval(id);
-  }, []);
 
   const watchlist = useMemo(() => resolveEffectiveWatchlist(settings), [settings]);
   const filterOptions = filterSummaryFromSettings(settings);
@@ -44,21 +31,8 @@ export function LiveStrategyGrid({ predictions, settings }: Props) {
     return map;
   }, [live]);
 
+  const benchmarkChange = extractBenchmarkChange5m(live, benchmark);
   const benchmarkPrediction = bySymbol.get(benchmark.toUpperCase());
-  const benchmarkChange =
-    benchmarkPrediction?.market_snapshot?.benchmark_change_5m ??
-    benchmarkPrediction?.market_snapshot?.spy_change_5m;
-
-  const newsSentiment =
-    live
-      .map((p) => p.market_snapshot?.news_sentiment)
-      .find((v) => v != null && Number.isFinite(v)) ?? null;
-  const tape = assessMarketCondition({
-    isMarketOpen,
-    benchmarkSymbol: benchmark,
-    benchmarkChange5m: benchmarkChange ?? null,
-    newsSentiment,
-  });
 
   const recentSkips = useMemo(() => {
     const watchSet = new Set(watchlist.map((s) => s.toUpperCase()));
@@ -70,18 +44,7 @@ export function LiveStrategyGrid({ predictions, settings }: Props) {
   return (
     <div className="space-y-4">
       <Card>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle>Benchmark strip</CardTitle>
-          <div className="flex items-center gap-1.5">
-            <span
-              className={cn("h-2 w-2 rounded-full", marketConditionDotClass(tape.level))}
-              aria-hidden
-            />
-            <span className={cn("text-xs font-medium", marketConditionToneClass(tape.level))}>
-              Tape: {tape.label}
-            </span>
-          </div>
-        </div>
+        <CardTitle>Benchmark strip</CardTitle>
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
           <span className="font-medium text-zinc-200">{benchmark}</span>
           {benchmarkChange != null ? (
@@ -101,13 +64,14 @@ export function LiveStrategyGrid({ predictions, settings }: Props) {
           <span className="text-xs text-zinc-600">
             Floor {STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct}% · headwind blocks entries
           </span>
-          {benchmarkPrediction && (
+          {benchmarkPrediction ? (
             <span className="text-xs text-zinc-600">
               Updated {formatDateTime(benchmarkPrediction.timestamp)}
             </span>
-          )}
+          ) : benchmarkChange != null ? (
+            <span className="text-xs text-zinc-600">From latest watchlist eval</span>
+          ) : null}
         </div>
-        <p className="mt-2 text-xs text-zinc-500">{tape.hint}</p>
       </Card>
 
       {recentSkips.length > 0 && (

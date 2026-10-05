@@ -6,18 +6,20 @@ import {
   getClosedTrades,
   getLatestPortfolio,
   getSessionBriefHistory,
+  getSessionMarketConditionMix,
   getPortfolioHistory,
   getSettings,
 } from "@/lib/queries";
 
 export default async function AnalyticsPage() {
-  const [portfolioHistory, closedTrades, portfolio, settings, sessionBriefLoad] =
+  const [portfolioHistory, closedTrades, portfolio, settings, sessionBriefLoad, conditionMix] =
     await Promise.all([
       getPortfolioHistory(ANALYTICS_PORTFOLIO_HISTORY_LIMIT),
       getClosedTrades(),
       getLatestPortfolio(),
       getSettings(),
       getSessionBriefHistory(),
+      getSessionMarketConditionMix(),
     ]);
 
   const currency = portfolio?.currency ?? "USD";
@@ -41,6 +43,8 @@ export default async function AnalyticsPage() {
       <SessionBriefCard
         initialHistory={sessionBriefLoad.history}
         initialLoadError={sessionBriefLoad.loadError}
+        initialConditionMix={conditionMix.rows}
+        initialMixError={conditionMix.loadError}
       />
     </div>
   );

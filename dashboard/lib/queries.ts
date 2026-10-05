@@ -19,6 +19,11 @@ import {
   parseSessionBriefDays,
   type SessionBriefHistoryEntry,
 } from "@/lib/session-brief/history";
+import {
+  parseSessionConditionMix,
+  type SessionConditionMinutes,
+} from "@/lib/session-brief/market-condition-mix";
+import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
 import { createClient } from "@/lib/supabase/server";
 import type {
   BotStatus,
@@ -157,6 +162,23 @@ export async function getSessionBriefHistory(): Promise<SessionBriefHistoryLoad>
     history: buildSessionBriefHistory(days, (briefRows ?? []) as SessionBriefRow[]),
     loadError: null,
   };
+}
+
+export type SessionConditionMixLoad = {
+  rows: SessionConditionMinutes[];
+  loadError: string | null;
+};
+
+export async function getSessionMarketConditionMix(): Promise<SessionConditionMixLoad> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("list_session_market_condition_mix", {
+    p_since: SESSION_BRIEF_FIRST_DATE,
+    p_headwind_floor: STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct,
+  });
+  if (error) {
+    return { rows: [], loadError: error.message };
+  }
+  return { rows: parseSessionConditionMix(data), loadError: null };
 }
 
 export async function getLatestSessionBriefForUser(): Promise<SessionBriefRow | null> {

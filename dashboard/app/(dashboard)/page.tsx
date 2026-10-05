@@ -10,7 +10,6 @@ import {
   getBotStatus,
   getLatestPortfolio,
   getLatestPredictionsBySymbol,
-  getMarketNews,
   getOpenTrades,
   getPositions,
   getTradesForTradingDay,
@@ -29,7 +28,6 @@ export default async function OverviewPage() {
     trades,
     settings,
     predictions,
-    news,
   ] = await Promise.all([
     getBotStatus(),
     getLatestPortfolio(),
@@ -39,7 +37,6 @@ export default async function OverviewPage() {
     getTradesForTradingDay(tradingDayStartIso),
     getSettings(),
     getLatestPredictionsBySymbol(),
-    getMarketNews(80),
   ]);
 
   const currency = portfolio?.currency ?? "USD";
@@ -53,8 +50,8 @@ export default async function OverviewPage() {
           <OverviewStats portfolio={portfolio} positions={positions} currency={currency} />
           <MarketConditionCard
             predictions={predictions}
-            news={news}
             settings={settings}
+            openSymbols={openTrades.map((trade) => trade.symbol)}
           />
           {settings ? <OverviewWatchlistCard settings={settings} /> : null}
         </div>

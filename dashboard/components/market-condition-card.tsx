@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/card";
-import { fetchMarketNews, fetchSettings } from "@/lib/data-client";
+import { fetchSettings } from "@/lib/data-client";
+import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import { LIVE_SETTINGS_POLL_MS } from "@/lib/live-data-config";
 import { useLatestPredictions } from "@/lib/latest-predictions-context";
@@ -15,26 +16,24 @@ import {
   marketConditionToneClass,
   type MarketCondition,
 } from "@/lib/market-condition";
-import type { MarketNewsRow, Prediction, Settings } from "@/lib/types/database";
+import type { Prediction, Settings } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
 type Props = {
   predictions: Prediction[];
-  news: MarketNewsRow[];
   settings: Settings | null;
+  openSymbols?: string[];
   className?: string;
 };
 
 function useLiveMarketCondition(
   predictions: Prediction[],
-  news: MarketNewsRow[],
   settings: Settings | null,
+  openSymbols: string[],
 ): MarketCondition {
   const livePredictions = useLatestPredictions(predictions);
-  const loadNews = useCallback(() => fetchMarketNews(40), []);
   const loadSettings = useCallback(() => fetchSettings(), []);
 
-  const liveNews = useLiveQuery(news, loadNews, ["market_news"]);
   const liveSettings = useLiveQuery(
     settings,
     loadSettings,
@@ -52,25 +51,41 @@ function useLiveMarketCondition(
     return () => clearInterval(id);
   }, []);
 
+  const watchlist = useMemo(
+    () => (liveSettings ? resolveEffectiveWatchlist(liveSettings) : []),
+    [liveSettings],
+  );
+
   return useMemo(
     () =>
       marketConditionFromLiveData({
         isMarketOpen,
         predictions: livePredictions,
-        news: liveNews,
+        watchlist,
+        openSymbols,
         benchmarkSymbol: liveSettings?.benchmark_symbol ?? "EEM",
       }),
-    [isMarketOpen, livePredictions, liveNews, liveSettings?.benchmark_symbol],
+    [isMarketOpen, livePredictions, watchlist, openSymbols, liveSettings?.benchmark_symbol],
   );
 }
 
-export function MarketConditionCard({ predictions, news, settings, className }: Props) {
-  const condition = useLiveMarketCondition(predictions, news, settings);
+export function MarketConditionCard({
+  predictions,
+  settings,
+  openSymbols = [],
+  className,
+}: Props) {
+  const condition = useLiveMarketCondition(predictions, settings, openSymbols);
 
   return (
     <Card className={cn("h-full", className)}>
       <div className="flex items-start justify-between gap-2">
-        <CardTitle>Market condition</CardTitle>
+        <div>
+          <CardTitle>Watchlist condition</CardTitle>
+          <p className="mt-1 text-xs text-zinc-500">
+            Median 5-minute move of your watchlist and open positions.
+          </p>
+        </div>
         <Link href="/strategy" className="shrink-0 text-xs text-emerald-400 hover:text-emerald-300">
           Strategy
         </Link>
@@ -98,7 +113,7 @@ export function MarketConditionCard({ predictions, news, settings, className }: 
             <span className="shrink-0 text-xs text-zinc-500">{factor.label}</span>
             <span
               className={cn(
-                "truncate text-right text-xs font-medium tabular-nums",
+                "text-right text-xs font-medium tabular-nums",
                 marketConditionFactorClass(factor.tone),
               )}
             >

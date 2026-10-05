@@ -1,13 +1,18 @@
 import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
-import type { MarketNewsRow, Prediction } from "@/lib/types/database";
+import type { Prediction } from "@/lib/types/database";
 
 export type MarketConditionLevel = "favorable" | "caution" | "headwind" | "closed" | "unknown";
 
 export type MarketConditionFactor = {
-  key: "session" | "benchmark" | "news";
+  key: "session" | "watchlist" | "names";
   label: string;
   detail: string;
   tone: "good" | "warn" | "bad" | "neutral";
+};
+
+export type WatchlistMove = {
+  symbol: string;
+  change5m: number;
 };
 
 export type MarketCondition = {
@@ -16,13 +21,44 @@ export type MarketCondition = {
   summary: string;
   hint: string;
   factors: MarketConditionFactor[];
-  benchmarkSymbol: string;
-  benchmarkChange5m: number | null;
-  newsSentiment: number | null;
+  medianChange5m: number | null;
+  symbolCount: number;
   isMarketOpen: boolean;
 };
 
-const NEWS_LOOKBACK_MS = 6 * 60 * 60 * 1000;
+/** Same cutoff the bot uses for a weak benchmark print, applied here to the watchlist median. */
+export const WATCHLIST_HEADWIND_FLOOR = STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct;
+
+/**
+ * Median of a list of numbers. Even counts average the two middle values,
+ * matching Postgres percentile_cont(0.5).
+ */
+export function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) return sorted[mid] ?? null;
+  const lower = sorted[mid - 1];
+  const upper = sorted[mid];
+  if (lower == null || upper == null) return null;
+  return (lower + upper) / 2;
+}
+
+/** Watchlist plus open positions — matches trader build_eval_symbols (minus benchmark). */
+export function mergeEvalScopeSymbols(
+  watchlist: string[] = [],
+  openSymbols: string[] = [],
+  benchmarkSymbol = "EEM",
+): string[] {
+  const benchmark = benchmarkSymbol.toUpperCase();
+  const merged: string[] = [];
+  for (const raw of [...watchlist, ...openSymbols]) {
+    const symbol = raw.toUpperCase();
+    if (!symbol || symbol === benchmark) continue;
+    if (!merged.includes(symbol)) merged.push(symbol);
+  }
+  return merged;
+}
 
 export function extractBenchmarkChange5m(
   predictions: Prediction[],
@@ -40,42 +76,33 @@ export function extractBenchmarkChange5m(
   return null;
 }
 
-export function averageRecentNewsSentiment(
-  news: MarketNewsRow[],
-  nowMs = Date.now(),
-  lookbackMs = NEWS_LOOKBACK_MS,
-): number | null {
-  const scores: number[] = [];
-  for (const row of news) {
-    if (row.sentiment == null || !Number.isFinite(row.sentiment)) continue;
-    const published = new Date(row.published_at).getTime();
-    if (Number.isNaN(published)) continue;
-    if (nowMs - published > lookbackMs) continue;
-    scores.push(row.sentiment);
+export function watchlistMovesFromPredictions(
+  predictions: Prediction[],
+  scopeSymbols: string[] = [],
+  benchmarkSymbol = "EEM",
+): WatchlistMove[] {
+  const allowed = new Set(mergeEvalScopeSymbols(scopeSymbols, [], benchmarkSymbol));
+  if (allowed.size === 0) return [];
+
+  const benchmark = benchmarkSymbol.toUpperCase();
+  const bySymbol = new Map<string, WatchlistMove>();
+
+  for (const prediction of predictions) {
+    const symbol = prediction.symbol.toUpperCase();
+    if (!symbol || symbol === benchmark || !allowed.has(symbol)) continue;
+    const change = prediction.market_snapshot?.change_5m;
+    if (change == null || !Number.isFinite(change)) continue;
+    bySymbol.set(symbol, { symbol, change5m: change });
   }
-  if (scores.length === 0) return null;
-  return scores.reduce((sum, value) => sum + value, 0) / scores.length;
+
+  return [...bySymbol.values()];
 }
 
-function benchmarkTone(
-  change: number | null,
-  floor: number,
-): MarketConditionFactor["tone"] {
+function moveTone(change: number | null, floor: number): MarketConditionFactor["tone"] {
   if (change == null) return "neutral";
   if (change < floor) return "bad";
   if (change < 0) return "warn";
   return "good";
-}
-
-function newsTone(
-  sentiment: number | null,
-  minSentiment: number,
-): MarketConditionFactor["tone"] {
-  if (sentiment == null) return "neutral";
-  if (sentiment <= minSentiment) return "bad";
-  if (sentiment < -0.1) return "warn";
-  if (sentiment > 0.1) return "good";
-  return "neutral";
 }
 
 function formatSignedPct(value: number): string {
@@ -83,31 +110,49 @@ function formatSignedPct(value: number): string {
   return `${sign}${value.toFixed(2)}%`;
 }
 
-function formatSentiment(value: number): string {
-  const sign = value > 0 ? "+" : "";
-  return `${sign}${value.toFixed(2)}`;
+function breadthDetail(moves: WatchlistMove[], floor: number): string {
+  let up = 0;
+  let down = 0;
+  let downHard = 0;
+  for (const move of moves) {
+    if (move.change5m < floor) downHard += 1;
+    else if (move.change5m < 0) down += 1;
+    else up += 1;
+  }
+  return `${up} flat or up · ${down} down · ${downHard} down hard`;
+}
+
+function breadthTone(moves: WatchlistMove[], floor: number): MarketConditionFactor["tone"] {
+  if (moves.length === 0) return "neutral";
+  if (moves.some((move) => move.change5m < floor)) return "bad";
+  if (moves.some((move) => move.change5m < 0)) return "warn";
+  return "good";
+}
+
+function conditionFromMedian(
+  medianChange: number | null,
+  floor: number,
+): Exclude<MarketConditionLevel, "closed"> {
+  if (medianChange == null) return "unknown";
+  if (medianChange < floor) return "headwind";
+  if (medianChange < 0) return "caution";
+  return "favorable";
 }
 
 /**
- * Score overall EM market conditions using the same thresholds the bot uses
- * for hard entry filters (benchmark 5m floor + news sentiment floor).
+ * Score the watchlist from the median 5-minute move of its names.
+ * Headwind is below the benchmark floor; caution is any smaller drop.
  */
 export function assessMarketCondition(options: {
   isMarketOpen: boolean;
-  benchmarkSymbol?: string;
-  benchmarkChange5m?: number | null;
-  newsSentiment?: number | null;
-  maxBenchmarkDrop5mPct?: number;
-  minNewsSentiment?: number;
+  moves?: WatchlistMove[];
+  floor?: number;
 }): MarketCondition {
-  const benchmarkSymbol = (options.benchmarkSymbol ?? "EEM").toUpperCase();
-  const floor =
-    options.maxBenchmarkDrop5mPct ?? STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct;
-  const minNews =
-    options.minNewsSentiment ?? STRATEGY_FILTER_THRESHOLDS.minNewsSentiment;
-  const change = options.benchmarkChange5m ?? null;
-  const sentiment = options.newsSentiment ?? null;
+  const floor = options.floor ?? WATCHLIST_HEADWIND_FLOOR;
+  const moves = options.moves ?? [];
+  const medianChange = median(moves.map((move) => move.change5m));
   const isOpen = options.isMarketOpen;
+  const nameCount = moves.length;
 
   const factors: MarketConditionFactor[] = [
     {
@@ -117,115 +162,101 @@ export function assessMarketCondition(options: {
       tone: isOpen ? "good" : "neutral",
     },
     {
-      key: "benchmark",
-      label: `Broad market (${benchmarkSymbol}, 5 min)`,
+      key: "watchlist",
+      label: "Watchlist, 5 min",
       detail:
-        change == null
-          ? "No recent reading"
-          : `${formatSignedPct(change)} (cutoff ${floor}%)`,
-      tone: benchmarkTone(change, floor),
+        medianChange == null
+          ? "No 5-minute readings"
+          : `${formatSignedPct(medianChange)} median · ${nameCount} ${nameCount === 1 ? "name" : "names"}`,
+      tone: moveTone(medianChange, floor),
     },
     {
-      key: "news",
-      label: "Recent news mood",
-      detail:
-        sentiment == null
-          ? "No recent headlines"
-          : `${formatSentiment(sentiment)} (blocks at ${minNews} or below)`,
-      tone: newsTone(sentiment, minNews),
+      key: "names",
+      label: "Names",
+      detail: nameCount === 0 ? "No names yet" : breadthDetail(moves, floor),
+      tone: breadthTone(moves, floor),
     },
   ];
 
+  const base = {
+    factors,
+    medianChange5m: medianChange,
+    symbolCount: nameCount,
+    isMarketOpen: isOpen,
+  };
+
   if (!isOpen) {
     return {
+      ...base,
       level: "closed",
       label: "Closed",
-      summary: "US market is closed. Figures below are the last readings for context.",
+      summary: "US market is closed. The figures below are the last watchlist readings.",
       hint: "The bot will not open new trades until the US session reopens. Open positions are still managed.",
-      factors,
-      benchmarkSymbol,
-      benchmarkChange5m: change,
-      newsSentiment: sentiment,
-      isMarketOpen: false,
     };
   }
 
-  if (change == null && sentiment == null) {
+  const level = conditionFromMedian(medianChange, floor);
+
+  if (level === "unknown") {
     return {
-      level: "unknown",
+      ...base,
+      level,
       label: "Unknown",
-      summary: "Waiting for market and news data from the trader.",
-      hint: "No recommendation yet — check again once readings appear.",
-      factors,
-      benchmarkSymbol,
-      benchmarkChange5m: change,
-      newsSentiment: sentiment,
-      isMarketOpen: true,
+      summary: "Waiting for 5-minute moves from the watchlist.",
+      hint: "No reading yet. Check again once the bot has evaluated these names.",
     };
   }
 
-  const benchmarkBlocks = change != null && change < floor;
-  const newsBlocks = sentiment != null && sentiment <= minNews;
-  const benchmarkSoft = change != null && change < 0 && change >= floor;
-  const newsSoft = sentiment != null && sentiment < -0.1 && sentiment > minNews;
-
-  if (benchmarkBlocks || newsBlocks) {
-    const drivers: string[] = [];
-    if (benchmarkBlocks) drivers.push(`${benchmarkSymbol} too weak`);
-    if (newsBlocks) drivers.push("bearish news");
+  if (level === "headwind") {
     return {
-      level: "headwind",
+      ...base,
+      level,
       label: "Headwind",
-      summary: `The broad market or recent news looks weak enough that new buys are risky (${drivers.join(" · ")}).`,
-      hint: "The bot blocks most new buys. Prefer waiting; losses here often come from the market, not a broken bot.",
-      factors,
-      benchmarkSymbol,
-      benchmarkChange5m: change,
-      newsSentiment: sentiment,
-      isMarketOpen: true,
+      summary: `The middle of the watchlist is down more than ${Math.abs(floor)}% over the last 5 minutes.`,
+      hint: "These names are weak together. A weak benchmark print can still block new buys on its own.",
     };
   }
 
-  if (benchmarkSoft || newsSoft) {
+  if (level === "caution") {
     return {
-      level: "caution",
+      ...base,
+      level,
       label: "Caution",
-      summary: "Conditions are a bit soft, but not weak enough to hard-block new buys.",
-      hint: "These checks still allow new buys, but other filters may skip symbols. Be selective and keep sizing modest.",
-      factors,
-      benchmarkSymbol,
-      benchmarkChange5m: change,
-      newsSentiment: sentiment,
-      isMarketOpen: true,
+      summary: "The middle of the watchlist is down a little over the last 5 minutes.",
+      hint: "The book is soft. Other filters may still skip names, and a weak benchmark print can still block new buys.",
     };
   }
 
   return {
+    ...base,
     level: "favorable",
     label: "Favorable",
-    summary: "Broad market and news look OK for new trades on these checks.",
-    hint: "These checks allow new buys; other filters may still skip symbols. If results are still weak, look at entries, exits, and risk settings — not this tape readout.",
-    factors,
-    benchmarkSymbol,
-    benchmarkChange5m: change,
-    newsSentiment: sentiment,
-    isMarketOpen: true,
+    summary: "The middle of the watchlist is flat or up over the last 5 minutes.",
+    hint: "This is the watchlist tape. A weak benchmark print or bearish headlines can still block new buys.",
   };
 }
 
 export function marketConditionFromLiveData(options: {
   isMarketOpen: boolean;
   predictions: Prediction[];
-  news: MarketNewsRow[];
+  watchlist?: string[];
+  openSymbols?: string[];
   benchmarkSymbol?: string;
-  nowMs?: number;
+  floor?: number;
 }): MarketCondition {
-  const benchmarkSymbol = options.benchmarkSymbol ?? "EEM";
+  const scope = mergeEvalScopeSymbols(
+    options.watchlist,
+    options.openSymbols,
+    options.benchmarkSymbol,
+  );
   return assessMarketCondition({
     isMarketOpen: options.isMarketOpen,
-    benchmarkSymbol,
-    benchmarkChange5m: extractBenchmarkChange5m(options.predictions, benchmarkSymbol),
-    newsSentiment: averageRecentNewsSentiment(options.news, options.nowMs),
+    floor: options.floor,
+    moves: watchlistMovesFromPredictions(
+      options.predictions,
+      scope,
+      options.benchmarkSymbol,
+    ),
   });
 }
 

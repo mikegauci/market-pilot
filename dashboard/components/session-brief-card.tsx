@@ -4,16 +4,44 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
+import { marketConditionToneClass } from "@/lib/market-condition";
 import { generateSessionBrief } from "@/lib/session-brief/actions";
 import { defaultSelectedSessionDate, type SessionBriefHistoryEntry } from "@/lib/session-brief/history";
+import {
+  formatSharePercent,
+  sessionConditionCoverageNote,
+  sharesFromMinutes,
+  type SessionConditionMinutes,
+} from "@/lib/session-brief/market-condition-mix";
 import { sessionBriefSettingLabel } from "@/lib/session-brief/setting-diff";
 import type { SessionBriefContent } from "@/lib/types/database";
 import { cn, formatDateTime } from "@/lib/utils";
 
 type Props = {
   initialHistory: SessionBriefHistoryEntry[];
+  initialConditionMix?: SessionConditionMinutes[];
   initialLoadError?: string | null;
+  initialMixError?: string | null;
 };
+
+function ConditionMixLine({ row }: { row: SessionConditionMinutes }) {
+  const shares = sharesFromMinutes(row);
+  if (shares.length === 0) {
+    return <span className="mt-0.5 block text-[10px] text-zinc-500">No watchlist readings</span>;
+  }
+  return (
+    <span className="mt-0.5 block">
+      {shares.map((share, index) => (
+        <span key={share.level}>
+          {index > 0 ? <span className="text-zinc-600">, </span> : null}
+          <span className={marketConditionToneClass(share.level)}>
+            {formatSharePercent(share.percent)} {share.label}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
 
 function directionLabel(direction: "raise" | "lower" | "keep"): string {
   if (direction === "raise") return "Consider raising";
@@ -130,7 +158,12 @@ function BriefBody({
   );
 }
 
-export function SessionBriefCard({ initialHistory, initialLoadError = null }: Props) {
+export function SessionBriefCard({
+  initialHistory,
+  initialConditionMix = [],
+  initialLoadError = null,
+  initialMixError = null,
+}: Props) {
   const [briefOpen, setBriefOpen] = useState(true);
   const [history, setHistory] = useState(initialHistory);
   const [loadError] = useState(initialLoadError);
@@ -151,6 +184,12 @@ export function SessionBriefCard({ initialHistory, initialLoadError = null }: Pr
   );
 
   const selectedBrief = selectedEntry?.brief ?? null;
+  const mixByDate = useMemo(() => {
+    const map = new Map<string, SessionConditionMinutes>();
+    for (const row of initialConditionMix) map.set(row.session_date, row);
+    return map;
+  }, [initialConditionMix]);
+  const selectedMix = selectedDate ? mixByDate.get(selectedDate) ?? null : null;
 
   const handleGenerate = () => {
     if (!selectedDate) return;
@@ -206,6 +245,7 @@ export function SessionBriefCard({ initialHistory, initialLoadError = null }: Pr
         <div className="mt-4 flex flex-wrap gap-2">
           {chronologicalDays.map((day) => {
             const active = day.session_date === selectedDate;
+            const mix = mixByDate.get(day.session_date);
             return (
               <button
                 key={day.session_date}
@@ -227,6 +267,13 @@ export function SessionBriefCard({ initialHistory, initialLoadError = null }: Pr
                   <span className="mx-1">·</span>
                   {day.prediction_count.toLocaleString()} preds
                 </span>
+                {mix ? (
+                  <ConditionMixLine row={mix} />
+                ) : day.prediction_count > 0 && !initialMixError ? (
+                  <span className="mt-0.5 block text-[10px] text-zinc-600">
+                    No condition mix for this day
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -236,6 +283,18 @@ export function SessionBriefCard({ initialHistory, initialLoadError = null }: Pr
           No sessions since 2 Oct 2026 yet. Run the trader on a US market day, then return here.
         </p>
       )}
+
+      {initialMixError ? (
+        <p className="mt-4 text-sm text-amber-400/90">
+          Could not load watchlist conditions: {initialMixError}
+        </p>
+      ) : null}
+
+      {selectedMix ? (
+        <p className="mt-4 text-xs leading-relaxed text-zinc-500">
+          {sessionConditionCoverageNote(selectedMix.observed_minutes)}
+        </p>
+      ) : null}
 
       {error ? <p className="mt-4 text-sm text-amber-400/90">{error}</p> : null}
 

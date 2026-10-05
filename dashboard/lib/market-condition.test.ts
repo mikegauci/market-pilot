@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   assessMarketCondition,
-  averageRecentNewsSentiment,
   extractBenchmarkChange5m,
   marketConditionFromLiveData,
+  median,
+  mergeEvalScopeSymbols,
+  watchlistMovesFromPredictions,
 } from "@/lib/market-condition";
-import type { MarketNewsRow, Prediction } from "@/lib/types/database";
+import type { Prediction } from "@/lib/types/database";
 
 function prediction(
   symbol: string,
@@ -14,73 +16,78 @@ function prediction(
   return {
     id: symbol,
     symbol,
-    timestamp: "2026-09-29T14:00:00Z",
+    timestamp: "2026-10-02T14:00:00Z",
     price: 10,
     buy_probability: 0.5,
     hold_probability: 0.3,
     sell_probability: 0.2,
     trade_created: false,
     market_snapshot: snapshot,
-    created_at: "2026-09-29T14:00:00Z",
+    created_at: "2026-10-02T14:00:00Z",
   };
 }
 
-function newsRow(sentiment: number | null, publishedAt: string): MarketNewsRow {
-  return {
-    id: 1,
-    headline: "Test",
-    summary: null,
-    url: null,
-    source: null,
-    image: null,
-    category: "general",
-    related: null,
-    related_symbols: [],
-    published_at: publishedAt,
-    fetched_at: publishedAt,
-    sentiment,
-    tags: [],
-  };
-}
-
-describe("extractBenchmarkChange5m", () => {
-  it("prefers the benchmark symbol snapshot", () => {
-    const value = extractBenchmarkChange5m(
-      [
-        prediction("BABA", { benchmark_change_5m: -0.1 }),
-        prediction("EEM", { benchmark_change_5m: 0.25 }),
-      ],
-      "EEM",
-    );
-    expect(value).toBe(0.25);
+describe("median", () => {
+  it("averages the two middle values for an even count", () => {
+    expect(median([1, 2, 3, 4])).toBe(2.5);
   });
 
-  it("falls back to spy_change_5m and any snapshot", () => {
-    expect(
-      extractBenchmarkChange5m([prediction("BABA", { spy_change_5m: -0.4 })], "EEM"),
-    ).toBe(-0.4);
+  it("returns the middle value for an odd count", () => {
+    expect(median([-0.2, 0.1, 0.4])).toBe(0.1);
   });
 });
 
-describe("averageRecentNewsSentiment", () => {
-  const now = Date.parse("2026-09-29T16:00:00Z");
+describe("mergeEvalScopeSymbols", () => {
+  it("merges watchlist and open positions without the benchmark", () => {
+    expect(mergeEvalScopeSymbols(["BABA", "EEM"], ["VALE", "baba"], "EEM")).toEqual([
+      "BABA",
+      "VALE",
+    ]);
+  });
+});
 
-  it("averages sentiments inside the lookback window", () => {
-    const avg = averageRecentNewsSentiment(
-      [
-        newsRow(0.4, "2026-09-29T15:00:00Z"),
-        newsRow(-0.2, "2026-09-29T14:30:00Z"),
-        newsRow(0.8, "2026-09-28T10:00:00Z"),
-      ],
-      now,
+describe("extractBenchmarkChange5m", () => {
+  it("prefers the benchmark row then falls back to any snapshot", () => {
+    expect(
+      extractBenchmarkChange5m(
+        [
+          prediction("BABA", { benchmark_change_5m: -0.1 }),
+          prediction("EEM", { benchmark_change_5m: 0.25 }),
+        ],
+        "EEM",
+      ),
+    ).toBe(0.25);
+    expect(extractBenchmarkChange5m([prediction("BABA", { spy_change_5m: -0.4 })], "EEM")).toBe(
+      -0.4,
     );
-    expect(avg).toBeCloseTo(0.1);
+  });
+});
+
+describe("watchlistMovesFromPredictions", () => {
+  it("returns nothing when the eval scope is empty", () => {
+    expect(
+      watchlistMovesFromPredictions([prediction("BABA", { change_5m: 0.2 })], [], "EEM"),
+    ).toEqual([]);
   });
 
-  it("returns null when nothing recent", () => {
+  it("keeps scoped names and drops the benchmark", () => {
+    const moves = watchlistMovesFromPredictions(
+      [
+        prediction("EEM", { change_5m: -0.4 }),
+        prediction("BABA", { change_5m: 0.2 }),
+        prediction("VALE", { change_5m: -0.1 }),
+        prediction("NU", { change_5m: 0.05 }),
+      ],
+      ["BABA", "VALE", "EEM"],
+      "EEM",
+    );
+    expect(moves.map((move) => move.symbol).sort()).toEqual(["BABA", "VALE"]);
+  });
+
+  it("does not fall back to every symbol when scope is empty", () => {
     expect(
-      averageRecentNewsSentiment([newsRow(0.5, "2026-09-20T10:00:00Z")], now),
-    ).toBeNull();
+      watchlistMovesFromPredictions([prediction("NU", { change_5m: -0.8 })], [], "EEM"),
+    ).toEqual([]);
   });
 });
 
@@ -88,89 +95,94 @@ describe("assessMarketCondition", () => {
   it("marks closed sessions", () => {
     const result = assessMarketCondition({
       isMarketOpen: false,
-      benchmarkChange5m: 0.2,
-      newsSentiment: 0.1,
+      moves: [{ symbol: "BABA", change5m: 0.2 }],
     });
     expect(result.level).toBe("closed");
     expect(result.label).toBe("Closed");
     expect(result.hint).toMatch(/will not open new trades/i);
+    expect(result.medianChange5m).toBe(0.2);
   });
 
-  it("marks favorable when benchmark and news are supportive", () => {
+  it("marks favorable when the median is flat or up", () => {
     const result = assessMarketCondition({
       isMarketOpen: true,
-      benchmarkChange5m: 0.15,
-      newsSentiment: 0.2,
+      moves: [
+        { symbol: "BABA", change5m: 0.2 },
+        { symbol: "VALE", change5m: -0.05 },
+        { symbol: "NU", change5m: 0.4 },
+      ],
     });
     expect(result.level).toBe("favorable");
-    expect(result.label).toBe("Favorable");
-    expect(result.hint).toMatch(/allow new buys/i);
-    expect(result.hint).toMatch(/other filters may still skip/i);
-    expect(result.factors.find((f) => f.key === "benchmark")?.label).toMatch(
-      /Broad market \(EEM, 5 min\)/,
-    );
-    expect(result.factors.find((f) => f.key === "news")?.detail).toMatch(
-      /blocks at -0\.3 or below/,
+    expect(result.summary).toMatch(/flat or up/i);
+    expect(result.hint).toMatch(/watchlist tape/i);
+    expect(result.factors.find((factor) => factor.key === "watchlist")?.detail).toMatch(
+      /\+0\.20% median · 3 names/,
     );
   });
 
-  it("marks caution when soft but above floors", () => {
+  it("marks caution when the median is down but above the floor", () => {
     const result = assessMarketCondition({
       isMarketOpen: true,
-      benchmarkChange5m: -0.08,
-      newsSentiment: 0,
+      moves: [
+        { symbol: "BABA", change5m: -0.08 },
+        { symbol: "VALE", change5m: -0.02 },
+      ],
     });
     expect(result.level).toBe("caution");
-    expect(result.hint).toMatch(/still allow new buys/i);
-    expect(result.hint).toMatch(/other filters may skip/i);
+    expect(result.medianChange5m).toBeCloseTo(-0.05);
+    expect(result.hint).toMatch(/book is soft/i);
   });
 
-  it("marks headwind when benchmark breaches the floor", () => {
+  it("marks headwind when the median is below the floor", () => {
     const result = assessMarketCondition({
       isMarketOpen: true,
-      benchmarkChange5m: -0.45,
-      newsSentiment: 0.1,
+      moves: [
+        { symbol: "BABA", change5m: -0.4 },
+        { symbol: "VALE", change5m: -0.2 },
+        { symbol: "NU", change5m: 0.1 },
+      ],
     });
     expect(result.level).toBe("headwind");
-    expect(result.summary).toMatch(/EEM too weak/i);
-    expect(result.hint).toMatch(/blocks most new buys/i);
-    expect(result.factors.find((f) => f.key === "benchmark")?.detail).toMatch(
-      /cutoff -0\.12%/,
+    expect(result.summary).toMatch(/more than 0\.12%/i);
+    expect(result.factors.find((factor) => factor.key === "names")?.detail).toBe(
+      "1 flat or up · 0 down · 2 down hard",
     );
   });
 
-  it("marks headwind when news is bearish enough to block", () => {
-    const result = assessMarketCondition({
-      isMarketOpen: true,
-      benchmarkChange5m: 0.1,
-      newsSentiment: -0.35,
-    });
-    expect(result.level).toBe("headwind");
-    expect(result.summary).toMatch(/bearish news/i);
-  });
-
-  it("marks unknown when open but no readings", () => {
-    const result = assessMarketCondition({
-      isMarketOpen: true,
-      benchmarkChange5m: null,
-      newsSentiment: null,
-    });
+  it("marks unknown when no name has a 5-minute reading", () => {
+    const result = assessMarketCondition({ isMarketOpen: true, moves: [] });
     expect(result.level).toBe("unknown");
-    expect(result.hint).toMatch(/No recommendation yet/i);
+    expect(result.hint).toMatch(/no reading yet/i);
   });
 });
 
 describe("marketConditionFromLiveData", () => {
-  it("combines predictions and news", () => {
-    const now = Date.parse("2026-09-29T16:00:00Z");
+  it("scores the watchlist and open positions in scope", () => {
     const result = marketConditionFromLiveData({
       isMarketOpen: true,
       benchmarkSymbol: "EEM",
-      nowMs: now,
-      predictions: [prediction("EEM", { benchmark_change_5m: -0.5 })],
-      news: [newsRow(0.1, "2026-09-29T15:00:00Z")],
+      watchlist: ["BABA"],
+      openSymbols: ["VALE"],
+      predictions: [
+        prediction("EEM", { benchmark_change_5m: -1 }),
+        prediction("BABA", { change_5m: 0.3 }),
+        prediction("VALE", { change_5m: 0.1 }),
+        prediction("NU", { change_5m: -0.8 }),
+      ],
     });
-    expect(result.level).toBe("headwind");
-    expect(result.benchmarkChange5m).toBe(-0.5);
+    expect(result.level).toBe("favorable");
+    expect(result.medianChange5m).toBeCloseTo(0.2);
+    expect(result.symbolCount).toBe(2);
+  });
+
+  it("is unknown when scope is empty even if other predictions exist", () => {
+    const result = marketConditionFromLiveData({
+      isMarketOpen: true,
+      watchlist: [],
+      openSymbols: [],
+      predictions: [prediction("NU", { change_5m: -0.8 })],
+    });
+    expect(result.level).toBe("unknown");
+    expect(result.symbolCount).toBe(0);
   });
 });
