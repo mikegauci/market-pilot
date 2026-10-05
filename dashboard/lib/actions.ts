@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { resolveCurrentEquity } from "@/lib/resolve-current-equity";
 import { createClient } from "@/lib/supabase/server";
-import { parseSettingsForm } from "@/lib/validate-settings";
+import { parseSettingsForm, parseWatchlistSymbols } from "@/lib/validate-settings";
 
 export async function updateSettings(formData: FormData) {
   const supabase = await createClient();
@@ -20,6 +20,20 @@ export async function updateSettings(formData: FormData) {
   }
 
   const { error } = await supabase.from("settings").update(payload).eq("id", 1);
+  if (error) throw new Error(error.message);
+  revalidatePath("/settings");
+  revalidatePath("/");
+  revalidatePath("/strategy");
+}
+
+export async function updateWatchlist(symbols: string[]) {
+  const watchlist = parseWatchlistSymbols(symbols);
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("settings")
+    .update({ watchlist, updated_at: new Date().toISOString() })
+    .eq("id", 1);
   if (error) throw new Error(error.message);
   revalidatePath("/settings");
   revalidatePath("/");

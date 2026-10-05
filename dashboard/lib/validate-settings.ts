@@ -1,5 +1,27 @@
 import { isRiskProfile, type RiskProfile } from "@/lib/risk-recommendations";
 
+const WATCHLIST_SYMBOL_PATTERN = /^[A-Z][A-Z0-9.]{0,9}$/;
+
+/** Normalize and validate watchlist tickers (comma-separated string or array). */
+export function parseWatchlistSymbols(raw: string | string[]): string[] {
+  const parts = Array.isArray(raw) ? raw : raw.split(",");
+  const watchlist = [
+    ...new Set(
+      parts
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ];
+  if (watchlist.length === 0) {
+    throw new Error("Watchlist must include at least one symbol");
+  }
+  const invalidWatchlist = watchlist.filter((s) => !WATCHLIST_SYMBOL_PATTERN.test(s));
+  if (invalidWatchlist.length > 0) {
+    throw new Error(`Invalid ticker(s): ${invalidWatchlist.join(", ")}`);
+  }
+  return watchlist;
+}
+
 function parseRequiredNumber(formData: FormData, name: string): number {
   const value = Number(formData.get(name));
   if (!Number.isFinite(value)) {
@@ -235,21 +257,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
 
   const watchlistRaw = String(formData.get("watchlist") ?? "");
-  const watchlist = [
-    ...new Set(
-      watchlistRaw
-        .split(",")
-        .map((s) => s.trim().toUpperCase())
-        .filter(Boolean),
-    ),
-  ];
-  if (watchlist.length === 0) {
-    throw new Error("Watchlist must include at least one symbol");
-  }
-  const invalidWatchlist = watchlist.filter((s) => !/^[A-Z][A-Z0-9.]{0,9}$/.test(s));
-  if (invalidWatchlist.length > 0) {
-    throw new Error(`Invalid ticker(s): ${invalidWatchlist.join(", ")}`);
-  }
+  const watchlist = parseWatchlistSymbols(watchlistRaw);
 
   const benchmark_symbol = String(formData.get("benchmark_symbol") ?? "EEM")
     .trim()

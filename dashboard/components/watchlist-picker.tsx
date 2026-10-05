@@ -27,14 +27,36 @@ function parseSymbolList(raw: string): string[] {
 
 export function WatchlistPicker({
   defaultValue,
+  value,
+  onChange,
   inputName = "watchlist",
   fieldLabel = "Watchlist",
+  hideChipList = false,
+  compact = false,
 }: {
   defaultValue: string[];
+  value?: string[];
+  onChange?: (symbols: string[]) => void;
   inputName?: string;
   fieldLabel?: string;
+  /** When true, omit the selected-symbol chips (parent shows them). */
+  hideChipList?: boolean;
+  /** Overview-style layout: search + custom ticker only. */
+  compact?: boolean;
 }) {
-  const [selected, setSelected] = useState<string[]>(() => normalizeSymbols(defaultValue));
+  const [selectedInternal, setSelectedInternal] = useState<string[]>(() =>
+    normalizeSymbols(defaultValue),
+  );
+  const selected = value ?? selectedInternal;
+
+  function setSelected(next: string[] | ((prev: string[]) => string[])) {
+    const resolved = typeof next === "function" ? next(selected) : next;
+    if (onChange) {
+      onChange(resolved);
+    } else {
+      setSelectedInternal(resolved);
+    }
+  }
   const [search, setSearch] = useState("");
   const [customSymbol, setCustomSymbol] = useState("");
   const [customError, setCustomError] = useState<string | null>(null);
@@ -124,45 +146,54 @@ export function WatchlistPicker({
     return true;
   }
 
+  const searchInputId = compact ? "overview-watchlist-search" : "watchlist-search";
+  const customInputId = compact ? "overview-watchlist-custom" : "watchlist-custom";
+
   return (
     <div className="space-y-3">
-      <input type="hidden" name={inputName} value={selected.join(", ")} required />
+      {!onChange ? (
+        <input type="hidden" name={inputName} value={selected.join(", ")} required />
+      ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Label htmlFor="watchlist-search">{fieldLabel}</Label>
-        <span className="text-xs text-zinc-500">
-          {selected.length} symbol{selected.length === 1 ? "" : "s"} selected
-        </span>
-      </div>
+      {!compact && !hideChipList ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label htmlFor={searchInputId}>{fieldLabel}</Label>
+            <span className="text-xs text-zinc-500">
+              {selected.length} symbol{selected.length === 1 ? "" : "s"} selected
+            </span>
+          </div>
 
-      {selected.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {selected.map((symbol) => (
-            <Badge
-              key={symbol}
-              className="gap-1 border border-zinc-700 bg-zinc-800/80 text-zinc-200"
-            >
-              {symbol}
-              <button
-                type="button"
-                onClick={() => removeSymbol(symbol)}
-                className="ml-0.5 rounded-full px-1 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100"
-                aria-label={`Remove ${symbol}`}
-              >
-                ×
-              </button>
-            </Badge>
-          ))}
-        </div>
-      ) : (
-        <p className="text-xs text-zinc-500">Add at least one symbol to save settings.</p>
-      )}
+          {selected.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {selected.map((symbol) => (
+                <Badge
+                  key={symbol}
+                  className="gap-1 border border-zinc-700 bg-zinc-800/80 text-zinc-200"
+                >
+                  {symbol}
+                  <button
+                    type="button"
+                    onClick={() => removeSymbol(symbol)}
+                    className="ml-0.5 rounded-full px-1 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-100"
+                    aria-label={`Remove ${symbol}`}
+                  >
+                    ×
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-zinc-500">Add at least one symbol to save settings.</p>
+          )}
+        </>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <Label htmlFor="watchlist-search">Search S&amp;P 500</Label>
+          <Label htmlFor={searchInputId}>Search S&amp;P 500</Label>
           <Input
-            id="watchlist-search"
+            id={searchInputId}
             type="search"
             className="mt-1.5"
             placeholder="Search or paste comma-separated tickers…"
@@ -186,10 +217,10 @@ export function WatchlistPicker({
         </div>
 
         <div>
-          <Label htmlFor="watchlist-custom">Custom ticker</Label>
+          <Label htmlFor={customInputId}>Custom ticker</Label>
           <div className="mt-1.5 flex gap-2">
             <Input
-              id="watchlist-custom"
+              id={customInputId}
               placeholder="e.g. SPY, QQQ"
               value={customSymbol}
               onChange={(e) => {
