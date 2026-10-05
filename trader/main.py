@@ -67,6 +67,7 @@ from runtime.capital import resolve_effective_capital, sync_risk_manager_capital
 from runtime.entry_eval import process_ready_states
 from runtime.heartbeat import run_heartbeat_cycle
 from runtime.sim_close import persist_simulated_closes
+from runtime.periodic import periodic_callback
 from runtime.startup import connect_ibkr_with_retries, run_ibkr_startup_backfill
 from runtime.state import TraderRuntimeState
 from runtime.status_log import log_trader_running
@@ -490,36 +491,50 @@ def run() -> int:
                 settings.ibkr_port,
                 runtime.ibkr_market_data_mode,
             )
-            _pulse_bot_status(
-                db,
-                enabled=bot_control.enabled,
-                trading_mode=trading_mode,
-                execution_mode=configured_execution_mode,
-                ibkr_connected=True,
-                jev_connected=False,
-            )
+            startup_ibkr_error: str | None = None
+            if runtime.ibkr_market_data_mode == "unavailable":
+                startup_ibkr_error = (
+                    "IBKR quotes unavailable — close TWS, IBKR mobile, and other API "
+                    "sessions, restart IB Gateway, then restart the trader."
+                )
+            elif ibkr.market_data_is_blocked():
+                startup_ibkr_error = (
+                    "Another IB app is using live market data — close it and restart "
+                    "IB Gateway so the bot can get prices."
+                )
+
+            def _startup_status_pulse(*, jev_connected: bool = False) -> None:
+                _pulse_bot_status(
+                    db,
+                    enabled=bot_control.enabled,
+                    trading_mode=trading_mode,
+                    execution_mode=configured_execution_mode,
+                    ibkr_connected=True,
+                    jev_connected=jev_connected,
+                    last_error=startup_ibkr_error,
+                )
+
+            _startup_status_pulse()
 
             def _on_backfill_progress(result: object, index: int, total: int) -> None:
                 del result
                 if index == 1 or index == total or index % 5 == 0:
                     logger.info("Watchlist backfill progress %s/%s", index, total)
-                    _pulse_bot_status(
-                        db,
-                        enabled=bot_control.enabled,
-                        trading_mode=trading_mode,
-                        execution_mode=configured_execution_mode,
-                        ibkr_connected=True,
-                        jev_connected=False,
-                    )
+                _startup_status_pulse()
 
-            run_ibkr_startup_backfill(
-                settings=settings,
-                db=db,
-                bar_store=bar_store,
-                ibkr=ibkr,
-                risk_settings=risk_settings,
-                on_progress=_on_backfill_progress,
-            )
+            with periodic_callback(
+                settings.heartbeat_interval_sec,
+                _startup_status_pulse,
+                name="startup-heartbeat",
+            ):
+                run_ibkr_startup_backfill(
+                    settings=settings,
+                    db=db,
+                    bar_store=bar_store,
+                    ibkr=ibkr,
+                    risk_settings=risk_settings,
+                    on_progress=_on_backfill_progress,
+                )
             open_symbols = [trade.symbol for trade in db.get_open_trades()]
             for symbol in resolve_runtime_watchlist(
                 risk_settings, open_symbols, env_fallback=settings.watchlist_symbols

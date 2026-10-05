@@ -6,8 +6,15 @@ export type TradeModeCopy = {
 export function getTradeModeCopy(options: {
   ibkrConnected: boolean;
   traderOnline: boolean;
+  jevConnected?: boolean;
 }): TradeModeCopy {
   if (options.ibkrConnected) {
+    if (options.traderOnline && options.jevConnected === false) {
+      return {
+        sidebarLabel: "Starting up",
+        statusLine: "Loading watchlist history — signals begin when startup finishes",
+      };
+    }
     return {
       sidebarLabel: "Paper broker",
       statusLine: "Orders sent to paper broker",

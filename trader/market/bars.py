@@ -383,7 +383,14 @@ class BarStore:
             if self.backfill_pacing_sec > 0:
                 time.sleep(min(self.backfill_pacing_sec, 5.0))
 
-        if needs_intraday:
+        skip_intraday = needs_daily and daily_count == 0
+        if skip_intraday and needs_intraday:
+            logger.info(
+                "Skipping intraday backfill for %s — daily history unavailable",
+                symbol,
+            )
+
+        if needs_intraday and not skip_intraday:
             intraday = fetcher.fetch_historical_bars(
                 symbol,
                 duration=self.intraday_duration,

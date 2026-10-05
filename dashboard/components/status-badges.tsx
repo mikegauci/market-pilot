@@ -103,6 +103,7 @@ function StatusPanel({
   const tradeMode = getTradeModeCopy({
     ibkrConnected: display.ibkrConnected,
     traderOnline: display.traderOnline,
+    jevConnected: display.jevConnected,
   });
   const signalsPaused = market && !market.isOpen && display.traderOnline;
   const signalsActive = display.jevConnected;
@@ -150,7 +151,13 @@ function StatusPanel({
           />
           <SidebarStatusRow
             label="Engine"
-            value={display.traderOnline ? "Running" : "Stopped"}
+            value={
+              !display.traderOnline
+                ? "Stopped"
+                : display.jevConnected
+                  ? "Running"
+                  : "Starting up"
+            }
             active={display.traderOnline}
           />
           <SidebarStatusRow
@@ -227,7 +234,13 @@ function StatusPanel({
         />
         <StatusItem
           label="Trading engine"
-          value={display.traderOnline ? "Running" : "Not running"}
+          value={
+            !display.traderOnline
+              ? "Not running"
+              : display.jevConnected
+                ? "Running"
+                : "Starting up"
+          }
           active={display.traderOnline}
           tone="teal"
         />

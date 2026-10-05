@@ -228,6 +228,8 @@ class IBKRClient:
             self.client_id,
         )
         self.ib.connect(self.host, self.port, clientId=self.client_id, timeout=timeout)
+        # Avoid blocking startup for ~60s when IBKR cancels slow historical requests.
+        self.ib.RequestTimeout = 25
         # Error 326 can arrive right after connect; wait briefly and verify.
         self.ib.sleep(0.5)
         if not self.is_connected():
