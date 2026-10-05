@@ -431,7 +431,7 @@ class SupabaseRepository:
         try:
             result = (
                 self.client.table("bot_status")
-                .select("enabled, trading_mode, execution_mode")
+                .select("enabled, trading_mode, execution_mode, shutdown_requested")
                 .eq("id", 1)
                 .single()
                 .execute()
@@ -443,6 +443,7 @@ class SupabaseRepository:
                 execution_mode=ExecutionMode(
                     data.get("execution_mode", fallback_execution_mode.value)
                 ),
+                shutdown_requested=bool(data.get("shutdown_requested", False)),
             )
         except Exception as exc:
             logger.warning("Could not read bot_status: %s", exc)
@@ -450,6 +451,7 @@ class SupabaseRepository:
                 enabled=False,
                 trading_mode=TradingMode.PAPER,
                 execution_mode=fallback_execution_mode,
+                shutdown_requested=False,
             )
 
     @_db_synchronized
@@ -468,9 +470,20 @@ class SupabaseRepository:
             "jev_connected": False,
             "last_heartbeat": None,
             "last_error": None,
+            "shutdown_requested": False,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         self.client.table("bot_status").update(payload).eq("id", 1).execute()
+
+    @_db_synchronized
+    def clear_shutdown_requested(self) -> None:
+        """Drop a dashboard stop request when the trader was not running."""
+        self.client.table("bot_status").update(
+            {
+                "shutdown_requested": False,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).eq("id", 1).execute()
 
     @_db_synchronized
     def get_settings(self) -> StrategySettings:

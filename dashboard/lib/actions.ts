@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { resolveCurrentEquity } from "@/lib/resolve-current-equity";
 import { createClient } from "@/lib/supabase/server";
+import { isTraderOnline } from "@/lib/trader-status";
 import { parseSettingsForm, parseWatchlistSymbols } from "@/lib/validate-settings";
 
 export async function updateSettings(formData: FormData) {
@@ -38,6 +39,46 @@ export async function updateWatchlist(symbols: string[]) {
   revalidatePath("/settings");
   revalidatePath("/");
   revalidatePath("/strategy");
+}
+
+export async function setAutoTradingEnabled(enabled: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("bot_status")
+    .update({ enabled, updated_at: new Date().toISOString() })
+    .eq("id", 1);
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+  revalidatePath("/trades");
+}
+
+export async function requestTraderShutdown() {
+  const supabase = await createClient();
+  const { data: status, error: readError } = await supabase
+    .from("bot_status")
+    .select("last_heartbeat, shutdown_requested")
+    .eq("id", 1)
+    .single();
+  if (readError || !status) {
+    throw new Error(readError?.message ?? "Could not read bot status");
+  }
+  if (!isTraderOnline(status.last_heartbeat)) {
+    throw new Error(
+      "Trader is offline — stop the process in your terminal (Ctrl+C), or start it first to use Stop engine",
+    );
+  }
+  if (status.shutdown_requested) {
+    return;
+  }
+  const { error } = await supabase
+    .from("bot_status")
+    .update({
+      shutdown_requested: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", 1);
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
 }
 
 export async function requestClosePosition(tradeId: string) {

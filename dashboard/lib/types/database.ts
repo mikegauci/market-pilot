@@ -1,6 +1,8 @@
 export type BotStatus = {
   id: number;
   enabled: boolean;
+  /** Dashboard asks the running trader process to exit on the next control sync. */
+  shutdown_requested?: boolean;
   trading_mode: "paper" | "live";
   execution_mode: "simulated" | "ibkr";
   ibkr_connected: boolean;

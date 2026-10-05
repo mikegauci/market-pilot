@@ -70,6 +70,7 @@ class BotControl:
     enabled: bool
     trading_mode: TradingMode
     execution_mode: ExecutionMode
+    shutdown_requested: bool = False
 
 
 @dataclass

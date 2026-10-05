@@ -44,6 +44,7 @@ from market.indicators import build_market_state
 from market.mock import MockMarketProvider
 from notify.telegram import configure_telegram
 from models.types import (
+    BotControl,
     BotStatusUpdate,
     DataSource,
     ExecutionMode,
@@ -471,6 +472,18 @@ def run() -> int:
         logger.info("News enrichment skipped in mock data mode")
 
     bot_control = db.get_bot_control(settings.execution_mode)
+    if bot_control.shutdown_requested:
+        db.clear_shutdown_requested()
+        logger.info(
+            "Cleared dashboard shutdown flag on startup "
+            "(Stop engine only stops a already-running trader)"
+        )
+        bot_control = BotControl(
+            enabled=bot_control.enabled,
+            trading_mode=bot_control.trading_mode,
+            execution_mode=bot_control.execution_mode,
+            shutdown_requested=False,
+        )
     trading_mode = bot_control.trading_mode
     configured_execution_mode = bot_control.execution_mode
     _pulse_bot_status(
@@ -731,6 +744,12 @@ def run() -> int:
                         settings.data_source, configured_execution_mode
                     )
                     last_bot_control_sync = now_mono
+                    if bot_control.shutdown_requested:
+                        logger.info(
+                            "Shutdown requested from dashboard — stopping trading engine"
+                        )
+                        runtime.shutdown_requested = True
+                        continue
 
                 if (
                     news_client is not None

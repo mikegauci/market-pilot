@@ -4,6 +4,7 @@ import { getBotStatus } from "@/lib/queries";
 const defaultBotStatus = {
   id: 1,
   enabled: false,
+  shutdown_requested: false,
   trading_mode: "paper" as const,
   execution_mode: "ibkr" as const,
   ibkr_connected: false,

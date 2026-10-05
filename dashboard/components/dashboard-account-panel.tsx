@@ -1,6 +1,7 @@
 "use client";
 
 import { LiveStatus } from "@/components/live-status";
+import { TraderControlButtons } from "@/components/trader-control-buttons";
 import { NavEquity } from "@/components/nav-equity";
 import { SidebarOpenPositions } from "@/components/sidebar-open-positions";
 import { SidebarRecentBuyPredictions } from "@/components/sidebar-recent-buy-predictions";
@@ -18,6 +19,7 @@ export function DashboardAccountPanel({ className }: Props) {
         <NavEquity className="mb-0 px-0 py-0" />
       </div>
       <LiveStatus variant="sidebar" />
+      <TraderControlButtons />
       <SidebarRecentBuyPredictions />
       <SidebarOpenPositions />
     </div>
