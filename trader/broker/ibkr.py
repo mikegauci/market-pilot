@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import threading
@@ -1017,15 +1018,24 @@ class IBKRClient:
             logger.warning("Skipping historical bars for %s — contract not qualified", symbol)
             return []
 
-        raw_bars = self.ib.reqHistoricalData(
-            contract,
-            endDateTime="",
-            durationStr=duration,
-            barSizeSetting=bar_size,
-            whatToShow="TRADES",
-            useRTH=use_rth,
-            formatDate=1,
-        )
+        try:
+            raw_bars = self.ib.reqHistoricalData(
+                contract,
+                endDateTime="",
+                durationStr=duration,
+                barSizeSetting=bar_size,
+                whatToShow="TRADES",
+                useRTH=use_rth,
+                formatDate=1,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Historical bars timed out for %s (%s %s) — will retry on next backfill",
+                symbol,
+                duration,
+                bar_size,
+            )
+            return []
         result: List[Bar] = []
         app_symbol = symbol.upper()
         for item in raw_bars or []:
