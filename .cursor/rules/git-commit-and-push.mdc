@@ -1,0 +1,16 @@
+---
+description: After commits, push to origin unless the user opts out for that turn
+alwaysApply: true
+---
+
+# Git commit and push
+
+When the user asks you to **commit** (or says yes to committing your changes):
+
+1. Commit with an accurate message (only when they explicitly requested a commit).
+2. **Push to the remote** in the same turn (`git push` on the current branch, usually `origin HEAD`).
+3. Do not ask whether to push unless the user said not to push for that task.
+
+If push fails (auth, hooks, non-fast-forward), report the error and what they need to do; do not claim the work is published.
+
+Still follow git safety: no force-push to main unless explicitly requested, no committing secrets, no amending pushed commits unless requested.
