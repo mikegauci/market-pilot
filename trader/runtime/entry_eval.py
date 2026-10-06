@@ -81,6 +81,8 @@ def process_ready_states(
     if not ready_states:
         return result
 
+    pending_shadows: List[tuple[dict, MarketState, JevPrediction]] = []
+
     for symbol, state in ready_states:
         prediction = predictions_by_symbol.get(symbol)
         if prediction is None:
@@ -322,32 +324,39 @@ def process_ready_states(
                     trade_skip_reason = decision.reason
                     logger.info("Risk: rejected %s — %s", symbol, decision.reason)
 
-            snapshot_state = state
-            if shadow_reader is not None and should_shadow_read(
-                prediction,
-                record_threshold=risk_settings.signal_record_threshold,
-            ):
-                shadow = shadow_reader.read(state, prediction)
-                if shadow is not None:
-                    verdict, note = shadow
-                    snapshot_state = replace(
-                        state,
-                        ai_shadow_verdict=verdict,
-                        ai_shadow_note=note,
-                    )
-
             if db:
-                result.prediction_rows.append(
-                    build_prediction_payload(
-                        snapshot_state,
-                        prediction,
-                        trade_created=trade_created,
-                        trade_skip_reason=trade_skip_reason,
-                    )
+                payload = build_prediction_payload(
+                    state,
+                    prediction,
+                    trade_created=trade_created,
+                    trade_skip_reason=trade_skip_reason,
                 )
+                result.prediction_rows.append(payload)
+                if shadow_reader is not None and should_shadow_read(
+                    prediction,
+                    record_threshold=risk_settings.signal_record_threshold,
+                ):
+                    pending_shadows.append((payload, state, prediction))
                 logger.info("Prediction queued")
 
         except Exception as exc:
             logger.error("Post-Jev processing failed for %s: %s", symbol, exc)
+
+    for payload, state, prediction in pending_shadows:
+        if shadow_reader is None:
+            continue
+        try:
+            shadow = shadow_reader.read(state, prediction)
+            if shadow is None:
+                continue
+            verdict, note = shadow
+            snapshot_state = replace(
+                state,
+                ai_shadow_verdict=verdict,
+                ai_shadow_note=note,
+            )
+            payload["market_snapshot"] = snapshot_state.to_dict()
+        except Exception as exc:
+            logger.warning("Shadow read failed for %s: %s", prediction.symbol, exc)
 
     return result

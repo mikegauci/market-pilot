@@ -49,9 +49,13 @@ class ReconcileFlatIbkrTradesTests(unittest.TestCase):
             self.risk_manager,
             self.db,
             quotes,
+            open_orders_synced=True,
         )
 
         self.assertTrue(dirty)
+        self.ibkr.get_bracket_exit_status.assert_called_once()
+        _, kwargs = self.ibkr.get_bracket_exit_status.call_args
+        self.assertTrue(kwargs.get("open_orders_synced"))
         self.db.close_trade.assert_called_once()
         kwargs = self.db.close_trade.call_args.kwargs
         self.assertEqual(kwargs.get("exit_reason"), "stop_loss")

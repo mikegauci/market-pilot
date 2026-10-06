@@ -83,6 +83,9 @@ export function useLiveQuery<T>(
         ) {
           return current;
         }
+        if (!initialDataChanged(current, next)) {
+          return current;
+        }
         return next;
       });
     } catch (err) {

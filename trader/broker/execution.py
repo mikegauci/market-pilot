@@ -74,6 +74,7 @@ def sync_ibkr_exits(
     db: SupabaseRepository,
     *,
     ibkr_account_id: Optional[str] = None,
+    open_orders_synced: bool = False,
 ) -> bool:
     """Close DB trades when IBKR bracket SL or TP legs fill."""
     closed_any = False
@@ -90,6 +91,7 @@ def sync_ibkr_exits(
             trade.ibkr_tp_order_id,
             trade.entry_price,
             trade.quantity,
+            open_orders_synced=open_orders_synced,
         )
         if exit_info is None:
             continue
@@ -136,6 +138,8 @@ def resolve_ibkr_already_flat_exit(
     trade: TradeRecord,
     ibkr: IBKRClient,
     quotes_by_symbol: Dict[str, Quote],
+    *,
+    open_orders_synced: bool = False,
 ) -> tuple[float, str]:
     """Exit price and reason when IBKR holds no long for an open trade row."""
     if trade.ibkr_sl_order_id and trade.ibkr_tp_order_id:
@@ -145,6 +149,7 @@ def resolve_ibkr_already_flat_exit(
             trade.ibkr_tp_order_id,
             trade.entry_price,
             trade.quantity,
+            open_orders_synced=open_orders_synced,
         )
         if exit_info is not None:
             return exit_info
@@ -224,6 +229,7 @@ def reconcile_flat_ibkr_trades(
     quotes_by_symbol: Dict[str, Quote],
     *,
     ibkr_account_id: Optional[str] = None,
+    open_orders_synced: bool = False,
 ) -> bool:
     """Close DB trades when IBKR has no long shares (e.g. bracket filled off-book)."""
     if not ibkr.is_connected():
@@ -239,7 +245,10 @@ def reconcile_flat_ibkr_trades(
             continue
 
         exit_price, reason = resolve_ibkr_already_flat_exit(
-            trade, ibkr, quotes_by_symbol
+            trade,
+            ibkr,
+            quotes_by_symbol,
+            open_orders_synced=open_orders_synced,
         )
         _record_ibkr_book_close(trade, exit_price, reason, risk_manager, db)
         closed_any = True

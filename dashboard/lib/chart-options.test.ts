@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isChartPreset, sortBarsAscending } from "@/lib/chart-options";
+import {
+  barFetchLimitForPreset,
+  isChartPreset,
+  sortBarsAscending,
+} from "@/lib/chart-options";
 import type { SymbolBar } from "@/lib/types/database";
 
 function bar(ts: string): SymbolBar {
@@ -21,6 +25,11 @@ describe("chart-options", () => {
   it("does not treat a bar size as a lookback preset", () => {
     expect(isChartPreset("4h")).toBe(true);
     expect(isChartPreset("5 mins")).toBe(false);
+  });
+
+  it("requests fewer bars for short lookback presets", () => {
+    expect(barFetchLimitForPreset("4h")).toBeLessThan(500);
+    expect(barFetchLimitForPreset("all")).toBe(500);
   });
 
   it("sorts bars ascending without truncating history", () => {

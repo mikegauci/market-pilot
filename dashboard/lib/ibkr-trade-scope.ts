@@ -21,9 +21,15 @@ export async function includeLegacyUntaggedTrades(
 export async function filterTradesByActiveIbkrAccount<T extends {
   or: (filter: string) => T;
   eq: (column: string, value: string) => T;
-}>(supabase: SupabaseClient, accountId: string, query: T): Promise<T> {
-  const includeLegacy = await includeLegacyUntaggedTrades(supabase, accountId);
-  if (includeLegacy) {
+}>(
+  supabase: SupabaseClient,
+  accountId: string,
+  query: T,
+  includeLegacy?: boolean,
+): Promise<T> {
+  const legacy =
+    includeLegacy ?? (await includeLegacyUntaggedTrades(supabase, accountId));
+  if (legacy) {
     return query.or(`ibkr_account_id.eq.${accountId},ibkr_account_id.is.null`) as T;
   }
   return query.eq("ibkr_account_id", accountId) as T;

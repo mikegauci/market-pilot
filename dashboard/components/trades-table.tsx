@@ -195,20 +195,7 @@ export function TradesTable({
   title = "Trades",
   tradingDayStartIso,
 }: Props) {
-  const traderOnline = useTraderOnline(
-    botStatus ?? {
-      id: 1,
-      enabled: false,
-      trading_mode: "paper",
-      execution_mode: "ibkr",
-      ibkr_connected: false,
-      jev_connected: false,
-      ibkr_account_id: null,
-      last_heartbeat: null,
-      last_error: null,
-      updated_at: "",
-    },
-  );
+  const traderOnline = useTraderOnline(botStatus);
   const [filter, setFilter] = useState<"all" | "open" | "closed">("all");
   const [exitReasonFilter, setExitReasonFilter] = useState<ExitReasonFilterValue>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);

@@ -239,13 +239,27 @@ class IBKROrdersMixin:
         return None
 
     @ibkr_synchronized
-    def find_open_bracket_legs(self, symbol: str) -> Optional[BracketLegs]:
+    def sync_open_orders(self, wait_sec: float = 0.3) -> None:
+        """Refresh IB open-order cache once before multiple bracket lookups."""
+        if not self.is_connected():
+            return
+        self.ib.reqOpenOrders()
+        if wait_sec > 0:
+            self.ib.sleep(wait_sec)
+
+    @ibkr_synchronized
+    def find_open_bracket_legs(
+        self,
+        symbol: str,
+        *,
+        open_orders_synced: bool = False,
+    ) -> Optional[BracketLegs]:
         """Find active bracket stop-loss and take-profit orders for a long position."""
         if not self.is_connected():
             return None
 
-        self.ib.reqOpenOrders()
-        self.ib.sleep(0.3)
+        if not open_orders_synced:
+            self.sync_open_orders()
 
         stop_trade: Optional[Trade] = None
         limit_trade: Optional[Trade] = None
@@ -294,11 +308,13 @@ class IBKROrdersMixin:
         tp_order_id: Optional[int],
         entry_price: float,
         quantity: float,
+        *,
+        open_orders_synced: bool = False,
     ) -> Optional[Tuple[float, str]]:
         """Return (exit_price, reason) if SL or TP filled, else None."""
         del parent_order_id, quantity  # reserved for future position-sync checks
-        self.ib.reqOpenOrders()
-        self.ib.sleep(0.3)
+        if not open_orders_synced:
+            self.sync_open_orders()
 
         sl_trade = self._find_trade_by_order_id(sl_order_id)
         if sl_trade and sl_trade.orderStatus.status == "Filled":

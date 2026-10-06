@@ -23,6 +23,21 @@ export function lookbackMsForPreset(preset: ChartPreset): number | null {
   return CHART_PRESETS.find((item) => item.value === preset)?.ms ?? null;
 }
 
+const FIVE_MIN_MS = 5 * 60 * 1000;
+
+/** Bar fetch limit for Supabase (default zoom needs far fewer than 500 rows). */
+export function barFetchLimitForPreset(preset: ChartPreset): number {
+  if (preset === "all") {
+    return 500;
+  }
+  const lookbackMs = lookbackMsForPreset(preset);
+  if (lookbackMs === null) {
+    return 500;
+  }
+  const barsNeeded = Math.ceil(lookbackMs / FIVE_MIN_MS) + 12;
+  return Math.min(500, Math.max(barsNeeded, 24));
+}
+
 /** Newest-first or mixed rows → ascending by time (full history kept for pan-back). */
 export function sortBarsAscending(bars: SymbolBar[]): SymbolBar[] {
   if (bars.length <= 1) return bars;

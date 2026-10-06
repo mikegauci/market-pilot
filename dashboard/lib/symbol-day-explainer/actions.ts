@@ -8,6 +8,7 @@ import { buildSymbolDayExplainPacket } from "@/lib/symbol-day-explainer/packet";
 import { generateSymbolDayExplanation } from "@/lib/symbol-day-explainer/openai.server";
 import type { SymbolDayExplanation } from "@/lib/symbol-day-explainer/schema";
 import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
+import { ANALYTICS_SKIP_PREDICTION_COLUMNS } from "@/lib/analytics-data";
 import { createClient } from "@/lib/supabase/server";
 import type { Prediction } from "@/lib/types/database";
 
@@ -54,7 +55,7 @@ export async function explainSymbolTradingDay(input: {
 
   const { data: rows, error } = await supabase
     .from("predictions")
-    .select("*")
+    .select(ANALYTICS_SKIP_PREDICTION_COLUMNS)
     .eq("symbol", symbol)
     .gte("timestamp", input.sessionStartIso)
     .order("timestamp", { ascending: false })

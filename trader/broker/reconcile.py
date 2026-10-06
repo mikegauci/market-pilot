@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Iterable, List, Optional, Set
@@ -171,24 +172,46 @@ def refresh_ibkr_bracket_targets(
     ibkr: IBKRClient,
     risk_manager: RiskManager,
     db: SupabaseRepository,
-) -> int:
+    *,
+    open_orders_synced: bool = False,
+    target_refresh_interval_sec: float = 15.0,
+    last_target_refresh_mono: float = 0.0,
+) -> tuple[int, float]:
     """Sync open-trade SL/TP from live IBKR bracket legs (e.g. after partial-fill resize)."""
     if not ibkr.is_connected():
-        return 0
+        return 0, last_target_refresh_mono
+
+    now = time.monotonic()
+    throttle_target_sync = (
+        target_refresh_interval_sec > 0
+        and last_target_refresh_mono > 0
+        and now - last_target_refresh_mono < target_refresh_interval_sec
+    )
 
     updated = 0
+    target_sync_ran = False
     for trade in risk_manager.open_trades:
         if trade.execution_mode != "ibkr":
             continue
         if not trade.ibkr_sl_order_id or not trade.ibkr_tp_order_id:
-            legs = ibkr.find_open_bracket_legs(trade.symbol)
+            legs = ibkr.find_open_bracket_legs(
+                trade.symbol,
+                open_orders_synced=open_orders_synced,
+            )
             if legs is not None:
                 _apply_bracket_legs(trade, legs)
                 db.update_trade_ibkr_bracket(trade)
                 updated += 1
             continue
 
-        legs = ibkr.find_open_bracket_legs(trade.symbol)
+        if throttle_target_sync:
+            continue
+
+        legs = ibkr.find_open_bracket_legs(
+            trade.symbol,
+            open_orders_synced=open_orders_synced,
+        )
+        target_sync_ran = True
         if legs is None:
             continue
         if (
@@ -205,4 +228,7 @@ def refresh_ibkr_bracket_targets(
             trade.stop_loss,
             trade.take_profit,
         )
-    return updated
+
+    if target_sync_ran:
+        last_target_refresh_mono = now
+    return updated, last_target_refresh_mono

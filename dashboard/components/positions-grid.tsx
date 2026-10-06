@@ -8,17 +8,16 @@ import { PositionRiskGauge } from "@/components/position-risk-gauge";
 import { SymbolChartPanel } from "@/components/symbol-chart-panel";
 import { Card, CardTitle } from "@/components/ui/card";
 import { overlaysForPosition } from "@/lib/chart-overlays";
+import { usePositionsWithSsrFallback } from "@/components/open-positions-count-provider";
 import {
   fetchActivePositionCommands,
   fetchActiveTradeCommands,
   fetchOpenTrades,
-  fetchPositions,
 } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import { useTraderOnline } from "@/lib/hooks/use-trader-online";
 import { tradeForPosition } from "@/lib/trade-matching";
 import type {
-  BotStatus,
   Position,
   PositionCommand,
   Settings,
@@ -32,7 +31,6 @@ type Props = {
   openTrades: Trade[];
   tradeCommands: TradeCommand[];
   positionCommands: PositionCommand[];
-  botStatus: BotStatus;
   settings?: Settings | null;
 };
 
@@ -41,16 +39,14 @@ export function PositionsGrid({
   openTrades,
   tradeCommands,
   positionCommands,
-  botStatus,
   settings,
 }: Props) {
-  const traderOnline = useTraderOnline(botStatus);
-  const fetchList = useCallback(() => fetchPositions(), []);
+  const traderOnline = useTraderOnline();
+  const livePositions = usePositionsWithSsrFallback(positions);
   const fetchTrades = useCallback(() => fetchOpenTrades(), []);
   const fetchCommands = useCallback(() => fetchActiveTradeCommands(), []);
   const fetchPositionCommands = useCallback(() => fetchActivePositionCommands(), []);
 
-  const livePositions = useLiveQuery(positions, fetchList, ["positions"]);
   const liveOpenTrades = useLiveQuery(openTrades, fetchTrades, ["trades"]);
   const liveCommands = useLiveQuery(tradeCommands, fetchCommands, ["trade_commands"]);
   const livePositionCommands = useLiveQuery(
@@ -142,7 +138,7 @@ export function PositionsGrid({
                     symbol={p.symbol}
                     overlays={overlaysForPosition(p, trade)}
                     lazy
-                    refreshIntervalMs={15_000}
+                    refreshIntervalMs={30_000}
                   />
                 </div>
 

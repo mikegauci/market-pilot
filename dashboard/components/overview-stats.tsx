@@ -4,7 +4,8 @@ import { useCallback, type ReactNode } from "react";
 import { IbkrAccountBadge } from "@/components/ibkr-account-badge";
 import { useLiveBotStatus } from "@/components/bot-status-provider";
 import { Card, CardTitle, CardValue } from "@/components/ui/card";
-import { fetchLatestPortfolio, fetchPositions } from "@/lib/data-client";
+import { usePositionsWithSsrFallback } from "@/components/open-positions-count-provider";
+import { fetchLatestPortfolio } from "@/lib/data-client";
 import { useEquityFlash } from "@/lib/hooks/use-equity-flash";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import type { PortfolioSnapshot, Position } from "@/lib/types/database";
@@ -46,9 +47,9 @@ function StatRow({
 export function OverviewStats({ portfolio, positions, currency, className }: Props) {
   const botStatus = useLiveBotStatus();
   const tradingMode = botStatus.trading_mode === "live" ? "live" : "paper";
+  const livePositions = usePositionsWithSsrFallback(positions);
 
   const fetchPortfolio = useCallback(() => fetchLatestPortfolio(), []);
-  const fetchPositionsList = useCallback(() => fetchPositions(), []);
 
   const livePortfolio = useLiveQuery(
     portfolio,
@@ -60,7 +61,6 @@ export function OverviewStats({ portfolio, positions, currency, className }: Pro
       resetKey: botStatus.ibkr_account_id,
     },
   );
-  const livePositions = useLiveQuery(positions, fetchPositionsList, ["positions"]);
 
   const displayCurrency = livePortfolio?.currency ?? currency;
   const equity = livePortfolio?.equity ?? null;

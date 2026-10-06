@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { initialDataChanged } from "@/lib/hooks/use-live-query";
 import { createClient } from "@/lib/supabase/client";
 import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
+import { LIVE_DATA_POLL_MS } from "@/lib/live-data-config";
+import { clearTradeAccountScopeCache } from "@/lib/trade-account-scope";
 import type { BotStatus } from "@/lib/types/database";
-
-const POLL_INTERVAL_MS = 10_000;
 
 export async function fetchBotStatus(): Promise<BotStatus | null> {
   const supabase = createClient();
@@ -31,7 +31,13 @@ export function useBotStatus(initialStatus: BotStatus): BotStatus {
 
   const refresh = useCallback(async () => {
     const next = await fetchBotStatus();
-    if (next) setStatus(next);
+    if (!next) return;
+    setStatus((prev) => {
+      if (prev.ibkr_account_id !== next.ibkr_account_id) {
+        clearTradeAccountScopeCache();
+      }
+      return next;
+    });
   }, []);
 
   useEffect(() => {
@@ -44,7 +50,7 @@ export function useBotStatus(initialStatus: BotStatus): BotStatus {
 
   useEffect(() => {
     const kickoff = window.setTimeout(() => void refresh(), 0);
-    const id = setInterval(() => void refresh(), POLL_INTERVAL_MS);
+    const id = setInterval(() => void refresh(), LIVE_DATA_POLL_MS);
     return () => {
       window.clearTimeout(kickoff);
       clearInterval(id);

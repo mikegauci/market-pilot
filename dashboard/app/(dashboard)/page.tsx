@@ -65,20 +65,6 @@ export default async function OverviewPage() {
         tradeCommands={tradeCommands}
         positionCommands={positionCommands}
         settings={settings}
-        botStatus={
-          botStatus ?? {
-            id: 1,
-            enabled: false,
-            trading_mode: "paper",
-            execution_mode: "ibkr",
-            ibkr_connected: false,
-            jev_connected: false,
-            ibkr_account_id: null,
-            last_heartbeat: null,
-            last_error: null,
-            updated_at: "",
-          }
-        }
       />
 
       <TradesTable

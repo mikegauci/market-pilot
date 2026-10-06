@@ -4,7 +4,7 @@ import { createContext, useContext } from "react";
 import { useBotStatus } from "@/lib/hooks/use-bot-status";
 import type { BotStatus } from "@/lib/types/database";
 
-const BotStatusContext = createContext<BotStatus | null>(null);
+export const BotStatusContext = createContext<BotStatus | null>(null);
 
 export function BotStatusProvider({
   initialStatus,

@@ -7,6 +7,7 @@ import {
   CHART_BAR_SIZE,
   CHART_PRESETS,
   DEFAULT_CHART_PRESET,
+  barFetchLimitForPreset,
   isChartPreset,
   lookbackMsForPreset,
   sortBarsAscending,
@@ -140,7 +141,11 @@ export function SymbolChartPanel({
         setLoading(true);
       }
       try {
-        const data = await fetchSymbolBars(symbol, resolvedBarSize);
+        const data = await fetchSymbolBars(
+          symbol,
+          resolvedBarSize,
+          barFetchLimitForPreset(preset),
+        );
         if (cancelled) return;
         const next = applyChartFetchResult(null, { ok: true, bars: data });
         hasBarsRef.current = true;
@@ -169,7 +174,7 @@ export function SymbolChartPanel({
       cancelled = true;
       window.clearInterval(pollId);
     };
-  }, [symbol, resolvedBarSize, isVisible, refreshIntervalMs]);
+  }, [symbol, resolvedBarSize, isVisible, refreshIntervalMs, preset]);
 
   function handlePresetChange(next: string) {
     if (isChartPreset(next)) {

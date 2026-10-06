@@ -6,6 +6,7 @@ import {
 } from "@/lib/analytics-data";
 import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
 import { filterTradesByActiveIbkrAccount } from "@/lib/ibkr-trade-scope";
+import { resolveTradeAccountScope } from "@/lib/trade-account-scope";
 import { tradingDayStartUtc } from "@/lib/market-hours";
 import { normalizeSettings } from "@/lib/normalize-settings";
 import {
@@ -44,7 +45,7 @@ export async function readPositions(
 }
 
 export async function readOpenTrades(supabase: SupabaseClient): Promise<SupabaseRead<Trade[]>> {
-  const accountId = await fetchActiveIbkrAccountId(supabase);
+  const { accountId, includeLegacy } = await resolveTradeAccountScope(supabase);
   if (!accountId) {
     return { data: [], error: null };
   }
@@ -53,7 +54,12 @@ export async function readOpenTrades(supabase: SupabaseClient): Promise<Supabase
     .select("*")
     .eq("status", "open")
     .order("entry_time", { ascending: false });
-  const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
+  const scoped = await filterTradesByActiveIbkrAccount(
+    supabase,
+    accountId,
+    query,
+    includeLegacy,
+  );
   const { data, error } = await scoped;
   return { data: (data ?? []) as Trade[], error };
 }
@@ -61,7 +67,7 @@ export async function readOpenTrades(supabase: SupabaseClient): Promise<Supabase
 export async function readClosedTrades(
   supabase: SupabaseClient,
 ): Promise<SupabaseRead<Trade[]>> {
-  const accountId = await fetchActiveIbkrAccountId(supabase);
+  const { accountId, includeLegacy } = await resolveTradeAccountScope(supabase);
   if (!accountId) {
     return { data: [], error: null };
   }
@@ -71,7 +77,12 @@ export async function readClosedTrades(
     .eq("status", "closed")
     .order("exit_time", { ascending: false })
     .limit(500);
-  const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
+  const scoped = await filterTradesByActiveIbkrAccount(
+    supabase,
+    accountId,
+    query,
+    includeLegacy,
+  );
   const { data, error } = await scoped;
   return { data: (data ?? []) as Trade[], error };
 }
@@ -80,7 +91,7 @@ export async function readTradesForTradingDay(
   supabase: SupabaseClient,
   dayStartIso: string = tradingDayStartUtc(),
 ): Promise<SupabaseRead<Trade[]>> {
-  const accountId = await fetchActiveIbkrAccountId(supabase);
+  const { accountId, includeLegacy } = await resolveTradeAccountScope(supabase);
   if (!accountId) {
     return { data: [], error: null };
   }
@@ -88,8 +99,14 @@ export async function readTradesForTradingDay(
     .from("trades")
     .select("*")
     .or(tradingDayTradesOrFilter(dayStartIso))
-    .order("entry_time", { ascending: false });
-  const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
+    .order("entry_time", { ascending: false })
+    .limit(500);
+  const scoped = await filterTradesByActiveIbkrAccount(
+    supabase,
+    accountId,
+    query,
+    includeLegacy,
+  );
   const { data, error } = await scoped;
   return { data: (data ?? []) as Trade[], error };
 }
@@ -98,7 +115,7 @@ export async function readAllTrades(
   supabase: SupabaseClient,
   status?: "open" | "closed" | "all",
 ): Promise<SupabaseRead<Trade[]>> {
-  const accountId = await fetchActiveIbkrAccountId(supabase);
+  const { accountId, includeLegacy } = await resolveTradeAccountScope(supabase);
   if (!accountId) {
     return { data: [], error: null };
   }
@@ -110,7 +127,12 @@ export async function readAllTrades(
   if (status && status !== "all") {
     query = query.eq("status", status);
   }
-  const scoped = await filterTradesByActiveIbkrAccount(supabase, accountId, query);
+  const scoped = await filterTradesByActiveIbkrAccount(
+    supabase,
+    accountId,
+    query,
+    includeLegacy,
+  );
   const { data, error } = await scoped;
   return { data: (data ?? []) as Trade[], error };
 }
@@ -140,7 +162,7 @@ export async function readActivePositionCommands(
 export async function readLatestPortfolio(
   supabase: SupabaseClient,
 ): Promise<SupabaseRead<PortfolioSnapshot | null>> {
-  const accountId = await fetchActiveIbkrAccountId(supabase);
+  const { accountId } = await resolveTradeAccountScope(supabase);
   if (!accountId) {
     return { data: null, error: null };
   }

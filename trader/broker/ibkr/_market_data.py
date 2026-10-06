@@ -187,8 +187,13 @@ class IBKRMarketDataMixin:
             return self._get_snapshot_quotes(symbols, wait_sec)
 
         self.sync_watchlist_subscriptions(symbols)
-        if wait_sec > 0:
-            self.ib.sleep(wait_sec)
+        priced, total = self._count_priced_symbols(symbols)
+        coverage_ok = bool(
+            total and priced / total >= MARKET_DATA_MIN_COVERAGE_RATIO
+        )
+        effective_wait = 0.0 if coverage_ok else wait_sec
+        if effective_wait > 0:
+            self.ib.sleep(effective_wait)
 
         quotes: List[Quote] = []
         for symbol in symbols:

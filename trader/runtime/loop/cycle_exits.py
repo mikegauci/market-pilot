@@ -88,11 +88,14 @@ def run_cycle_exits(
             scratch.portfolio_dirty = True
 
     if scratch.execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
+        ibkr.sync_open_orders()
+        orders_synced = True
         if sync_ibkr_exits(
             ibkr,
             risk_manager,
             db,
             ibkr_account_id=scratch.daily_pnl_account_id,
+            open_orders_synced=orders_synced,
         ):
             scratch.portfolio_dirty = True
         if reconcile_flat_ibkr_trades(
@@ -101,9 +104,16 @@ def run_cycle_exits(
             db,
             scratch.quotes_by_symbol,
             ibkr_account_id=scratch.daily_pnl_account_id,
+            open_orders_synced=orders_synced,
         ):
             scratch.portfolio_dirty = True
-        refresh_ibkr_bracket_targets(ibkr, risk_manager, db)
+        _, runtime.last_ibkr_bracket_target_refresh_mono = refresh_ibkr_bracket_targets(
+            ibkr,
+            risk_manager,
+            db,
+            open_orders_synced=orders_synced,
+            last_target_refresh_mono=runtime.last_ibkr_bracket_target_refresh_mono,
+        )
 
     if scratch.portfolio_dirty and db:
         sync_portfolio_state(
