@@ -67,7 +67,15 @@ class IBKRContractsMixin:
         if symbol in self._contracts:
             return self._contracts[symbol]
         contract = Stock(to_ibkr_symbol(symbol), "SMART", "USD")
-        qualified = self.ib.qualifyContracts(contract)
+        try:
+            qualified = self.ib.qualifyContracts(contract)
+        except (asyncio.TimeoutError, TimeoutError) as exc:
+            logger.warning(
+                "Contract qualify timed out for %s — will retry on next cycle: %s",
+                symbol,
+                exc,
+            )
+            return None
         if not qualified:
             return None
         self._contracts[symbol] = qualified[0]

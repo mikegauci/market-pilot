@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from broker.ibkr import IBKRClient
 from broker.symbols import from_ibkr_contract, to_ibkr_symbol
@@ -33,6 +35,24 @@ class TestIBKRSymbolMapping(unittest.TestCase):
         contract = SimpleNamespace(conId=99, symbol="BRK", localSymbol="BRK B")
         self.assertTrue(client._contract_matches_symbol(contract, "BRK.B"))
         self.assertFalse(client._contract_matches_symbol(contract, "AAPL"))
+
+    def test_try_ensure_contract_survives_qualify_timeout(self) -> None:
+        client = IBKRClient("127.0.0.1", 4002, client_id=1)
+        client.ib = MagicMock()
+        client.ib.qualifyContracts.side_effect = asyncio.TimeoutError()
+
+        self.assertIsNone(client._try_ensure_contract("AAPL"))
+        self.assertNotIn("AAPL", client._contracts)
+
+    def test_subscribe_watchlist_skips_symbol_after_qualify_timeout(self) -> None:
+        client = IBKRClient("127.0.0.1", 4002, client_id=1)
+        client.ib = MagicMock()
+        client.ib.qualifyContracts.side_effect = asyncio.TimeoutError()
+
+        client.subscribe_watchlist(["AAPL"])
+
+        client.ib.reqMktData.assert_not_called()
+        self.assertNotIn("AAPL", client._tickers)
 
 
 if __name__ == "__main__":
