@@ -3,8 +3,9 @@
 | Field | Value |
 | --- | --- |
 | Baseline revision | `2d9dc93` |
-| Scope | `trader/` Phase E (in progress) |
+| Scope | Phase E — trader E1 done; dashboard E2 done |
 | Latest pytest | 247 passed (`.venv` Python 3.9.6) |
+| Latest vitest | 161 passed (`dashboard`) |
 | Updated | 2026-10-06 |
 
 ## Phase A — Defect fixes (complete)
@@ -56,7 +57,7 @@ Runtime extraction (`runtime/*`), `process_ready_states`, heartbeat/startup modu
 | ID | Status | Notes |
 | --- | --- | --- |
 | E1 Cycle module split | done | `runtime/loop/eval_cycle_state.py`, `cycle_sync`, `cycle_quotes`, `cycle_rotation`, `cycle_exits`, `cycle_eval`, `cycle_tail`; `eval_cycle.py` orchestrates |
-| E2 Dashboard D1–D3 | pending | queries/data-client dedupe, settings normalization, ibkr-trade-scope tests |
+| E2 Dashboard D1–D3 | done | `lib/supabase/data-reads.ts` shared reads; `fetchSettings` + RSC `getPredictions` use normalize/feed select; `ibkr-trade-scope.test.ts` |
 | E3 Deep splits (optional) | pending | Supabase repository domains, IBKR client submodules |
 | E4 Dashboard D4–D6 | pending | settings form, watchlist symbol module, server/client guards |
 
