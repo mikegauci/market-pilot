@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from broker.execution import close_ibkr_signal_exits, collect_profit_take_trade_ids
 from config import Settings
@@ -32,6 +32,7 @@ from watchlist.resolution import effective_benchmark
 
 if TYPE_CHECKING:
     from broker.ibkr import IBKRClient
+    from jev.shadow_read import OpenAiShadowReader
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,7 @@ def run_cycle_eval_and_exits_after_jev(
     runtime: TraderRuntimeState,
     data_source_label: str,
     active_ibkr_account_id: str | None,
+    shadow_reader: Optional["OpenAiShadowReader"] = None,
 ) -> None:
     if news_service and scratch.eval_symbols:
         news_service.refresh_stale(scratch.eval_symbols)
@@ -198,6 +200,7 @@ def run_cycle_eval_and_exits_after_jev(
         active_ibkr_account_id=active_ibkr_account_id,
         daily_pnl_account_id=scratch.daily_pnl_account_id,
         runtime=runtime,
+        shadow_reader=shadow_reader,
     )
     scratch.prediction_rows = scratch.prediction_rows + eval_outcome.prediction_rows
     if eval_outcome.portfolio_dirty:

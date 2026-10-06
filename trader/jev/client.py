@@ -30,7 +30,11 @@ TRADE_ACTION_QUESTION = {
         "headline context into the decision: penalize BUY on bearish sentiment "
         "(news_sentiment below zero) or tags such as downgrade, lawsuit, "
         "sec_investigation, guidance_cut, or earnings_miss; favor caution (hold/sell) "
-        "on high-impact negative tags. Treat missing news fields as neutral."
+        "on high-impact negative tags. When news_still_relevant_for_open is false, "
+        "treat company news as neutral. When tape_sentiment, tape_tags, or "
+        "tape_top_headline are present, penalize BUY on risk-off tape (negative "
+        "tape_sentiment or tags such as market_selloff, geopolitics, or hot inflation). "
+        "Treat missing news or tape fields as neutral."
     ),
     "criteria": {
         "buy": (

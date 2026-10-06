@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
@@ -16,6 +15,7 @@ from broker.ibkr._util import (
     TERMINAL_ORDER_STATUSES,
     commission_from_trade,
     describe_trade_state,
+    is_ibkr_request_timeout,
     safe_float,
     ticker_price,
 )
@@ -69,7 +69,9 @@ class IBKRContractsMixin:
         contract = Stock(to_ibkr_symbol(symbol), "SMART", "USD")
         try:
             qualified = self.ib.qualifyContracts(contract)
-        except (asyncio.TimeoutError, TimeoutError) as exc:
+        except Exception as exc:
+            if not is_ibkr_request_timeout(exc):
+                raise
             logger.warning(
                 "Contract qualify timed out for %s — will retry on next cycle: %s",
                 symbol,

@@ -118,9 +118,7 @@ export function PositionRiskGauge({ position, trade, settings }: Props) {
         value={tpProgress}
         tone="success"
         detail={
-          trade.take_profit != null
-            ? [`Target ${trade.take_profit.toFixed(2)}`, moveFromEntry].filter(Boolean).join(" · ")
-            : undefined
+          trade.take_profit != null ? `Target ${trade.take_profit.toFixed(2)}` : undefined
         }
       />
       {holdProgress != null && (

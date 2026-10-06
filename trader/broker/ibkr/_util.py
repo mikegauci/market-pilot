@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import math
 from typing import Optional
 
@@ -103,3 +104,11 @@ def is_kid_document_rejection(detail: object) -> bool:
     if not text:
         return False
     return any(marker in text for marker in _KID_REJECTION_MARKERS)
+
+
+def is_ibkr_request_timeout(exc: BaseException) -> bool:
+    """True when ib_insync/IBKR did not answer within RequestTimeout."""
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
+        return True
+    message = str(exc).lower()
+    return "timeout" in message or "timed out" in message

@@ -16,6 +16,7 @@ from broker.ibkr._util import (
     TERMINAL_ORDER_STATUSES,
     commission_from_trade,
     describe_trade_state,
+    is_ibkr_request_timeout,
     safe_float,
     ticker_price,
 )
@@ -468,7 +469,9 @@ class IBKROrdersMixin:
                 useRTH=use_rth,
                 formatDate=1,
             )
-        except asyncio.TimeoutError:
+        except Exception as exc:
+            if not is_ibkr_request_timeout(exc):
+                raise
             logger.warning(
                 "Historical bars timed out for %s (%s %s) — will retry on next backfill",
                 symbol,

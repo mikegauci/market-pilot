@@ -100,6 +100,14 @@ export type MarketSnapshotNews = {
   news_tags?: string[] | null;
   news_fetched_at?: string | null;
   news_articles?: NewsArticleSnapshot[] | null;
+  news_materiality_note?: string | null;
+  news_still_relevant_for_open?: boolean | null;
+  tape_sentiment?: number | null;
+  tape_tags?: string[] | null;
+  tape_top_headline?: string | null;
+  tape_fetched_at?: string | null;
+  ai_shadow_verdict?: "agree" | "hold" | "conflict" | string | null;
+  ai_shadow_note?: string | null;
 };
 
 export type MarketSnapshot = MarketSnapshotNews & {

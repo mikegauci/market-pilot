@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Fragment, useCallback, useMemo, useState } from "react";
 import { ClosePositionButton } from "@/components/close-position-button";
+import { TradeRecapButton } from "@/components/trade-recap-button";
 import { SortableTh } from "@/components/sortable-th";
 import { SymbolChartPanel } from "@/components/symbol-chart-panel";
 import { Badge } from "@/components/ui/badge";
@@ -244,7 +245,7 @@ export function TradesTable({
     [afterStatus],
   );
 
-  const resolvedExitReasonFilter = useMemo((): ExitReasonFilterValue => {
+  const activeExitReasonFilter = useMemo((): ExitReasonFilterValue => {
     if (exitReasonFilter === "all") return "all";
     if (exitReasonOptions.some((o) => o.value === exitReasonFilter)) {
       return exitReasonFilter;
@@ -253,13 +254,13 @@ export function TradesTable({
   }, [exitReasonFilter, exitReasonOptions]);
 
   const filtered = useMemo(() => {
-    return filterTradesByExitReason(afterStatus, resolvedExitReasonFilter);
-  }, [afterStatus, resolvedExitReasonFilter]);
+    return filterTradesByExitReason(afterStatus, activeExitReasonFilter);
+  }, [afterStatus, activeExitReasonFilter]);
 
   const emptyMessage = useMemo(
     () =>
-      tradesEmptyMessage(liveTrades.length > 0, filter, resolvedExitReasonFilter),
-    [liveTrades.length, filter, resolvedExitReasonFilter],
+      tradesEmptyMessage(liveTrades.length > 0, filter, activeExitReasonFilter),
+    [liveTrades.length, filter, activeExitReasonFilter],
   );
 
   const compare = useCallback(
@@ -339,7 +340,7 @@ export function TradesTable({
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={handleSort}
-                  exitReasonFilter={resolvedExitReasonFilter}
+                  exitReasonFilter={activeExitReasonFilter}
                   onExitReasonFilterChange={setExitReasonFilter}
                   filterOptions={exitReasonOptions}
                 />
@@ -425,6 +426,7 @@ export function TradesTable({
                       {t.status === "closed" ? (
                         <div className="mt-1 text-xs text-zinc-500">
                           {exitReasonLabel(t.exit_reason ?? "unknown")}
+                          <TradeRecapButton tradeId={t.id} />
                         </div>
                       ) : null}
                     </td>

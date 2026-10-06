@@ -95,6 +95,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     news_llm_model: str = "gpt-4o-mini"
     news_llm_timeout_sec: float = 8.0
+    openai_shadow_read_enabled: bool = False
 
     bar_backfill_pacing_sec: float = 12.0
     live_bar_flush_interval_sec: float = 60.0
@@ -165,6 +166,13 @@ class Settings(BaseSettings):
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
+    @field_validator("openai_shadow_read_enabled", mode="before")
+    @classmethod
+    def parse_openai_shadow_read_enabled(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
     @field_validator("market_snapshots_enabled", mode="before")
     @classmethod
     def parse_market_snapshots_enabled(cls, value: object) -> bool:
@@ -213,6 +221,19 @@ class Settings(BaseSettings):
                 file=sys.stderr,
             )
             self.news_llm_enabled = False
+        return self
+
+    @model_validator(mode="after")
+    def disable_shadow_read_without_openai(self) -> Settings:
+        if not self.openai_shadow_read_enabled:
+            return self
+        if not self.openai_api_key.strip():
+            print(
+                "WARNING: OPENAI_SHADOW_READ_ENABLED=true but OPENAI_API_KEY is missing "
+                "— shadow reads disabled.",
+                file=sys.stderr,
+            )
+            self.openai_shadow_read_enabled = False
         return self
 
     @property

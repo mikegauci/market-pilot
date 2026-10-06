@@ -9,6 +9,7 @@ from broker.ibkr import IBKRClient
 from config import Settings
 from database.supabase import SupabaseRepository
 from jev.client import JevClient
+from jev.shadow_read import OpenAiShadowReader
 from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
 from market.mock import MockMarketProvider
@@ -65,6 +66,7 @@ class EvalCycleContext:
     data_source_label: str
     news_client: Optional[FinnhubNewsClient] = None
     last_general_news_refresh: float = 0.0
+    shadow_reader: Optional[OpenAiShadowReader] = None
 
 
 def run_eval_cycle(
@@ -159,6 +161,7 @@ def run_eval_cycle(
             runtime=runtime,
             data_source_label=ctx.data_source_label,
             active_ibkr_account_id=scratch.active_ibkr_account_id,
+            shadow_reader=ctx.shadow_reader,
         )
 
         run_cycle_heartbeat_and_status(

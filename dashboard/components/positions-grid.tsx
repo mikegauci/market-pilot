@@ -3,6 +3,7 @@
 import { useCallback, useMemo } from "react";
 import { ClosePositionButton } from "@/components/close-position-button";
 import { CoverShortButton } from "@/components/cover-short-button";
+import { PositionOpenExplanation } from "@/components/position-open-explanation";
 import { PositionRiskGauge } from "@/components/position-risk-gauge";
 import { SymbolChartPanel } from "@/components/symbol-chart-panel";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -146,6 +147,15 @@ export function PositionsGrid({
                 </div>
 
                 <PositionRiskGauge position={p} trade={trade ?? null} settings={settings} />
+
+                <PositionOpenExplanation
+                  symbol={p.symbol}
+                  quantity={p.quantity}
+                  avgCost={p.avg_cost}
+                  marketPrice={p.market_price}
+                  unrealizedPnl={p.unrealized_pnl}
+                  trade={trade ?? null}
+                />
 
                 <div className="mt-3 border-t border-zinc-800/60 pt-3">
                   {trade ? (

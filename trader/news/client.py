@@ -21,6 +21,7 @@ from news.sentiment import (
     score_articles,
     score_single_article,
 )
+from news.tape_context import MarketTapeContext, MarketTapeStore
 
 logger = logging.getLogger(__name__)
 
@@ -284,7 +285,13 @@ class FinnhubNewsClient:
                     llm.sentiment,
                     llm.tags,
                 )
-                context = replace(context, sentiment=sentiment, tags=tags)
+                context = replace(
+                    context,
+                    sentiment=sentiment,
+                    tags=tags,
+                    materiality_note=llm.materiality_note,
+                    still_relevant_for_open=llm.still_relevant_for_open,
+                )
         return FetchOutcome(
             context=context,
             status=FetchStatus.OK,
@@ -389,6 +396,7 @@ class NewsService:
         empty_cooldown_sec: float = 300.0,
         failure_cooldown_sec: float = 60.0,
         fetch_workers: int = 3,
+        tape_store: MarketTapeStore | None = None,
     ) -> None:
         self.client = client
         self.cache = cache
@@ -396,6 +404,13 @@ class NewsService:
         self.empty_cooldown = CooldownTracker(empty_cooldown_sec, max_ttl_sec=empty_cooldown_sec)
         self.failure_cooldown = CooldownTracker(failure_cooldown_sec)
         self.fetch_workers = max(1, fetch_workers)
+        self.tape_store = tape_store or MarketTapeStore()
+
+    def get_market_tape(self) -> MarketTapeContext | None:
+        return self.tape_store.get()
+
+    def set_market_tape(self, context: MarketTapeContext) -> None:
+        self.tape_store.set(context)
 
     def _should_fetch(self, symbol: str) -> bool:
         if symbol in self.skip_symbols:

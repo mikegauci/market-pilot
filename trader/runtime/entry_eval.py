@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from dataclasses import dataclass, field, replace
+from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from broker.ibkr import (
     IBKRClient,
@@ -29,6 +29,11 @@ from strategy.signals import (
     signal_tier,
     trade_skip_reason_from_tier,
 )
+
+if TYPE_CHECKING:
+    from jev.shadow_read import OpenAiShadowReader
+
+from jev.shadow_read import should_shadow_read
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +75,7 @@ def process_ready_states(
     active_ibkr_account_id: Optional[str],
     daily_pnl_account_id: Optional[str],
     runtime: TraderRuntimeState,
+    shadow_reader: Optional["OpenAiShadowReader"] = None,
 ) -> EntryEvalResult:
     result = EntryEvalResult()
     if not ready_states:
@@ -316,10 +322,24 @@ def process_ready_states(
                     trade_skip_reason = decision.reason
                     logger.info("Risk: rejected %s — %s", symbol, decision.reason)
 
+            snapshot_state = state
+            if shadow_reader is not None and should_shadow_read(
+                prediction,
+                record_threshold=risk_settings.signal_record_threshold,
+            ):
+                shadow = shadow_reader.read(state, prediction)
+                if shadow is not None:
+                    verdict, note = shadow
+                    snapshot_state = replace(
+                        state,
+                        ai_shadow_verdict=verdict,
+                        ai_shadow_note=note,
+                    )
+
             if db:
                 result.prediction_rows.append(
                     build_prediction_payload(
-                        state,
+                        snapshot_state,
                         prediction,
                         trade_created=trade_created,
                         trade_skip_reason=trade_skip_reason,

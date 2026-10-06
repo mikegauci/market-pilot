@@ -366,10 +366,25 @@ export function PredictionsFeed({
                             ) : (
                               <p className="text-xs text-zinc-500">No indicator snapshot for this row.</p>
                             )}
-                            {snapshot?.news_top_headline && (
+                            {snapshot?.ai_shadow_verdict && snapshot.ai_shadow_note ? (
+                              <div className="border-t border-zinc-800/60 pt-3 text-xs text-zinc-400">
+                                <p className="text-sm font-medium text-zinc-300">OpenAI second read</p>
+                                <p className="mt-1 capitalize text-zinc-300">
+                                  {snapshot.ai_shadow_verdict.replace("_", " ")}
+                                </p>
+                                <p className="mt-1">{snapshot.ai_shadow_note}</p>
+                                <p className="mt-1 text-zinc-600">Logged with the prediction; does not change trades.</p>
+                              </div>
+                            ) : null}
+                            {(snapshot?.news_top_headline ||
+                              snapshot?.tape_top_headline) && (
                               <div className="space-y-2 border-t border-zinc-800/60 pt-3 text-xs text-zinc-400">
-                                <p className="text-sm font-medium text-zinc-300">News</p>
-                                <p className="text-sm text-zinc-300">{snapshot.news_top_headline}</p>
+                                {snapshot?.news_top_headline ? (
+                                  <>
+                                    <p className="text-sm font-medium text-zinc-300">Company news</p>
+                                    <p className="text-sm text-zinc-300">{snapshot.news_top_headline}</p>
+                                  </>
+                                ) : null}
                                 {snapshot?.news_sentiment != null && (
                                   <p>
                                     Sentiment:{" "}
@@ -394,8 +409,37 @@ export function PredictionsFeed({
                                   </p>
                                 )}
                                 {snapshot?.news_fetched_at && (
-                                  <p>News fetched: {formatDateTime(snapshot.news_fetched_at)}</p>
+                                  <p>Company news fetched: {formatDateTime(snapshot.news_fetched_at)}</p>
                                 )}
+                                {snapshot?.news_materiality_note ? (
+                                  <p>{snapshot.news_materiality_note}</p>
+                                ) : null}
+                                {snapshot?.news_still_relevant_for_open === false ? (
+                                  <p className="text-amber-500/90">Headline treated as stale for the open.</p>
+                                ) : null}
+                                {snapshot?.tape_top_headline ? (
+                                  <>
+                                    <p className="pt-2 text-sm font-medium text-zinc-300">Broad tape</p>
+                                    <p className="text-sm text-zinc-300">{snapshot.tape_top_headline}</p>
+                                    {snapshot.tape_sentiment != null ? (
+                                      <p>
+                                        Tape sentiment:{" "}
+                                        <span
+                                          className={
+                                            snapshot.tape_sentiment > 0.05
+                                              ? "text-emerald-400"
+                                              : snapshot.tape_sentiment < -0.05
+                                                ? "text-red-400"
+                                                : "text-zinc-500"
+                                          }
+                                        >
+                                          {sentimentLabel(snapshot.tape_sentiment)} (
+                                          {snapshot.tape_sentiment.toFixed(2)})
+                                        </span>
+                                      </p>
+                                    ) : null}
+                                  </>
+                                ) : null}
                               </div>
                             )}
                           </div>

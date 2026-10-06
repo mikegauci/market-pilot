@@ -1,5 +1,6 @@
 import { PredictionsFeed } from "@/components/predictions-feed";
 import { SkipReasonAnalytics } from "@/components/skip-reason-analytics";
+import { tradingDayStartUtc } from "@/lib/market-hours";
 import { getAnalyticsPredictions, getPredictions, getSettings } from "@/lib/queries";
 
 export default async function PredictionsPage({
@@ -22,6 +23,7 @@ export default async function PredictionsPage({
 
   const recordThreshold = settings?.signal_record_threshold ?? 0.75;
   const minConfidence = settings?.minimum_jev_confidence ?? 0.85;
+  const sessionStartIso = tradingDayStartUtc();
 
   return (
     <div className="space-y-6">
@@ -40,6 +42,7 @@ export default async function PredictionsPage({
         predictions={analyticsPredictions}
         recordThreshold={recordThreshold}
         minConfidence={minConfidence}
+        sessionStartIso={sessionStartIso}
       />
     </div>
   );

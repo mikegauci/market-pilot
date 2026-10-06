@@ -15,6 +15,7 @@ from database.supabase import GENERAL_NEWS_FAILURE_BACKOFF_SEC, SupabaseReposito
 from execution_mode import effective_execution_mode
 from instance_lock import acquire_trader_lock
 from jev.client import JevClient
+from jev.shadow_read import OpenAiShadowReader
 from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
 from market.hours import is_us_regular_session_open
@@ -22,8 +23,10 @@ from market.mock import MockMarketProvider
 from models.types import DataSource, ExecutionMode, TradingMode
 from news.cache import TtlCache
 from news.client import FetchStatus, FinnhubNewsClient, NewsService
+from news.openai_market_tape import OpenAiMarketTapeScorer
 from news.openai_scorer import OpenAiNewsScorer
-from news.sentiment import NewsContext
+from news.sentiment import NewsArticle, NewsContext
+from news.tape_context import MarketTapeContext, MarketTapeStore
 from notify.telegram import configure_telegram
 from risk.manager import RiskManager
 from runtime.entry_eval import process_ready_states
@@ -170,10 +173,16 @@ def run() -> int:
 
     news_service: Optional[NewsService] = None
     news_client: Optional[FinnhubNewsClient] = None
+    market_tape_scorer: Optional[OpenAiMarketTapeScorer] = None
     if settings.news_enabled and settings.data_source != DataSource.MOCK:
         news_llm_scorer: Optional[OpenAiNewsScorer] = None
         if settings.news_llm_enabled:
             news_llm_scorer = OpenAiNewsScorer(
+                settings.openai_api_key,
+                model=settings.news_llm_model,
+                timeout_sec=settings.news_llm_timeout_sec,
+            )
+            market_tape_scorer = OpenAiMarketTapeScorer(
                 settings.openai_api_key,
                 model=settings.news_llm_model,
                 timeout_sec=settings.news_llm_timeout_sec,
@@ -186,6 +195,7 @@ def run() -> int:
             scorer=news_llm_scorer,
         )
         news_cache: TtlCache[NewsContext] = TtlCache(settings.news_cache_ttl_sec)
+        tape_store = MarketTapeStore()
         news_service = NewsService(
             news_client,
             news_cache,
@@ -193,6 +203,7 @@ def run() -> int:
             empty_cooldown_sec=settings.news_empty_cooldown_sec,
             failure_cooldown_sec=settings.news_failure_cooldown_sec,
             fetch_workers=settings.news_fetch_workers,
+            tape_store=tape_store,
         )
         logger.info(
             "News enrichment enabled (Finnhub, cache TTL %.0fs, general refresh %.0fs, skip %s%s)",
@@ -203,6 +214,14 @@ def run() -> int:
         )
     elif settings.data_source == DataSource.MOCK:
         logger.info("News enrichment skipped in mock data mode")
+
+    shadow_reader: Optional[OpenAiShadowReader] = None
+    if settings.openai_shadow_read_enabled:
+        shadow_reader = OpenAiShadowReader(
+            settings.openai_api_key,
+            model=settings.news_llm_model,
+        )
+        logger.info("OpenAI Jev shadow reads enabled (%s)", settings.news_llm_model)
 
     bot_control = db.get_bot_control(settings.execution_mode)
     startup_shutdown = resolve_startup_shutdown_action(
@@ -442,6 +461,7 @@ def run() -> int:
         watchlist=watchlist,
         all_symbols=all_symbols,
         data_source_label=data_source_label,
+        shadow_reader=shadow_reader,
     )
 
     def _start_general_news_refresh() -> None:
@@ -470,6 +490,30 @@ def run() -> int:
                     rows = [item.to_row(fetched_at=fetched_at) for item in items]
                     count = repo.upsert_market_news(rows, keep=keep)
                     logger.info("Upserted %s general market news articles", count)
+                    if market_tape_scorer is not None and news_service is not None:
+                        tape_articles = [
+                            NewsArticle(
+                                headline=item.headline,
+                                summary=item.summary or "",
+                            )
+                            for item in items[:12]
+                        ]
+                        tape_score = market_tape_scorer.score(tape_articles)
+                        if tape_score is not None:
+                            sentiment, tags, top_headline = tape_score
+                            news_service.set_market_tape(
+                                MarketTapeContext(
+                                    sentiment=sentiment,
+                                    tags=tags,
+                                    top_headline=top_headline,
+                                    fetched_at=fetched_at,
+                                )
+                            )
+                            logger.info(
+                                "Market tape score %.2f (%s)",
+                                sentiment,
+                                ", ".join(tags) or "no tags",
+                            )
                     success = True
                 elif status == FetchStatus.EMPTY:
                     logger.info("General market news fetch returned empty")

@@ -411,6 +411,21 @@ class TestMergeNewsScores(unittest.TestCase):
         self.assertEqual(tags, ["downgrade", "earnings_beat"])
 
 
+def _llm_score_content(
+    *,
+    sentiment: float = -0.4,
+    tags: list[str] | None = None,
+) -> str:
+    return json.dumps(
+        {
+            "sentiment": sentiment,
+            "tags": tags if tags is not None else ["lawsuit"],
+            "materiality_note": "Fresh lawsuit filing",
+            "still_relevant_for_open": True,
+        }
+    )
+
+
 class TestOpenAiNewsScorer(unittest.TestCase):
     def test_cache_avoids_second_http_call(self) -> None:
         scorer = OpenAiNewsScorer("test-key", max_retries=1)
@@ -419,9 +434,7 @@ class TestOpenAiNewsScorer(unittest.TestCase):
             "choices": [
                 {
                     "message": {
-                        "content": json.dumps(
-                            {"sentiment": -0.4, "tags": ["lawsuit"]}
-                        )
+                        "content": _llm_score_content(sentiment=-0.4, tags=["lawsuit"])
                     }
                 }
             ]
@@ -462,7 +475,7 @@ class TestOpenAiNewsScorer(unittest.TestCase):
             "choices": [
                 {
                     "message": {
-                        "content": json.dumps({"sentiment": -0.2, "tags": ["downgrade"]})
+                        "content": _llm_score_content(sentiment=-0.2, tags=["downgrade"])
                     }
                 }
             ]
@@ -515,7 +528,7 @@ class TestOpenAiNewsScorer(unittest.TestCase):
             "choices": [
                 {
                     "message": {
-                        "content": json.dumps({"sentiment": -0.1, "tags": []})
+                        "content": _llm_score_content(sentiment=-0.1, tags=[])
                     }
                 }
             ]

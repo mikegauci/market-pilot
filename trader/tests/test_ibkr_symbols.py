@@ -54,6 +54,14 @@ class TestIBKRSymbolMapping(unittest.TestCase):
         client.ib.reqMktData.assert_not_called()
         self.assertNotIn("AAPL", client._tickers)
 
+    def test_try_ensure_contract_survives_qualify_timeout_message(self) -> None:
+        client = IBKRClient("127.0.0.1", 4002, client_id=1)
+        client.ib = MagicMock()
+        client.ib.qualifyContracts.side_effect = RuntimeError("Request timed out")
+
+        self.assertIsNone(client._try_ensure_contract("AAPL"))
+        self.assertNotIn("AAPL", client._contracts)
+
 
 if __name__ == "__main__":
     unittest.main()

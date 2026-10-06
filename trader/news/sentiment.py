@@ -32,6 +32,8 @@ class NewsContext:
     tags: List[str]
     fetched_at: str
     articles: List[NewsArticle]
+    materiality_note: str = ""
+    still_relevant_for_open: bool = True
 
 
 _NEGATIVE_RULES: Sequence[tuple[re.Pattern[str], str, float]] = (

@@ -1,0 +1,87 @@
+"use server";
+
+import {
+  checkOpenAiActionCooldown,
+  OPENAI_COOLDOWN_MS,
+} from "@/lib/openai-action-cooldown";
+import { normalizeSettings, type SettingsRow } from "@/lib/normalize-settings";
+import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
+import { buildTradeRecapPacket } from "@/lib/trade-recap/packet";
+import { generateTradeRecap } from "@/lib/trade-recap/openai.server";
+import type { TradeRecap } from "@/lib/trade-recap/schema";
+import { createClient } from "@/lib/supabase/server";
+import type { Trade } from "@/lib/types/database";
+
+export type TradeRecapResult =
+  | { ok: true; recap: TradeRecap }
+  | { ok: false; error: string };
+
+export async function explainTradeRecap(tradeId: string): Promise<TradeRecapResult> {
+  const id = tradeId.trim();
+  if (!id) {
+    return { ok: false, error: "Missing trade." };
+  }
+
+  try {
+    requireOpenAiKey();
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "OpenAI is not configured.",
+    };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { ok: false, error: "Sign in to recap a trade." };
+  }
+
+  const cooldownError = checkOpenAiActionCooldown(
+    user.id,
+    `trade-recap:${id}`,
+    OPENAI_COOLDOWN_MS.tradeRecap,
+  );
+  if (cooldownError) {
+    return { ok: false, error: cooldownError };
+  }
+
+  const { data: tradeRow, error: tradeError } = await supabase
+    .from("trades")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (tradeError) {
+    return { ok: false, error: tradeError.message };
+  }
+  if (!tradeRow) {
+    return { ok: false, error: "Trade not found." };
+  }
+
+  const { data: settingsRow, error: settingsError } = await supabase
+    .from("settings")
+    .select("*")
+    .eq("id", 1)
+    .single();
+  if (settingsError || !settingsRow) {
+    return { ok: false, error: settingsError?.message ?? "Settings not found." };
+  }
+  const settings = normalizeSettings(settingsRow as SettingsRow);
+  if (!settings) {
+    return { ok: false, error: "Settings not found." };
+  }
+
+  const packet = buildTradeRecapPacket(tradeRow as Trade, settings);
+
+  try {
+    const result = await generateTradeRecap(packet);
+    return { ok: true, recap: result.recap };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "OpenAI request failed.",
+    };
+  }
+}

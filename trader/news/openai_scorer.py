@@ -34,8 +34,16 @@ _NEWS_SCORE_JSON_SCHEMA: dict[str, Any] = {
                 "enum": sorted(KNOWN_NEWS_TAGS),
             },
         },
+        "materiality_note": {
+            "type": "string",
+            "description": "One short phrase on why headlines matter for a long entry now.",
+        },
+        "still_relevant_for_open": {
+            "type": "boolean",
+            "description": "False when the story is stale or after-hours noise for the open.",
+        },
     },
-    "required": ["sentiment", "tags"],
+    "required": ["sentiment", "tags", "materiality_note", "still_relevant_for_open"],
     "additionalProperties": False,
 }
 
@@ -53,6 +61,8 @@ _SYSTEM_PROMPT = (
 class ScoredNews:
     sentiment: float
     tags: List[str]
+    materiality_note: str = ""
+    still_relevant_for_open: bool = True
 
 
 class NewsLlmScorer(Protocol):
@@ -307,7 +317,14 @@ class OpenAiNewsScorer:
                 }
             )
             sentiment = max(-1.0, min(1.0, round(sentiment, 3)))
-            return ScoredNews(sentiment=sentiment, tags=tags)
+            materiality_note = str(payload.get("materiality_note", "")).strip()[:200]
+            still_relevant = bool(payload.get("still_relevant_for_open", True))
+            return ScoredNews(
+                sentiment=sentiment,
+                tags=tags,
+                materiality_note=materiality_note,
+                still_relevant_for_open=still_relevant,
+            )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             logger.warning("OpenAI news scorer invalid JSON: %s", exc)
             return None

@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { SymbolDayExplanation } from "@/components/symbol-day-explanation";
 import { Card, CardTitle } from "@/components/ui/card";
 import { ANALYTICS_SKIP_LOOKBACK_HOURS } from "@/lib/analytics-data";
 import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
@@ -29,6 +30,7 @@ type Props = {
   predictions: Prediction[];
   recordThreshold: number;
   minConfidence: number;
+  sessionStartIso: string;
 };
 
 function FunnelStep({
@@ -139,6 +141,7 @@ export function SkipReasonAnalytics({
   predictions,
   recordThreshold,
   minConfidence,
+  sessionStartIso,
 }: Props) {
   const skipBuckets = useMemo(
     () => aggregateSkipReasons(predictions).slice(0, 10),
@@ -159,6 +162,14 @@ export function SkipReasonAnalytics({
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
+      <div className="xl:col-span-2">
+        <SymbolDayExplanation
+          predictions={predictions}
+          sessionStartIso={sessionStartIso}
+          recordThreshold={recordThreshold}
+          minConfidence={minConfidence}
+        />
+      </div>
       <p className="text-xs text-zinc-600 xl:col-span-2">
         Skip-reason stats use up to {predictions.length.toLocaleString()} predictions from the last{" "}
         {ANALYTICS_SKIP_LOOKBACK_HOURS}h (page load). Refresh to update.
