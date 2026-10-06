@@ -26,37 +26,8 @@ from market.hours import is_us_regular_session_open  # noqa: E402
 from models.types import DataSource, Quote  # noqa: E402
 from strategy.config import strategy_config_with_risk_overrides  # noqa: E402
 from watchlist.resolution import effective_benchmark  # noqa: E402
-from market.indicators import compute_intraday_from_five_min_bars  # noqa: E402
-from watchlist.rotation import RotationCandidate, rotate_active, score_candidate  # noqa: E402
-
-
-def _rotation_candidate(symbol, quote, minute_bars, bar_store):
-    aggregator = minute_bars.get(symbol)
-    price = quote.price if quote is not None else None
-    change_5m = aggregator.change_pct(5, price) if aggregator.bar_count() else None
-    change_15m = aggregator.change_pct(15, price) if aggregator.bar_count() else None
-    rsi = None
-    ema_20 = None
-    volume_ratio = None
-    cached = bar_store.get_intraday_bars(symbol) if bar_store is not None else []
-    if price is not None and cached:
-        intraday = compute_intraday_from_five_min_bars(cached, price)
-        if change_5m is None:
-            change_5m = intraday.change_5m
-        if change_15m is None:
-            change_15m = intraday.change_15m
-        rsi = intraday.rsi
-        ema_20 = intraday.ema_20
-        volume_ratio = intraday.volume_ratio
-    return RotationCandidate(
-        symbol=symbol,
-        change_5m=change_5m,
-        change_15m=change_15m,
-        volume_ratio=volume_ratio,
-        rsi=rsi,
-        price=price,
-        ema_20=ema_20,
-    )
+from watchlist.rotation import rotate_active, score_candidate  # noqa: E402
+from watchlist.rotation_runtime import build_rotation_candidate  # noqa: E402
 
 
 def _print_header(title: str) -> None:
@@ -129,7 +100,7 @@ def simulate_scores(
 
     scores: dict[str, float] = {}
     for symbol in risk.watchlist_pool:
-        candidate = _rotation_candidate(
+        candidate = build_rotation_candidate(
             symbol,
             quotes_by_symbol.get(symbol.upper()),
             minute_bars,

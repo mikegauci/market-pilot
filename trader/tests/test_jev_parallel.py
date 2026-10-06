@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 from jev.client import JevClient
-from main import _fetch_jev_predictions
+from runtime.jev_fetch import fetch_jev_predictions
 from models.types import JevPrediction, MarketState
 
 
@@ -43,7 +43,7 @@ class TestFetchJevPredictionsParallel(unittest.TestCase):
         jev.predict.side_effect = predict
         ready = [("AAPL", _state("AAPL")), ("MSFT", _state("MSFT"))]
 
-        result = _fetch_jev_predictions(jev, ready, max_workers=2)
+        result = fetch_jev_predictions(jev, ready, max_workers=2)
 
         self.assertEqual(set(result), {"AAPL", "MSFT"})
         self.assertEqual(jev.predict.call_count, 2)
@@ -66,7 +66,7 @@ class TestFetchJevPredictionsParallel(unittest.TestCase):
         jev.predict.side_effect = predict
         ready = [("AAPL", _state("AAPL")), ("MSFT", _state("MSFT"))]
 
-        result = _fetch_jev_predictions(jev, ready, max_workers=2)
+        result = fetch_jev_predictions(jev, ready, max_workers=2)
 
         self.assertEqual(set(result), {"AAPL"})
 

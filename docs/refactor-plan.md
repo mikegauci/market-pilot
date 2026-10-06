@@ -2,10 +2,10 @@
 
 | Field | Value |
 | --- | --- |
-| Baseline revision | `f0d1349` |
-| Scope | `trader/` |
-| Latest pytest | 208 passed (`.venv` Python 3.9.6) |
-| Updated | 2026-10-01 |
+| Baseline revision | `6bcf09a` |
+| Scope | `trader/` Phase D |
+| Latest pytest | 243 passed (`.venv` Python 3.9.6) |
+| Updated | 2026-10-06 |
 
 ## Phase A — Defect fixes (complete)
 
@@ -31,12 +31,23 @@ Runtime extraction (`runtime/*`), `process_ready_states`, heartbeat/startup modu
 | C6 Dead `HistoryStore` | done | Removed `market/history.py` and unused seed paths |
 | C7 Packaging | done | `httpx` in pyproject deps; optional `dev` pytest; `apply_schema.py` deprecation note |
 
+## Phase D — Maintainability (complete 2026-10-06)
+
+| ID | Status | Notes |
+| --- | --- | --- |
+| D0 Ledger + import hygiene | done | Tests import `runtime.timing`, `runtime.eval_symbols`, `runtime.jev_fetch` |
+| D1 `entry_eval` tests | done | `tests/test_entry_eval.py` characterization (skip, confirmation, sim, IBKR block) |
+| D2 Rotation orchestration | done | `watchlist/rotation_runtime.py`; `verify_rotation_ready.py` shares builder |
+| D3 Main loop extraction | done | `runtime/loop/eval_cycle.py` + `runtime/trader_ops.py`; `main.py` ~520 lines |
+| D4 Runtime unit tests | done | `tests/test_runtime_modules.py`, `tests/test_rotation_runtime.py` |
+| D5 Supabase split | done | Helpers in `database/supabase_support.py`; repository composes via namespace merge |
+| D6 IBKR + packaging | done | Package `broker/ibkr/` (`client.py`, `_util.py`); `pyproject` `find` packages, `>=3.9` |
+
 ## Checks log
 
 | When | Command | Result |
 | --- | --- | --- |
-| Baseline | `cd trader && .venv/bin/python -m pytest tests -q` | 196 passed |
-| After A+B | same | 202+ passed |
-| After backfill fix | same | 204 passed |
+| Phase D baseline | `cd trader && .venv/bin/python -m pytest tests -q` | 232 passed |
+| After Phase D | same | 243 passed |
 
-**Runtime:** Restart trader after pull when Python changes affect IBKR entries, capital sync, or backfill.
+**Runtime:** Restart the trader after pull when Python changes affect the eval loop, rotation, IBKR client layout, or Supabase repository wiring (`python main.py` in `trader/`).

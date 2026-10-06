@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import threading
 from datetime import datetime, timezone
 from functools import wraps
@@ -32,111 +31,19 @@ from models.types import (
     Quote,
 )
 
+from broker.ibkr._util import (
+    MARKET_DATA_COMPETING_SESSION_CODE,
+    MARKET_DATA_COMPETING_SESSION_MSG,
+    MARKET_DATA_MIN_COVERAGE_RATIO,
+    MARKET_DATA_TYPE_DELAYED,
+    TERMINAL_ORDER_STATUSES,
+    commission_from_trade,
+    describe_trade_state,
+    safe_float,
+    ticker_price,
+)
+
 logger = logging.getLogger(__name__)
-
-TERMINAL_ORDER_STATUSES = frozenset({"Filled", "Cancelled", "Inactive", "ApiCancelled"})
-MARKET_DATA_COMPETING_SESSION_CODE = 10197
-MARKET_DATA_TYPE_DELAYED = 3
-MARKET_DATA_MIN_COVERAGE_RATIO = 0.5
-
-MARKET_DATA_COMPETING_SESSION_MSG = (
-    "IBKR error 10197 — another session (TWS, IB Gateway, or IBKR mobile) is using "
-    "live market data for this account. Close other IB clients and restart Gateway, "
-    "or the trader will use snapshot/delayed quotes when available."
-)
-
-
-def _safe_float(value: object) -> Optional[float]:
-    if value is None:
-        return None
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError):
-        return None
-    if math.isnan(numeric):
-        return None
-    return numeric
-
-
-def _commission_from_trade(trade: Trade) -> float:
-    total = 0.0
-    for fill in trade.fills or []:
-        report = getattr(fill, "commissionReport", None)
-        if report is None:
-            continue
-        commission = _safe_float(getattr(report, "commission", None))
-        if commission is not None:
-            total += abs(commission)
-    return round(total, 4)
-
-
-def _ticker_price(ticker: object) -> Optional[float]:
-    """Best available price from an IB ticker (live, delayed, or mid)."""
-    for attr in ("last", "close", "delayedLast", "marketPrice"):
-        if attr == "marketPrice":
-            value = getattr(ticker, "marketPrice", lambda: None)()
-        else:
-            value = getattr(ticker, attr, None)
-        parsed = _safe_float(value)
-        if parsed is not None and parsed > 0:
-            return parsed
-
-    bid = _safe_float(getattr(ticker, "bid", None))
-    ask = _safe_float(getattr(ticker, "ask", None))
-    if bid is not None and ask is not None and ask >= bid > 0:
-        return round((bid + ask) / 2, 6)
-    return None
-
-
-def _describe_trade_state(trade: Trade) -> str:
-    order_status = trade.orderStatus
-    parts = [
-        f"status={order_status.status}",
-        f"filled={order_status.filled}",
-        f"remaining={order_status.remaining}",
-    ]
-    why_held = getattr(order_status, "whyHeld", None)
-    if why_held:
-        parts.append(f"whyHeld={why_held!r}")
-    for entry in reversed(trade.log):
-        if entry.errorCode:
-            message = entry.message.strip() or "(no message)"
-            parts.append(f"IB {entry.errorCode}: {message}")
-            break
-    return ", ".join(parts)
-
-
-# Permanent account/product eligibility failures — retrying will not help.
-_ELIGIBILITY_REJECTION_MARKERS = (
-    "no trading permission",
-    "customer ineligible",
-    "ineligibility reasons",
-    "does not have a kid",
-    "appropriate kid is available",
-)
-
-# Stronger product-document signals for IBKR eligibility rejections.
-_KID_REJECTION_MARKERS = (
-    "does not have a kid",
-    "appropriate kid is available",
-    "ineligibility reasons",
-)
-
-
-def is_permanent_ibkr_eligibility_rejection(detail: object) -> bool:
-    """True when IB rejected the order for product/account eligibility (e.g. missing KID)."""
-    text = str(detail or "").lower()
-    if not text:
-        return False
-    return any(marker in text for marker in _ELIGIBILITY_REJECTION_MARKERS)
-
-
-def is_kid_document_rejection(detail: object) -> bool:
-    """True when rejection cites missing/unavailable KID (durable product ineligibility)."""
-    text = str(detail or "").lower()
-    if not text:
-        return False
-    return any(marker in text for marker in _KID_REJECTION_MARKERS)
 
 
 class IBKRClient:
@@ -197,7 +104,7 @@ class IBKRClient:
         priced = 0
         for symbol in symbols:
             ticker = self._tickers.get(symbol)
-            if ticker is not None and _ticker_price(ticker) is not None:
+            if ticker is not None and ticker_price(ticker) is not None:
                 priced += 1
         return priced, len(symbols)
 
@@ -371,14 +278,14 @@ class IBKRClient:
             item = values.get(tag)
             if item is None:
                 return default
-            parsed = _safe_float(item.value)
+            parsed = safe_float(item.value)
             return parsed if parsed is not None else default
 
         def optional_value(tag: str) -> Optional[float]:
             item = values.get(tag)
             if item is None:
                 return None
-            return _safe_float(item.value)
+            return safe_float(item.value)
 
         currency = "USD"
         net_liq_item = values.get("NetLiquidation")
@@ -416,7 +323,7 @@ class IBKRClient:
 
             if symbol in self._tickers:
                 ticker = self._tickers[symbol]
-                market_price = _ticker_price(ticker)
+                market_price = ticker_price(ticker)
                 if market_price is not None:
                     market_value = market_price * pos.position
                     unrealized_pnl = (market_price - pos.avgCost) * pos.position
@@ -554,9 +461,9 @@ class IBKRClient:
                 continue
             ticker = self.ib.reqMktData(contract, "", True, False)
             self.ib.sleep(per_symbol_wait)
-            price = _ticker_price(ticker)
-            bid = _safe_float(getattr(ticker, "bid", None))
-            ask = _safe_float(getattr(ticker, "ask", None))
+            price = ticker_price(ticker)
+            bid = safe_float(getattr(ticker, "bid", None))
+            ask = safe_float(getattr(ticker, "ask", None))
             spread = None
             if bid is not None and ask is not None and ask >= bid:
                 spread = round(ask - bid, 6)
@@ -650,9 +557,9 @@ class IBKRClient:
                 quotes.append(Quote(symbol=symbol, price=None, bid=None, ask=None, spread=None))
                 continue
 
-            price = _ticker_price(ticker)
-            bid = _safe_float(ticker.bid)
-            ask = _safe_float(ticker.ask)
+            price = ticker_price(ticker)
+            bid = safe_float(ticker.bid)
+            ask = safe_float(ticker.ask)
             spread = None
             if bid is not None and ask is not None and ask >= bid:
                 spread = round(ask - bid, 6)
@@ -737,7 +644,7 @@ class IBKRClient:
         fill = self._wait_for_fill(parent_trade, fill_timeout_sec, symbol)
         if fill is None:
             status = parent_trade.orderStatus.status
-            detail = _describe_trade_state(parent_trade)
+            detail = describe_trade_state(parent_trade)
             self._cancel_trade(parent_trade)
             self._cancel_trade(tp_trade)
             self._cancel_trade(sl_trade)
@@ -792,7 +699,7 @@ class IBKRClient:
         elapsed = 0.0
         step = 0.5
         last_logged_filled = 0.0
-        target_qty = _safe_float(trade.order.totalQuantity) or 0.0
+        target_qty = safe_float(trade.order.totalQuantity) or 0.0
         label = symbol or getattr(trade.contract, "symbol", "order")
 
         while elapsed < timeout_sec:
@@ -800,15 +707,15 @@ class IBKRClient:
             elapsed += step
             status = trade.orderStatus.status
             if status == "Filled":
-                avg = _safe_float(trade.orderStatus.avgFillPrice)
-                filled = _safe_float(trade.orderStatus.filled)
+                avg = safe_float(trade.orderStatus.avgFillPrice)
+                filled = safe_float(trade.orderStatus.filled)
                 if avg is not None and filled is not None and filled > 0:
-                    commission = _commission_from_trade(trade)
+                    commission = commission_from_trade(trade)
                     return OrderFill(price=avg, quantity=filled, commission=commission)
             if status in {"Cancelled", "Inactive", "ApiCancelled"}:
                 return None
 
-            filled = _safe_float(trade.orderStatus.filled) or 0.0
+            filled = safe_float(trade.orderStatus.filled) or 0.0
             if filled > last_logged_filled:
                 logger.info(
                     "%s fill progress: %.0f / %.0f shares (%.0fs)",
@@ -819,8 +726,8 @@ class IBKRClient:
                 )
                 last_logged_filled = filled
 
-        filled = _safe_float(trade.orderStatus.filled) or 0.0
-        avg = _safe_float(trade.orderStatus.avgFillPrice)
+        filled = safe_float(trade.orderStatus.filled) or 0.0
+        avg = safe_float(trade.orderStatus.avgFillPrice)
         if filled >= 1 and avg is not None:
             logger.warning(
                 "%s partial fill accepted after %.0fs timeout: %.0f / %.0f shares @ $%.2f",
@@ -830,7 +737,7 @@ class IBKRClient:
                 target_qty,
                 avg,
             )
-            commission = _commission_from_trade(trade)
+            commission = commission_from_trade(trade)
             return OrderFill(price=avg, quantity=filled, commission=commission)
         return None
 
@@ -849,7 +756,7 @@ class IBKRClient:
         if parent_trade.orderStatus.status not in TERMINAL_ORDER_STATUSES:
             self._cancel_trade(parent_trade)
         for child_trade in (sl_trade, tp_trade):
-            child_qty = int(_safe_float(child_trade.order.totalQuantity) or 0)
+            child_qty = int(safe_float(child_trade.order.totalQuantity) or 0)
             if child_qty == filled_qty:
                 continue
             child_trade.order.totalQuantity = filled_qty
@@ -908,10 +815,10 @@ class IBKRClient:
 
         stop_order = stop_trade.order
         limit_order = limit_trade.order
-        stop_price = _safe_float(
+        stop_price = safe_float(
             getattr(stop_order, "auxPrice", None) or getattr(stop_order, "stopPrice", None)
         )
-        tp_price = _safe_float(getattr(limit_order, "lmtPrice", None))
+        tp_price = safe_float(getattr(limit_order, "lmtPrice", None))
         if stop_price is None or tp_price is None:
             return None
 
@@ -940,12 +847,12 @@ class IBKRClient:
 
         sl_trade = self._find_trade_by_order_id(sl_order_id)
         if sl_trade and sl_trade.orderStatus.status == "Filled":
-            price = _safe_float(sl_trade.orderStatus.avgFillPrice) or entry_price
+            price = safe_float(sl_trade.orderStatus.avgFillPrice) or entry_price
             return price, "stop_loss"
 
         tp_trade = self._find_trade_by_order_id(tp_order_id)
         if tp_trade and tp_trade.orderStatus.status == "Filled":
-            price = _safe_float(tp_trade.orderStatus.avgFillPrice) or entry_price
+            price = safe_float(tp_trade.orderStatus.avgFillPrice) or entry_price
             return price, "take_profit"
 
         return None
@@ -1007,7 +914,7 @@ class IBKRClient:
         fill = self._wait_for_fill(sell_trade, fill_timeout_sec, symbol)
         if fill is None:
             status = sell_trade.orderStatus.status
-            detail = _describe_trade_state(sell_trade)
+            detail = describe_trade_state(sell_trade)
             self._cancel_trade(sell_trade)
             raise RuntimeError(
                 f"Market SELL for {symbol} did not fill within {fill_timeout_sec}s "
@@ -1064,7 +971,7 @@ class IBKRClient:
         fill = self._wait_for_fill(buy_trade, fill_timeout_sec, symbol)
         if fill is None:
             status = buy_trade.orderStatus.status
-            detail = _describe_trade_state(buy_trade)
+            detail = describe_trade_state(buy_trade)
             self._cancel_trade(buy_trade)
             raise RuntimeError(
                 f"Market BUY cover for {symbol} did not fill within {fill_timeout_sec}s "
@@ -1130,10 +1037,10 @@ class IBKRClient:
                     continue
                 bar_ts = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
-            open_px = _safe_float(getattr(item, "open", None))
-            high_px = _safe_float(getattr(item, "high", None))
-            low_px = _safe_float(getattr(item, "low", None))
-            close_px = _safe_float(getattr(item, "close", None))
+            open_px = safe_float(getattr(item, "open", None))
+            high_px = safe_float(getattr(item, "high", None))
+            low_px = safe_float(getattr(item, "low", None))
+            close_px = safe_float(getattr(item, "close", None))
             if None in (open_px, high_px, low_px, close_px):
                 continue
 

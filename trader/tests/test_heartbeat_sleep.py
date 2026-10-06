@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from main import compute_loop_sleep_sec, should_refresh
+from runtime.timing import compute_loop_sleep_sec, should_refresh
 
 
 class TestComputeLoopSleep(unittest.TestCase):

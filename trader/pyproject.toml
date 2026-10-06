@@ -3,7 +3,7 @@ name = "market-pilot-trader"
 version = "0.1.0"
 description = "Python trading engine for market-pilot"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 dependencies = [
     "ib-insync>=0.9.86",
     "supabase>=2.0.0",
@@ -24,6 +24,24 @@ market-pilot-trader = "main:main"
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "broker*",
+    "database*",
+    "execution_mode*",
+    "instance_lock*",
+    "jev*",
+    "market*",
+    "models*",
+    "news*",
+    "notify*",
+    "risk*",
+    "runtime*",
+    "strategy*",
+    "watchlist*",
+]
 
 [tool.setuptools]
 py-modules = ["main", "config"]

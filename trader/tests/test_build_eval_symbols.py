@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 
-from main import build_eval_symbols, eval_allow_five_min_fallback
+from runtime.eval_symbols import build_eval_symbols, eval_allow_five_min_fallback
 from models.types import RiskSettings
 
 
