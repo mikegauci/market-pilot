@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +9,7 @@ import { Logo } from "@/components/logo";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -30,8 +32,8 @@ export default function LoginPage() {
       return;
     }
 
-    // Full navigation so the auth proxy sees the new session cookies (more reliable on mobile).
-    window.location.assign("/");
+    router.refresh();
+    router.push("/");
   }
 
   return (

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { WatchlistPicker } from "@/components/watchlist-picker";
 import { WatchlistMoveChip } from "@/components/watchlist-move-chip";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -19,23 +19,25 @@ type Props = {
 export function OverviewWatchlistCard({ settings }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [symbols, setSymbols] = useState(() => resolveEffectiveWatchlist(settings));
+  const serverSymbols = useMemo(
+    () => resolveEffectiveWatchlist(settings),
+    [settings],
+  );
+  const [optimisticSymbols, setOptimisticSymbols] = useState<string[] | null>(null);
+  const symbols = optimisticSymbols ?? serverSymbols;
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setSymbols(resolveEffectiveWatchlist(settings));
-  }, [settings]);
 
   function persistWatchlist(next: string[]) {
     setSaveError(null);
     const previous = symbols;
-    setSymbols(next);
+    setOptimisticSymbols(next);
     startTransition(async () => {
       try {
         await updateWatchlist(next);
+        setOptimisticSymbols(null);
         router.refresh();
       } catch (error) {
-        setSymbols(previous);
+        setOptimisticSymbols(previous);
         setSaveError(error instanceof Error ? error.message : "Could not save watchlist");
       }
     });

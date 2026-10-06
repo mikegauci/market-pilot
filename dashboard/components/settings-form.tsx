@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { BriefSettingDiff } from "@/components/brief-setting-diff";
 import {
   RiskField,
@@ -107,13 +107,14 @@ export function SettingsForm({
     confidencePercentFromDecimal(settings.signal_record_threshold),
   );
   const [maxOpenPositions, setMaxOpenPositions] = useState(settings.max_open_positions);
-  const [briefDismissed, setBriefDismissed] = useState(false);
-
-  useEffect(() => {
-    if (briefSessionDate && isBriefSettingsDismissed(briefSessionDate)) {
-      setBriefDismissed(true);
-    }
-  }, [briefSessionDate]);
+  const [dismissedBriefSession, setDismissedBriefSession] = useState<string | null>(
+    () =>
+      briefSessionDate && isBriefSettingsDismissed(briefSessionDate)
+        ? briefSessionDate
+        : null,
+  );
+  const briefDismissed =
+    briefSessionDate != null && dismissedBriefSession === briefSessionDate;
   const maxHoldHints = getMaxHoldHints(maxHoldMinutes);
   const [selectedProfile, setSelectedProfile] = useState<RiskProfile>(
     resolveRiskProfile(settings.risk_profile),
@@ -128,8 +129,8 @@ export function SettingsForm({
   function dismissBriefBanner() {
     if (briefSessionDate) {
       dismissBriefSettings(briefSessionDate);
+      setDismissedBriefSession(briefSessionDate);
     }
-    setBriefDismissed(true);
   }
 
   function applyBriefDiffs() {

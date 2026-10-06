@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import { ClosePositionButton } from "@/components/close-position-button";
 import { SortableTh } from "@/components/sortable-th";
 import { SymbolChartPanel } from "@/components/symbol-chart-panel";
@@ -244,20 +244,22 @@ export function TradesTable({
     [afterStatus],
   );
 
-  useEffect(() => {
-    if (exitReasonFilter === "all") return;
-    if (!exitReasonOptions.some((o) => o.value === exitReasonFilter)) {
-      setExitReasonFilter("all");
+  const resolvedExitReasonFilter = useMemo((): ExitReasonFilterValue => {
+    if (exitReasonFilter === "all") return "all";
+    if (exitReasonOptions.some((o) => o.value === exitReasonFilter)) {
+      return exitReasonFilter;
     }
+    return "all";
   }, [exitReasonFilter, exitReasonOptions]);
 
   const filtered = useMemo(() => {
-    return filterTradesByExitReason(afterStatus, exitReasonFilter);
-  }, [afterStatus, exitReasonFilter]);
+    return filterTradesByExitReason(afterStatus, resolvedExitReasonFilter);
+  }, [afterStatus, resolvedExitReasonFilter]);
 
   const emptyMessage = useMemo(
-    () => tradesEmptyMessage(liveTrades.length > 0, filter, exitReasonFilter),
-    [liveTrades.length, filter, exitReasonFilter],
+    () =>
+      tradesEmptyMessage(liveTrades.length > 0, filter, resolvedExitReasonFilter),
+    [liveTrades.length, filter, resolvedExitReasonFilter],
   );
 
   const compare = useCallback(
@@ -337,7 +339,7 @@ export function TradesTable({
                   sortKey={sortKey}
                   sortDir={sortDir}
                   onSort={handleSort}
-                  exitReasonFilter={exitReasonFilter}
+                  exitReasonFilter={resolvedExitReasonFilter}
                   onExitReasonFilterChange={setExitReasonFilter}
                   filterOptions={exitReasonOptions}
                 />

@@ -41,8 +41,8 @@ type TradeQuery = {
 
 function mockTradeQuery(): TradeQuery {
   const query = {} as TradeQuery;
-  query.or = vi.fn((_filter: string) => query);
-  query.eq = vi.fn((_column: string, _value: string) => query);
+  query.or = vi.fn(() => query);
+  query.eq = vi.fn(() => query);
   return query;
 }
 
