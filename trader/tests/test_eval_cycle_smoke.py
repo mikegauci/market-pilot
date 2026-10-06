@@ -13,12 +13,15 @@ from strategy.config import StrategyConfig
 class EvalCycleSmokeTests(unittest.TestCase):
     def _context(self, *, news_client: object | None = None) -> EvalCycleContext:
         settings = load_settings()
+        # Large refresh intervals skip Supabase work; sleep intervals must stay 0
+        # or run_eval_cycle blocks in interruptible_sleep (~interval - elapsed).
         settings.bot_control_refresh_interval_sec = 1e9
         settings.settings_refresh_interval_sec = 1e9
         settings.news_general_refresh_sec = 1e9
         settings.live_bar_flush_interval_sec = 1e9
-        settings.heartbeat_interval_sec = 1e9
-        settings.eval_interval_sec = 1e9
+        settings.heartbeat_interval_sec = 0.0
+        settings.eval_interval_sec = 0.0
+        settings.closed_market_eval_interval_sec = 0.0
         settings.data_source = DataSource.MOCK
 
         db = MagicMock()
