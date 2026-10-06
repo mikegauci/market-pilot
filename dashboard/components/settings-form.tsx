@@ -351,6 +351,13 @@ export function SettingsForm({
   const takeProfitHints = getTakeProfitHints(takeProfitFraction, stopLossFraction);
   const briefDiffs = buildSettingDiffs(settings, briefSuggestions);
 
+  function dismissBriefBanner() {
+    if (briefSessionDate) {
+      dismissBriefSettings(briefSessionDate);
+    }
+    setBriefDismissed(true);
+  }
+
   function applyBriefDiffs() {
     for (const diff of briefDiffs) {
       switch (diff.key) {
@@ -380,10 +387,7 @@ export function SettingsForm({
           break;
       }
     }
-    if (briefSessionDate) {
-      dismissBriefSettings(briefSessionDate);
-    }
-    setBriefDismissed(true);
+    dismissBriefBanner();
   }
 
   const showBriefDiffs =
@@ -441,6 +445,7 @@ export function SettingsForm({
           sessionDate={briefSessionDate}
           diffs={briefDiffs}
           onApply={applyBriefDiffs}
+          onHide={dismissBriefBanner}
         />
       ) : null}
 
