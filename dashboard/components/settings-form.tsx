@@ -8,6 +8,7 @@ import {
   StrategyPercentField,
 } from "@/components/settings-form-fields";
 import { Button } from "@/components/ui/button";
+import { SettingsNumberInput } from "@/components/settings-number-input";
 import { Input } from "@/components/ui/input";
 import { RiskProfilePicker } from "@/components/risk-profile-picker";
 import { WatchlistSettingsSection } from "@/components/watchlist-settings-section";
@@ -244,13 +245,13 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.minimum_jev_confidence}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.minimum_jev_confidence}
           >
-            <Input
+            <SettingsNumberInput
               id="minimum_jev_confidence"
               name="minimum_jev_confidence"
-              type="number"
               step="1"
+              integer
               value={minJevPct}
-              onChange={(event) => setMinJevPct(Number(event.target.value))}
+              onChange={setMinJevPct}
               required
             />
           </SettingsField>
@@ -260,13 +261,13 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.signal_record_threshold}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.signal_record_threshold}
           >
-            <Input
+            <SettingsNumberInput
               id="signal_record_threshold"
               name="signal_record_threshold"
-              type="number"
               step="1"
+              integer
               value={signalRecordPct}
-              onChange={(event) => setSignalRecordPct(Number(event.target.value))}
+              onChange={setSignalRecordPct}
               required
             />
           </SettingsField>
@@ -351,13 +352,13 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.max_open_positions}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.max_open_positions}
           >
-            <Input
+            <SettingsNumberInput
               id="max_open_positions"
               name="max_open_positions"
-              type="number"
               step="1"
+              integer
               value={maxOpenPositions}
-              onChange={(event) => setMaxOpenPositions(Number(event.target.value))}
+              onChange={setMaxOpenPositions}
               required
             />
           </SettingsField>
@@ -420,15 +421,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.profit_take_min_fraction}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_min_fraction}
           >
-            <Input
+            <SettingsNumberInput
               id="profit_take_min_fraction"
               name="profit_take_min_fraction"
-              type="number"
               step="1"
               min={1}
               max={100}
+              integer
               value={profitTakeMinPct}
-              onChange={(event) => setProfitTakeMinPct(Number(event.target.value))}
+              onChange={setProfitTakeMinPct}
               required
             />
           </SettingsField>
@@ -438,15 +439,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.profit_take_max_fraction}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_max_fraction}
           >
-            <Input
+            <SettingsNumberInput
               id="profit_take_max_fraction"
               name="profit_take_max_fraction"
-              type="number"
               step="1"
               min={1}
               max={100}
+              integer
               value={profitTakeMaxPct}
-              onChange={(event) => setProfitTakeMaxPct(Number(event.target.value))}
+              onChange={setProfitTakeMaxPct}
               required
             />
           </SettingsField>
@@ -456,17 +457,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.profit_take_min_band_hits}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_min_band_hits}
           >
-            <Input
+            <SettingsNumberInput
               id="profit_take_min_band_hits"
               name="profit_take_min_band_hits"
-              type="number"
               step="1"
               min={1}
               max={20}
+              integer
               value={profitTakeMinBandHits}
-              onChange={(event) =>
-                setProfitTakeMinBandHits(Number(event.target.value))
-              }
+              onChange={setProfitTakeMinBandHits}
               required
             />
           </SettingsField>
@@ -476,17 +475,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.profit_take_band_window_cycles}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_band_window_cycles}
           >
-            <Input
+            <SettingsNumberInput
               id="profit_take_band_window_cycles"
               name="profit_take_band_window_cycles"
-              type="number"
               step="1"
               min={1}
               max={30}
+              integer
               value={profitTakeBandWindow}
-              onChange={(event) =>
-                setProfitTakeBandWindow(Number(event.target.value))
-              }
+              onChange={setProfitTakeBandWindow}
               required
             />
           </SettingsField>
@@ -496,17 +493,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.profit_take_jev_sell_threshold}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_jev_sell_threshold}
           >
-            <Input
+            <SettingsNumberInput
               id="profit_take_jev_sell_threshold"
               name="profit_take_jev_sell_threshold"
-              type="number"
               step="1"
               min={0}
               max={100}
+              integer
               value={profitTakeJevSellPct}
-              onChange={(event) =>
-                setProfitTakeJevSellPct(Number(event.target.value))
-              }
+              onChange={setProfitTakeJevSellPct}
               required
             />
           </SettingsField>
@@ -516,15 +511,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.max_hold_minutes}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.max_hold_minutes}
           >
-            <Input
+            <SettingsNumberInput
               id="max_hold_minutes"
               name="max_hold_minutes"
-              type="number"
               step="1"
               min={0}
               max={480}
+              integer
               value={maxHoldMinutes}
-              onChange={(event) => setMaxHoldMinutes(Number(event.target.value))}
+              onChange={setMaxHoldMinutes}
               required
             />
           </SettingsField>
@@ -534,15 +529,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.min_hold_minutes}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.min_hold_minutes}
           >
-            <Input
+            <SettingsNumberInput
               id="min_hold_minutes"
               name="min_hold_minutes"
-              type="number"
               step="1"
               min={0}
               max={480}
+              integer
               value={minHoldMinutes}
-              onChange={(event) => setMinHoldMinutes(Number(event.target.value))}
+              onChange={setMinHoldMinutes}
               required
             />
           </SettingsField>
@@ -552,15 +547,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.jev_sell_exit_threshold}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.jev_sell_exit_threshold}
           >
-            <Input
+            <SettingsNumberInput
               id="jev_sell_exit_threshold"
               name="jev_sell_exit_threshold"
-              type="number"
               step="1"
               min={50}
               max={100}
+              integer
               value={jevSellExitPct}
-              onChange={(event) => setJevSellExitPct(Number(event.target.value))}
+              onChange={setJevSellExitPct}
               required
             />
           </SettingsField>
@@ -570,15 +565,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.reentry_cooldown_minutes}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.reentry_cooldown_minutes}
           >
-            <Input
+            <SettingsNumberInput
               id="reentry_cooldown_minutes"
               name="reentry_cooldown_minutes"
-              type="number"
               step="1"
               min={0}
               max={480}
+              integer
               value={reentryCooldownMinutes}
-              onChange={(event) => setReentryCooldownMinutes(Number(event.target.value))}
+              onChange={setReentryCooldownMinutes}
               required
             />
           </SettingsField>
@@ -588,15 +583,14 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.min_volume_ratio}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.min_volume_ratio}
           >
-            <Input
+            <SettingsNumberInput
               id="min_volume_ratio"
               name="min_volume_ratio"
-              type="number"
               step="0.05"
               min={0}
               max={5}
               value={minVolumeRatio}
-              onChange={(event) => setMinVolumeRatio(Number(event.target.value))}
+              onChange={setMinVolumeRatio}
               required
             />
           </SettingsField>
@@ -606,15 +600,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.min_share_price}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.min_share_price}
           >
-            <Input
+            <SettingsNumberInput
               id="min_share_price"
               name="min_share_price"
-              type="number"
               step="1"
               min={0}
               max={10000}
+              integer
               value={minSharePrice}
-              onChange={(event) => setMinSharePrice(Number(event.target.value))}
+              onChange={setMinSharePrice}
               required
             />
           </SettingsField>
@@ -624,15 +618,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.min_dollar_volume}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.min_dollar_volume}
           >
-            <Input
+            <SettingsNumberInput
               id="min_dollar_volume"
               name="min_dollar_volume"
-              type="number"
               step="1000"
               min={0}
               max={1000000000}
+              integer
               value={minDollarVolume}
-              onChange={(event) => setMinDollarVolume(Number(event.target.value))}
+              onChange={setMinDollarVolume}
               required
             />
           </SettingsField>

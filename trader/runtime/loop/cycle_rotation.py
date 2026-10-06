@@ -21,7 +21,7 @@ from runtime.trader_ops import merge_watchlist_symbols, sync_watchlist_symbols
 from strategy.config import StrategyConfig
 from strategy.confirmation import ConfirmationTracker
 from watchlist.backfill import backfill_watchlist_symbols
-from watchlist.resolution import effective_benchmark, strip_benchmark_symbol
+from watchlist.resolution import effective_benchmark, resolve_rotation_scan_watchlist
 from watchlist.rotation_runtime import maybe_rotate_watchlist
 
 if TYPE_CHECKING:
@@ -68,10 +68,7 @@ def run_cycle_rotation_and_bar_flush(
             else is_us_regular_session_open(),
             strategy_config=strategy_config,
         )
-        scratch.watchlist = strip_benchmark_symbol(
-            scratch.risk_settings.watchlist_active or scratch.risk_settings.watchlist_pool,
-            scratch.risk_settings,
-        )
+        scratch.watchlist = resolve_rotation_scan_watchlist(scratch.risk_settings)
         if rotation_swapped_in:
             rot_open = (
                 [t.symbol for t in risk_manager.open_trades] if risk_manager else []

@@ -24,7 +24,7 @@ describe("resolveEffectiveWatchlist", () => {
     ).toEqual(["NVDA", "AMD"]);
   });
 
-  it("falls back to the pool when rotation is on but active is empty", () => {
+  it("returns empty active when rotation is on but active is empty", () => {
     expect(
       resolveEffectiveWatchlist(
         settingsFixture({
@@ -35,7 +35,19 @@ describe("resolveEffectiveWatchlist", () => {
           benchmark_symbol: "QQQ",
         }),
       ),
-    ).toEqual(["NVDA", "AMD"]);
+    ).toEqual([]);
+  });
+
+  it("hides blocked symbols on the active list", () => {
+    expect(
+      resolveEffectiveWatchlist(
+        settingsFixture({
+          watchlist_rotation_enabled: true,
+          watchlist_active: ["ISRG", "NVDA"],
+          entry_blocked_symbols: ["ISRG"],
+        }),
+      ),
+    ).toEqual(["NVDA"]);
   });
 });
 

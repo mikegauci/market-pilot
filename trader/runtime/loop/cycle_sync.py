@@ -21,7 +21,11 @@ from strategy.config import strategy_config_with_risk_overrides
 from strategy.confirmation import ConfirmationTracker
 from strategy.profit_take_tracker import ProfitTakeBandTracker
 from watchlist.backfill import backfill_watchlist_symbols
-from watchlist.resolution import effective_benchmark, resolve_runtime_watchlist, strip_benchmark_symbol
+from watchlist.resolution import (
+    effective_benchmark,
+    resolve_rotation_scan_watchlist,
+    resolve_runtime_watchlist,
+)
 
 if TYPE_CHECKING:
     from broker.ibkr import IBKRClient
@@ -120,10 +124,7 @@ def run_cycle_sync(
         scratch.risk_settings.watchlist_rotation_enabled
         and scratch.risk_settings.watchlist_pool
     ):
-        scratch.watchlist = strip_benchmark_symbol(
-            scratch.risk_settings.watchlist_active or scratch.risk_settings.watchlist_pool,
-            scratch.risk_settings,
-        )
+        scratch.watchlist = resolve_rotation_scan_watchlist(scratch.risk_settings)
         quote_symbols = list(
             dict.fromkeys(
                 list(scratch.risk_settings.watchlist_pool)

@@ -56,7 +56,12 @@ export default async function OverviewPage() {
             settings={settings}
             openSymbols={openTrades.map((trade) => trade.symbol)}
           />
-          {settings ? <OverviewWatchlistCard settings={settings} /> : null}
+          {settings ? (
+            <OverviewWatchlistCard
+              settings={settings}
+              openSymbols={openTrades.map((trade) => trade.symbol)}
+            />
+          ) : null}
         </div>
 
         <PositionsGrid

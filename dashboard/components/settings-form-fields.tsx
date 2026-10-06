@@ -1,6 +1,6 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
+import { SettingsNumberInput } from "@/components/settings-number-input";
 import { SettingsField } from "@/components/settings-section";
 import {
   formatRiskPct,
@@ -65,17 +65,12 @@ export function RiskField({
       descriptionTitle={descriptionFull}
     >
       <div className="space-y-1.5">
-        <Input
+        <SettingsNumberInput
           id={id}
           name={id}
-          type="number"
           step="0.01"
           value={value}
-          onChange={(e) => {
-            const next = parseFloat(e.target.value);
-            if (!Number.isFinite(next)) return;
-            onChange(next);
-          }}
+          onChange={onChange}
           required
           className={cn(
             matchesRecommended && "border-emerald-800/50 focus:border-emerald-600",
@@ -132,19 +127,14 @@ export function StrategyPercentField({
       descriptionTitle={descriptionFull}
     >
       <div className="space-y-1.5">
-        <Input
+        <SettingsNumberInput
           id={id}
           name={id}
-          type="number"
           step="0.1"
           min="0.1"
           max="25"
           value={value}
-          onChange={(e) => {
-            const next = parseFloat(e.target.value);
-            if (!Number.isFinite(next)) return;
-            onChange(next);
-          }}
+          onChange={onChange}
           required
           className={cn(
             matchesRecommended && "border-emerald-800/50 focus:border-emerald-600",

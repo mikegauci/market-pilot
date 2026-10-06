@@ -23,6 +23,7 @@ export type SettingsRow = Omit<
   | "watchlist_rotation_interval_minutes"
   | "watchlist_max_swaps_per_rotation"
   | "watchlist_last_rotation_note"
+  | "entry_blocked_symbols"
 > &
   Partial<
     Pick<
@@ -47,6 +48,7 @@ export type SettingsRow = Omit<
       | "watchlist_rotation_interval_minutes"
       | "watchlist_max_swaps_per_rotation"
       | "watchlist_last_rotation_note"
+      | "entry_blocked_symbols"
     >
   >;
 
@@ -80,5 +82,8 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     watchlist_rotation_interval_minutes: raw.watchlist_rotation_interval_minutes ?? 15,
     watchlist_max_swaps_per_rotation: raw.watchlist_max_swaps_per_rotation ?? 2,
     watchlist_last_rotation_note: raw.watchlist_last_rotation_note ?? "",
+    entry_blocked_symbols: (raw.entry_blocked_symbols ?? []).map((symbol) =>
+      symbol.toUpperCase(),
+    ),
   };
 }

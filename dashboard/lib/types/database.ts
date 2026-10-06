@@ -56,6 +56,8 @@ export type Settings = {
   watchlist_max_swaps_per_rotation: number;
   watchlist_last_rotation_note: string;
   watchlist_last_rotation_at?: string | null;
+  /** Manual block: no entries or Jev scan until unblocked from the dashboard. */
+  entry_blocked_symbols: string[];
   benchmark_symbol: string;
   /** Market-sell when price is in the entry→TP path band (fractions 0–1). */
   profit_take_enabled: boolean;

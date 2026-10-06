@@ -4,7 +4,18 @@ import { revalidatePath } from "next/cache";
 import { resolveCurrentEquity } from "@/lib/resolve-current-equity";
 import { createClient } from "@/lib/supabase/server";
 import { isTraderOnline } from "@/lib/trader-status";
+import {
+  mergeEntryBlockedSymbols,
+  removeEntryBlockedSymbol,
+} from "@/lib/entry-blocked-symbols";
+import { seedActiveWatchlistFromPool } from "@/lib/seed-active-watchlist";
 import { parseSettingsForm, parseWatchlistSymbols } from "@/lib/validate-settings";
+
+function revalidateEntryBlockPaths() {
+  revalidatePath("/settings");
+  revalidatePath("/");
+  revalidatePath("/strategy");
+}
 
 export async function updateSettings(formData: FormData) {
   const supabase = await createClient();
@@ -25,6 +36,90 @@ export async function updateSettings(formData: FormData) {
   revalidatePath("/settings");
   revalidatePath("/");
   revalidatePath("/strategy");
+}
+
+export async function blockSymbolFromEntries(symbol: string) {
+  const [normalized] = parseWatchlistSymbols([symbol]);
+  const supabase = await createClient();
+
+  const { data: settings, error: readError } = await supabase
+    .from("settings")
+    .select(
+      "entry_blocked_symbols, watchlist_active, watchlist_rotation_enabled, watchlist, watchlist_pool, watchlist_active_size",
+    )
+    .eq("id", 1)
+    .single();
+
+  if (readError || !settings) {
+    throw new Error(readError?.message ?? "Could not read settings");
+  }
+
+  const entry_blocked_symbols = mergeEntryBlockedSymbols(
+    settings.entry_blocked_symbols as string[] | null,
+    [normalized],
+  );
+
+  const payload: Record<string, unknown> = {
+    entry_blocked_symbols,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (settings.watchlist_rotation_enabled) {
+    let nextActive = (settings.watchlist_active as string[] | null ?? [])
+      .map((item) => item.toUpperCase())
+      .filter((item) => item && item !== normalized);
+    if (nextActive.length === 0) {
+      nextActive = seedActiveWatchlistFromPool(
+        (settings.watchlist_pool as string[] | null) ?? [],
+        entry_blocked_symbols,
+        Number(settings.watchlist_active_size ?? 12),
+      );
+    }
+    payload.watchlist_active = nextActive;
+  } else {
+    const nextWatchlist = (settings.watchlist as string[] | null ?? [])
+      .map((item) => item.toUpperCase())
+      .filter((item) => item && item !== normalized);
+    if (nextWatchlist.length < 1) {
+      throw new Error("Keep at least one symbol on the watchlist.");
+    }
+    payload.watchlist = nextWatchlist;
+  }
+
+  const { error } = await supabase.from("settings").update(payload).eq("id", 1);
+  if (error) throw new Error(error.message);
+  revalidateEntryBlockPaths();
+}
+
+export async function unblockSymbolFromEntries(symbol: string) {
+  const [normalized] = parseWatchlistSymbols([symbol]);
+  const supabase = await createClient();
+
+  const { data: settings, error: readError } = await supabase
+    .from("settings")
+    .select("entry_blocked_symbols")
+    .eq("id", 1)
+    .single();
+
+  if (readError || !settings) {
+    throw new Error(readError?.message ?? "Could not read settings");
+  }
+
+  const entry_blocked_symbols = removeEntryBlockedSymbol(
+    settings.entry_blocked_symbols as string[] | null,
+    normalized,
+  );
+
+  const { error } = await supabase
+    .from("settings")
+    .update({
+      entry_blocked_symbols,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", 1);
+
+  if (error) throw new Error(error.message);
+  revalidateEntryBlockPaths();
 }
 
 export async function updateWatchlist(symbols: string[]) {

@@ -42,6 +42,7 @@ const RISK_REASONS = new Set([
   "invalid_price",
   "correlation_cap",
   "reentry_cooldown",
+  "entry_blocked",
 ]);
 
 const IBKR_REASON_PREFIXES = [
@@ -101,6 +102,7 @@ export function skipReasonLabel(key: string): string {
     invalid_price: "Invalid price",
     correlation_cap: "Correlation cap",
     reentry_cooldown: "Re-entry cooldown",
+    entry_blocked: "Entry blocked",
     ibkr_not_connected: "Broker not connected",
     ibkr_pending_entry_order: "Pending BUY order",
     ibkr_cooldown: "Broker cooldown",

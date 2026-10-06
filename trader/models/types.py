@@ -174,6 +174,8 @@ class RiskSettings:
     watchlist_rotation_interval_minutes: int = 15
     watchlist_max_swaps_per_rotation: int = 2
     watchlist_last_rotation_note: str = ""
+    # Manual dashboard block: no entries or Jev scan until unblocked.
+    entry_blocked_symbols: List[str] = field(default_factory=list)
 
 
 @dataclass

@@ -33,7 +33,8 @@ class SupabaseSettingsMixin:
     _SETTINGS_SELECT_ROTATION = (
         "watchlist_pool, watchlist_active, watchlist_rotation_enabled, "
         "watchlist_active_size, watchlist_rotation_interval_minutes, "
-        "watchlist_max_swaps_per_rotation, watchlist_last_rotation_note"
+        "watchlist_max_swaps_per_rotation, watchlist_last_rotation_note, "
+        "entry_blocked_symbols"
     )
 
     @staticmethod
@@ -54,6 +55,18 @@ class SupabaseSettingsMixin:
         data.setdefault("watchlist_rotation_interval_minutes", 15)
         data.setdefault("watchlist_max_swaps_per_rotation", 2)
         data.setdefault("watchlist_last_rotation_note", "")
+        data.setdefault("entry_blocked_symbols", [])
+
+    @staticmethod
+    def _normalize_symbol_list(raw: object) -> list[str]:
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for item in raw or []:
+            symbol = str(item).strip().upper()
+            if symbol and symbol not in seen:
+                seen.add(symbol)
+                ordered.append(symbol)
+        return ordered
 
     def _select_settings_row(self, columns: str) -> Optional[dict]:
         try:
@@ -180,6 +193,9 @@ class SupabaseSettingsMixin:
                 data.get("watchlist_max_swaps_per_rotation", 2)
             ),
             watchlist_last_rotation_note=str(data.get("watchlist_last_rotation_note") or ""),
+            entry_blocked_symbols=self._normalize_symbol_list(
+                data.get("entry_blocked_symbols")
+            ),
         )
 
     @_db_synchronized

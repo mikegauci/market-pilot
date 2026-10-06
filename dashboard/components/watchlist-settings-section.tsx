@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { EntryBlockedSymbols } from "@/components/entry-blocked-symbols";
 import { WatchlistPicker } from "@/components/watchlist-picker";
 import { FieldDescription } from "@/components/settings-section";
 import { Input } from "@/components/ui/input";
@@ -148,6 +149,8 @@ export function WatchlistSettingsSection({ settings }: Props) {
         value={watchlistSymbolsHiddenValue(poolSymbols)}
         required={rotating}
       />
+
+      <EntryBlockedSymbols symbols={settings.entry_blocked_symbols ?? []} />
 
       {rotating ? (
         <div className="space-y-2">

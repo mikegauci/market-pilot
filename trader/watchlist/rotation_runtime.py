@@ -10,6 +10,7 @@ from models.types import Quote, RiskSettings
 from runtime.state import TraderRuntimeState
 from strategy.config import StrategyConfig
 from strategy.confirmation import ConfirmationTracker
+from watchlist.resolution import entry_blocked_symbol_set
 from watchlist.rotation import (
     RotationCandidate,
     capped_active_size,
@@ -78,6 +79,25 @@ def maybe_rotate_watchlist(
     if not market_open:
         return risk_settings, []
 
+    blocked = entry_blocked_symbol_set(risk_settings)
+    current_active = [
+        symbol
+        for symbol in risk_settings.watchlist_active
+        if symbol.upper() not in blocked
+    ]
+    if current_active != list(risk_settings.watchlist_active):
+        note = "removed blocked symbols"
+        if db is not None:
+            try:
+                db.save_watchlist_rotation(current_active, note)
+            except Exception as exc:
+                logger.warning("Could not persist trimmed active list: %s", exc)
+        risk_settings = replace(
+            risk_settings,
+            watchlist_active=current_active,
+            watchlist_last_rotation_note=note,
+        )
+
     interval_sec = max(1, risk_settings.watchlist_rotation_interval_minutes) * 60
     due = not risk_settings.watchlist_active or (
         now_mono - runtime.last_rotation_mono
@@ -95,8 +115,13 @@ def maybe_rotate_watchlist(
         symbol.upper()
         for symbol in list(open_symbols) + list(confirmation_tracker.confirming_symbols())
     }
+    rotation_pool = [
+        symbol
+        for symbol in risk_settings.watchlist_pool
+        if symbol.upper() not in blocked
+    ]
     scores: Dict[str, float] = {}
-    for symbol in risk_settings.watchlist_pool:
+    for symbol in rotation_pool:
         candidate = build_rotation_candidate(
             symbol, quotes_by_symbol.get(symbol), minute_bars, bar_store
         )
@@ -110,7 +135,7 @@ def maybe_rotate_watchlist(
 
     requested = capped_active_size(
         risk_settings.watchlist_active_size,
-        len(risk_settings.watchlist_active),
+        len(current_active),
         median_cycle_sec(runtime.cycle_elapsed_sec),
     )
     if requested < risk_settings.watchlist_active_size:
@@ -123,15 +148,15 @@ def maybe_rotate_watchlist(
         )
 
     result = rotate_active(
-        risk_settings.watchlist_pool,
-        risk_settings.watchlist_active,
+        rotation_pool,
+        current_active,
         scores,
         active_size=requested,
         max_swaps=risk_settings.watchlist_max_swaps_per_rotation,
         protected=protected,
     )
     runtime.last_rotation_mono = now_mono
-    if result.active == list(risk_settings.watchlist_active):
+    if result.active == list(current_active):
         logger.info("Watchlist rotation: %s", result.note)
         return risk_settings, []
 

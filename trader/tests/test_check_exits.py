@@ -201,6 +201,38 @@ class TestCheckExits(unittest.TestCase):
         self.assertFalse(decision.approved)
         self.assertIn("reentry_cooldown", decision.reason or "")
 
+    def test_entry_blocked_rejects_new_trade(self) -> None:
+        from models.types import JevPrediction, MarketState
+
+        settings = _risk_settings()
+        settings.entry_blocked_symbols = ["META"]
+        self.manager.update_settings(settings)
+
+        state = MarketState(
+            symbol="META",
+            price=750.0,
+            change_5m=0.1,
+            change_15m=0.2,
+            volume_ratio=1.0,
+            rsi=50.0,
+            ema_9=745.0,
+            ema_20=740.0,
+            bid=749.9,
+            ask=750.1,
+            spread=0.2,
+            spy_change_5m=0.0,
+        )
+        prediction = JevPrediction(
+            symbol="META",
+            buy=0.9,
+            hold=0.05,
+            sell=0.05,
+            timestamp=datetime.now(timezone.utc),
+        )
+        decision = self.manager.evaluate_entry(state, prediction, True, {})
+        self.assertFalse(decision.approved)
+        self.assertEqual(decision.reason, "entry_blocked")
+
     def test_eod_flatten_closes_simulated_loser(self) -> None:
         self.manager.open_trades = [_trade(entry_price=100.0, quantity=10.0)]
         quotes = {

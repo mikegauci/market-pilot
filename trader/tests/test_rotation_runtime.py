@@ -93,6 +93,49 @@ class MaybeRotateWatchlistTests(unittest.TestCase):
         db.save_watchlist_rotation.assert_called_once()
         self.assertIsInstance(swapped, list)
 
+    def test_trims_blocked_from_active_before_rotation_due(self) -> None:
+        risk = RiskSettings(
+            minimum_jev_confidence=0.85,
+            signal_record_threshold=0.75,
+            risk_per_trade=100.0,
+            max_position_size=10_000.0,
+            max_daily_loss=500.0,
+            max_open_positions=5,
+            stop_loss_percentage=0.01,
+            take_profit_percentage=0.015,
+            max_hold_minutes=0.0,
+            account_capital=10_000.0,
+            risk_sync_equity=None,
+            watchlist=["AAA"],
+            watchlist_rotation_enabled=True,
+            watchlist_pool=["ISRG", "NVDA", "AMD"],
+            watchlist_active=["ISRG", "NVDA"],
+            watchlist_active_size=2,
+            watchlist_rotation_interval_minutes=15,
+            watchlist_max_swaps_per_rotation=2,
+            entry_blocked_symbols=["ISRG"],
+        )
+        runtime = TraderRuntimeState()
+        runtime.last_rotation_mono = 1_000.0
+        db = MagicMock()
+        updated, swapped = maybe_rotate_watchlist(
+            db=db,
+            risk_settings=risk,
+            minute_bars=MinuteBarStore(["ISRG", "NVDA", "AMD"]),
+            bar_store=None,
+            quotes_by_symbol={},
+            benchmark_minute_bars=None,
+            confirmation_tracker=ConfirmationTracker(1),
+            open_symbols=[],
+            runtime=runtime,
+            now_mono=1_100.0,
+            market_open=True,
+            strategy_config=StrategyConfig(),
+        )
+        self.assertEqual(updated.watchlist_active, ["NVDA"])
+        self.assertEqual(swapped, [])
+        db.save_watchlist_rotation.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

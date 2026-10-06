@@ -15,6 +15,24 @@ def untradeable_benchmark_symbols(risk_settings: RiskSettings) -> set[str]:
     return {configured} if configured else set()
 
 
+def entry_blocked_symbol_set(risk_settings: RiskSettings) -> set[str]:
+    return {
+        str(symbol).strip().upper()
+        for symbol in getattr(risk_settings, "entry_blocked_symbols", ()) or ()
+        if str(symbol).strip()
+    }
+
+
+def strip_blocked_symbols(
+    symbols: Sequence[str],
+    risk_settings: RiskSettings,
+) -> List[str]:
+    blocked = entry_blocked_symbol_set(risk_settings)
+    if not blocked:
+        return list(symbols)
+    return [symbol for symbol in symbols if symbol.upper() not in blocked]
+
+
 def strip_benchmark_symbol(
     symbols: Sequence[str],
     risk_settings: RiskSettings,
@@ -28,8 +46,11 @@ def resolve_trading_watchlist(
     open_symbols: Sequence[str] = (),
 ) -> List[str]:
     """Configured watchlist plus open positions (benchmark excluded)."""
-    base = strip_benchmark_symbol(
-        [str(s).upper() for s in risk_settings.watchlist if str(s).strip()],
+    base = strip_blocked_symbols(
+        strip_benchmark_symbol(
+            [str(s).upper() for s in risk_settings.watchlist if str(s).strip()],
+            risk_settings,
+        ),
         risk_settings,
     )
     if not open_symbols:
@@ -40,6 +61,17 @@ def resolve_trading_watchlist(
         if symbol and symbol not in merged:
             merged.append(symbol)
     return strip_benchmark_symbol(merged, risk_settings)
+
+
+def resolve_rotation_scan_watchlist(risk_settings: RiskSettings) -> List[str]:
+    """Active list for Jev entry scans when rotation is on (never the full pool)."""
+    blocked = entry_blocked_symbol_set(risk_settings)
+    active = [
+        str(symbol).strip().upper()
+        for symbol in risk_settings.watchlist_active
+        if str(symbol).strip() and str(symbol).strip().upper() not in blocked
+    ]
+    return strip_benchmark_symbol(active, risk_settings)
 
 
 def resolve_runtime_watchlist(

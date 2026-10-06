@@ -6,7 +6,9 @@ import { useMemo, useState, useTransition } from "react";
 import { WatchlistPicker } from "@/components/watchlist-picker";
 import { WatchlistMoveChip } from "@/components/watchlist-move-chip";
 import { Card, CardTitle } from "@/components/ui/card";
-import { updateWatchlist } from "@/lib/actions";
+import { EntryBlockedSymbols } from "@/components/entry-blocked-symbols";
+import { blockSymbolFromEntries, updateWatchlist } from "@/lib/actions";
+import { mergeEntryBlockedSymbols } from "@/lib/entry-blocked-symbols";
 import { useLatestPredictions } from "@/lib/latest-predictions-context";
 import { watchlistMovesFromPredictions } from "@/lib/market-condition";
 import type { Settings } from "@/lib/types/database";
@@ -14,9 +16,11 @@ import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
 
 type Props = {
   settings: Settings;
+  /** Symbols with an open long — block is disabled until the position closes. */
+  openSymbols?: string[];
 };
 
-export function OverviewWatchlistCard({ settings }: Props) {
+export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const serverSymbols = useMemo(
@@ -25,7 +29,15 @@ export function OverviewWatchlistCard({ settings }: Props) {
   );
   const [optimisticSymbols, setOptimisticSymbols] = useState<string[] | null>(null);
   const symbols = optimisticSymbols ?? serverSymbols;
+  const [optimisticBlocked, setOptimisticBlocked] = useState<string[] | null>(null);
+  const blockedSymbols =
+    optimisticBlocked ?? settings.entry_blocked_symbols ?? [];
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const openSymbolSet = useMemo(
+    () => new Set(openSymbols.map((symbol) => symbol.toUpperCase())),
+    [openSymbols],
+  );
 
   function persistWatchlist(next: string[]) {
     setSaveError(null);
@@ -39,6 +51,31 @@ export function OverviewWatchlistCard({ settings }: Props) {
       } catch (error) {
         setOptimisticSymbols(previous);
         setSaveError(error instanceof Error ? error.message : "Could not save watchlist");
+      }
+    });
+  }
+
+  function blockSymbol(symbol: string) {
+    const key = symbol.toUpperCase();
+    if (openSymbolSet.has(key)) {
+      setSaveError(`Close the open ${symbol} position before blocking entries.`);
+      return;
+    }
+    setSaveError(null);
+    const previousSymbols = symbols;
+    const previousBlocked = blockedSymbols;
+    setOptimisticSymbols(symbols.filter((s) => s.toUpperCase() !== key));
+    setOptimisticBlocked(mergeEntryBlockedSymbols(blockedSymbols, [symbol]));
+    startTransition(async () => {
+      try {
+        await blockSymbolFromEntries(symbol);
+        setOptimisticSymbols(null);
+        setOptimisticBlocked(null);
+        router.refresh();
+      } catch (error) {
+        setOptimisticSymbols(previousSymbols);
+        setOptimisticBlocked(previousBlocked);
+        setSaveError(error instanceof Error ? error.message : "Could not block symbol");
       }
     });
   }
@@ -63,6 +100,31 @@ export function OverviewWatchlistCard({ settings }: Props) {
   }, [predictions, symbols, benchmark]);
 
   const hasMoveData = changeBySymbol.size > 0;
+
+  function blockButton(symbol: string) {
+    const key = symbol.toUpperCase();
+    const positionOpen = openSymbolSet.has(key);
+    return (
+      <button
+        type="button"
+        disabled={pending || positionOpen}
+        onClick={() => blockSymbol(symbol)}
+        className="rounded px-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-amber-200 disabled:opacity-40"
+        aria-label={
+          positionOpen
+            ? `${symbol} has an open position — close it before blocking`
+            : `Block ${symbol} from new entries`
+        }
+        title={
+          positionOpen
+            ? "Close the open position before blocking"
+            : "Block from entries"
+        }
+      >
+        ⊘
+      </button>
+    );
+  }
 
   return (
     <Card className="min-w-0">
@@ -98,24 +160,34 @@ export function OverviewWatchlistCard({ settings }: Props) {
               symbol={symbol}
               change5m={changeBySymbol.get(symbol.toUpperCase())}
               trailing={
-                rotating ? null : (
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => removeSymbol(symbol)}
-                    className="rounded px-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-40"
-                    aria-label={`Remove ${symbol} from watchlist`}
-                  >
-                    ×
-                  </button>
+                rotating ? (
+                  blockButton(symbol)
+                ) : (
+                  <span className="inline-flex items-center">
+                    {blockButton(symbol)}
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => removeSymbol(symbol)}
+                      className="rounded px-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-40"
+                      aria-label={`Remove ${symbol} from watchlist (can re-add later)`}
+                      title="Remove only — not blocked from re-entry"
+                    >
+                      ×
+                    </button>
+                  </span>
                 )
               }
             />
           ))
         ) : (
-          <span className="text-xs text-zinc-500">No symbols configured</span>
+          <span className="text-xs text-zinc-500">
+            {rotating ? "Active list is empty — the bot will refill on the next rotation." : "No symbols configured"}
+          </span>
         )}
       </div>
+
+      <EntryBlockedSymbols symbols={blockedSymbols} />
 
       {rotating ? null : (
       <div

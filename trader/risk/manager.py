@@ -233,6 +233,11 @@ class RiskManager:
         if any(t.symbol == state.symbol for t in self.open_trades):
             return TradeDecision(False, "already_open")
 
+        from watchlist.resolution import entry_blocked_symbol_set
+
+        if state.symbol.upper() in entry_blocked_symbol_set(self.settings):
+            return TradeDecision(False, "entry_blocked")
+
         reentry_remaining = self.reentry_cooldown_remaining_minutes(state.symbol)
         if reentry_remaining > 0:
             return TradeDecision(
