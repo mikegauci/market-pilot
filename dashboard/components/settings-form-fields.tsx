@@ -93,7 +93,7 @@ export function RiskField({
               matchesRecommended ? "text-emerald-400/90" : "text-amber-400/90",
             )}
           >
-            {formatRiskPct(pct)} of {formatCurrency(baselineEquity, currency)}
+            {formatRiskPct(pct)} of Equity
             {!matchesRecommended &&
               ` · Suggested ${formatCurrency(recommended, currency)}`}
           </p>
