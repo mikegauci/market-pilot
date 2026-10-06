@@ -172,6 +172,10 @@
     "name": "Ares Management"
   },
   {
+    "symbol": "ARM",
+    "name": "Arm Holdings"
+  },
+  {
     "symbol": "ATO",
     "name": "Atmos Energy"
   },
@@ -338,6 +342,10 @@
   {
     "symbol": "CEG",
     "name": "Constellation Energy"
+  },
+  {
+    "symbol": "CELH",
+    "name": "Celsius Holdings"
   },
   {
     "symbol": "CF",
@@ -1288,6 +1296,10 @@
     "name": "Motorola Solutions"
   },
   {
+    "symbol": "MSTR",
+    "name": "MicroStrategy"
+  },
+  {
     "symbol": "MTB",
     "name": "M&T Bank"
   },
@@ -1318,6 +1330,10 @@
   {
     "symbol": "NEM",
     "name": "Newmont"
+  },
+  {
+    "symbol": "NET",
+    "name": "Cloudflare"
   },
   {
     "symbol": "NFLX",
@@ -1640,12 +1656,20 @@
     "name": "Sandisk"
   },
   {
+    "symbol": "SNOW",
+    "name": "Snowflake"
+  },
+  {
     "symbol": "SNPS",
     "name": "Synopsys"
   },
   {
     "symbol": "SO",
     "name": "Southern Company"
+  },
+  {
+    "symbol": "SOFI",
+    "name": "SoFi Technologies"
   },
   {
     "symbol": "SOLV",
@@ -2006,6 +2030,10 @@
   {
     "symbol": "ZBRA",
     "name": "Zebra Technologies"
+  },
+  {
+    "symbol": "ZS",
+    "name": "Zscaler"
   },
   {
     "symbol": "ZTS",

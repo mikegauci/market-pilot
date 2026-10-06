@@ -399,6 +399,18 @@ class SupabaseRepository:
             )
 
     @_db_synchronized
+    def get_trader_status_snapshot(self) -> Dict[str, object]:
+        """Lightweight bot_status row for diagnostics scripts."""
+        result = (
+            self.client.table("bot_status")
+            .select("ibkr_connected, jev_connected, last_heartbeat, last_error")
+            .eq("id", 1)
+            .single()
+            .execute()
+        )
+        return dict(result.data or {})
+
+    @_db_synchronized
     def mark_trader_offline(
         self,
         enabled: bool,

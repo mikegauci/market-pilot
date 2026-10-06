@@ -1,17 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import sp500 from "@/data/sp500.json";
+import equityUniverse from "@/data/equity-universe.json";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { resolveSearchCommit, shouldWarnLargeWatchlist } from "@/lib/watchlist-commit";
 
 const SYMBOL_PATTERN = /^[A-Z][A-Z0-9.]{0,9}$/;
-const LARGE_WATCHLIST_THRESHOLD = 25;
 const MAX_SEARCH_RESULTS = 50;
 
-type Sp500Entry = { symbol: string; name: string };
+type EquityEntry = { symbol: string; name: string };
 
 function normalizeSymbols(symbols: string[]): string[] {
   return [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
@@ -34,18 +33,19 @@ export function WatchlistPicker({
   hideChipList = false,
   compact = false,
 }: {
-  defaultValue: string[];
+  /** Initial symbols when uncontrolled; omit when `value` is provided. */
+  defaultValue?: string[];
   value?: string[];
   onChange?: (symbols: string[]) => void;
   inputName?: string;
   fieldLabel?: string;
   /** When true, omit the selected-symbol chips (parent shows them). */
   hideChipList?: boolean;
-  /** Overview-style layout: search + custom ticker only. */
+  /** Overview-style layout: search only, tighter spacing. */
   compact?: boolean;
 }) {
   const [selectedInternal, setSelectedInternal] = useState<string[]>(() =>
-    normalizeSymbols(defaultValue),
+    normalizeSymbols(defaultValue ?? []),
   );
   const selected = value ?? selectedInternal;
 
@@ -58,16 +58,15 @@ export function WatchlistPicker({
     }
   }
   const [search, setSearch] = useState("");
-  const [customSymbol, setCustomSymbol] = useState("");
-  const [customError, setCustomError] = useState<string | null>(null);
+  const [inputError, setInputError] = useState<string | null>(null);
 
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return [];
+    if (!q || q.includes(",")) return [];
 
-    return (sp500 as Sp500Entry[])
+    return (equityUniverse as EquityEntry[])
       .filter((entry) => {
         if (selectedSet.has(entry.symbol)) return false;
         return (
@@ -82,16 +81,15 @@ export function WatchlistPicker({
     const symbol = raw.trim().toUpperCase();
     if (!symbol) return;
     if (!isValidSymbol(symbol)) {
-      setCustomError("Use 1–10 uppercase letters, digits, or dots (e.g. SPY, BRK.B).");
+      setInputError("Use 1–10 uppercase letters, digits, or dots (e.g. SPY, BRK.B).");
       return;
     }
     if (selectedSet.has(symbol)) {
-      setCustomError(`${symbol} is already on the watchlist.`);
+      setInputError(`${symbol} is already on the watchlist.`);
       return;
     }
     setSelected((prev) => [...prev, symbol]);
-    setCustomError(null);
-    setCustomSymbol("");
+    setInputError(null);
     setSearch("");
   }
 
@@ -124,9 +122,9 @@ export function WatchlistPicker({
     }
 
     if (invalid.length > 0) {
-      setCustomError(`Invalid symbols: ${invalid.join(", ")}`);
+      setInputError(`Invalid symbols: ${invalid.join(", ")}`);
     } else {
-      setCustomError(null);
+      setInputError(null);
     }
 
     clearInput();
@@ -136,20 +134,33 @@ export function WatchlistPicker({
     setSelected((prev) => prev.filter((s) => s !== symbol));
   }
 
-  function handleCustomAdd() {
-    addSymbolsFromInput(customSymbol, () => setCustomSymbol(""));
-  }
-
   function handleBulkInput(raw: string, clearInput: () => void) {
     if (!raw.includes(",")) return false;
     addSymbolsFromInput(raw, clearInput);
     return true;
   }
 
-  const searchInputId = compact ? "overview-watchlist-search" : "watchlist-search";
-  const customInputId = compact ? "overview-watchlist-custom" : "watchlist-custom";
+  function commitSearchInput() {
+    const raw = search.trim();
+    const outcome = resolveSearchCommit(
+      raw,
+      filtered.map((entry) => entry.symbol),
+      { isValidSymbol: isValidSymbol },
+    );
+    if (outcome.kind === "noop") return;
+    if (outcome.kind === "bulk") {
+      handleBulkInput(outcome.raw, () => setSearch(""));
+      return;
+    }
+    if (outcome.kind === "error") {
+      setInputError(outcome.message);
+      return;
+    }
+    addSymbol(outcome.symbol);
+  }
+
+  const searchInputId = `${inputName}-search`;
   const labelClassName = compact ? "text-xs font-medium text-zinc-400" : undefined;
-  const addFieldsClassName = compact ? "grid grid-cols-1 gap-3" : "grid gap-3 sm:grid-cols-2";
 
   return (
     <div className={compact ? "space-y-2" : "space-y-3"}>
@@ -191,68 +202,45 @@ export function WatchlistPicker({
         </>
       ) : null}
 
-      <div className={addFieldsClassName}>
-        <div className="min-w-0">
-          <Label htmlFor={searchInputId} className={labelClassName}>
-            {compact ? "S&P 500 search" : "Search S&P 500"}
-          </Label>
-          <Input
-            id={searchInputId}
-            type="search"
-            className="mt-1.5 w-full min-w-0"
-            placeholder={
-              compact ? "Name or ticker…" : "Search or paste comma-separated tickers…"
+      <div className="min-w-0">
+        <Label htmlFor={searchInputId} className={labelClassName}>
+          Search stocks
+        </Label>
+        <Input
+          id={searchInputId}
+          type="search"
+          className="mt-1.5 w-full min-w-0"
+          placeholder={
+            compact
+              ? "Ticker, company name, or paste tickers…"
+              : "Ticker or company name — paste comma-separated tickers to add many"
+          }
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setInputError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitSearchInput();
             }
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleBulkInput(search, () => setSearch(""));
-              }
-            }}
-            onPaste={(e) => {
-              const text = e.clipboardData.getData("text");
-              if (text.includes(",")) {
-                e.preventDefault();
-                addSymbolsFromInput(text, () => setSearch(""));
-              }
-            }}
-            autoComplete="off"
-          />
-        </div>
-
-        <div className="min-w-0">
-          <Label htmlFor={customInputId} className={labelClassName}>
-            Custom ticker
-          </Label>
-          <div className="mt-1.5 flex w-full min-w-0 items-center gap-2">
-            <Input
-              id={customInputId}
-              className="min-w-0 flex-1"
-              placeholder={compact ? "SPY, QQQ" : "e.g. SPY, QQQ"}
-              value={customSymbol}
-              onChange={(e) => {
-                setCustomSymbol(e.target.value.toUpperCase());
-                setCustomError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleCustomAdd();
-                }
-              }}
-              autoComplete="off"
-            />
-            <Button
-              type="button"
-              onClick={handleCustomAdd}
-              className="shrink-0 bg-zinc-800 hover:bg-zinc-700"
-            >
-              Add
-            </Button>
-          </div>
-        </div>
+          }}
+          onPaste={(e) => {
+            const text = e.clipboardData.getData("text");
+            if (text.includes(",")) {
+              e.preventDefault();
+              addSymbolsFromInput(text, () => setSearch(""));
+            }
+          }}
+          autoComplete="off"
+        />
+        {!compact ? (
+          <p className="mt-1 text-xs text-zinc-500">
+            Suggestions include S&amp;P 500 names plus other liquid tickers. Type any valid US
+            symbol and press Enter if it is not listed.
+          </p>
+        ) : null}
       </div>
 
       {search.trim() && search.includes(",") ? (
@@ -262,7 +250,9 @@ export function WatchlistPicker({
       ) : search.trim() ? (
         <ul className="max-h-48 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950/50">
           {filtered.length === 0 ? (
-            <li className="px-3 py-2 text-xs text-zinc-500">No matching symbols.</li>
+            <li className="px-3 py-2 text-xs text-zinc-500">
+              No matches in the search index — press Enter to add the ticker if it is valid.
+            </li>
           ) : (
             filtered.map((entry) => (
               <li key={entry.symbol}>
@@ -280,15 +270,14 @@ export function WatchlistPicker({
         </ul>
       ) : null}
 
-      {customError && <p className="text-xs text-red-400">{customError}</p>}
+      {inputError && <p className="text-xs text-red-400">{inputError}</p>}
 
-      {selected.length > LARGE_WATCHLIST_THRESHOLD && (
+      {shouldWarnLargeWatchlist(selected.length) && (
         <p className="text-xs text-amber-400/90">
           Large watchlists increase IBKR market-data subscriptions and Jev evaluation time.
-          Consider keeping the list focused ({LARGE_WATCHLIST_THRESHOLD} or fewer symbols).
+          Consider keeping the list focused (30 or fewer symbols).
         </p>
       )}
-
     </div>
   );
 }

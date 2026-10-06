@@ -1,0 +1,17 @@
+[
+  { "symbol": "PLTR", "name": "Palantir Technologies" },
+  { "symbol": "APP", "name": "AppLovin" },
+  { "symbol": "ARM", "name": "Arm Holdings" },
+  { "symbol": "MSTR", "name": "MicroStrategy" },
+  { "symbol": "COIN", "name": "Coinbase Global" },
+  { "symbol": "HOOD", "name": "Robinhood Markets" },
+  { "symbol": "SNOW", "name": "Snowflake" },
+  { "symbol": "CRWD", "name": "CrowdStrike Holdings" },
+  { "symbol": "DDOG", "name": "Datadog" },
+  { "symbol": "NET", "name": "Cloudflare" },
+  { "symbol": "ZS", "name": "Zscaler" },
+  { "symbol": "MRVL", "name": "Marvell Technology" },
+  { "symbol": "SMCI", "name": "Super Micro Computer" },
+  { "symbol": "CELH", "name": "Celsius Holdings" },
+  { "symbol": "SOFI", "name": "SoFi Technologies" }
+]

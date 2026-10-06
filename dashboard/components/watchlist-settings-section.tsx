@@ -1,3 +1,6 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import { WatchlistPicker } from "@/components/watchlist-picker";
 import { FieldDescription } from "@/components/settings-section";
 import { Input } from "@/components/ui/input";
@@ -12,10 +15,39 @@ type Props = {
   settings: Settings;
 };
 
+function normalizeSymbolList(symbols: string[] | undefined): string[] {
+  return [
+    ...new Set(
+      (symbols ?? []).map((symbol) => symbol.trim().toUpperCase()).filter(Boolean),
+    ),
+  ];
+}
+
+function symbolsHiddenValue(symbols: string[]): string {
+  return symbols.join(", ");
+}
+
 export function WatchlistSettingsSection({ settings }: Props) {
-  const effectiveWatchlist = resolveEffectiveWatchlist(settings);
+  const [rotating, setRotating] = useState(Boolean(settings.watchlist_rotation_enabled));
+  const [poolSymbols, setPoolSymbols] = useState(() =>
+    normalizeSymbolList(settings.watchlist_pool),
+  );
+  const [manualWatchlist, setManualWatchlist] = useState(() =>
+    normalizeSymbolList(settings.watchlist),
+  );
+
+  const previewSettings = useMemo(
+    (): Settings => ({
+      ...settings,
+      watchlist_rotation_enabled: rotating,
+      watchlist_pool: poolSymbols,
+      watchlist: manualWatchlist,
+    }),
+    [settings, rotating, poolSymbols, manualWatchlist],
+  );
+
+  const effectiveWatchlist = resolveEffectiveWatchlist(previewSettings);
   const headline = formatPredictingWatchlistHeadline(effectiveWatchlist.length);
-  const rotating = Boolean(settings.watchlist_rotation_enabled);
 
   return (
     <div className="space-y-4">
@@ -38,7 +70,8 @@ export function WatchlistSettingsSection({ settings }: Props) {
           type="checkbox"
           name="watchlist_rotation_enabled"
           value="on"
-          defaultChecked={rotating}
+          checked={rotating}
+          onChange={(e) => setRotating(e.target.checked)}
           className="rounded border-zinc-700"
         />
         Rotate the active list through the session
@@ -111,27 +144,42 @@ export function WatchlistSettingsSection({ settings }: Props) {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <WatchlistPicker
-          inputName="watchlist_pool"
-          defaultValue={settings.watchlist_pool?.length ? settings.watchlist_pool : []}
-          fieldLabel="Candidate pool"
-        />
-        <FieldDescription title="The larger list rotation chooses from. About 30 liquid names is enough.">
-          QQQ itself stays the benchmark and is not traded.
-        </FieldDescription>
-      </div>
+      <input
+        type="hidden"
+        name="watchlist"
+        value={symbolsHiddenValue(manualWatchlist)}
+        required={!rotating}
+      />
+      <input
+        type="hidden"
+        name="watchlist_pool"
+        value={symbolsHiddenValue(poolSymbols)}
+        required={rotating}
+      />
 
-      <div className="space-y-2">
-        <WatchlistPicker
-          inputName="watchlist"
-          defaultValue={settings.watchlist?.length ? settings.watchlist : []}
-          fieldLabel="Manual watchlist"
-        />
-        <FieldDescription title="Used only when rotation is off.">
-          Save to apply.
-        </FieldDescription>
-      </div>
+      {rotating ? (
+        <div className="space-y-2">
+          <WatchlistPicker
+            value={poolSymbols}
+            onChange={setPoolSymbols}
+            fieldLabel="Candidate pool"
+          />
+          <FieldDescription title="The larger list rotation chooses from. About 30 liquid names is enough.">
+            QQQ itself stays the benchmark and is not traded.
+          </FieldDescription>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <WatchlistPicker
+            value={manualWatchlist}
+            onChange={setManualWatchlist}
+            fieldLabel="Watchlist"
+          />
+          <FieldDescription title="Symbols Jev monitors for entries when rotation is off.">
+            Save to apply.
+          </FieldDescription>
+        </div>
+      )}
     </div>
   );
 }
