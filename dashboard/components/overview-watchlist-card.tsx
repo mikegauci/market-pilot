@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { WatchlistPicker } from "@/components/watchlist-picker";
+import { WatchlistMoveChip } from "@/components/watchlist-move-chip";
 import { Card, CardTitle } from "@/components/ui/card";
 import { updateWatchlist } from "@/lib/actions";
+import { useLatestPredictions } from "@/lib/latest-predictions-context";
+import { watchlistMovesFromPredictions } from "@/lib/market-condition";
 import type { Settings } from "@/lib/types/database";
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
 
@@ -46,14 +49,35 @@ export function OverviewWatchlistCard({ settings }: Props) {
     persistWatchlist(symbols.filter((s) => s !== symbol));
   }
 
+  const rotating = Boolean(settings.watchlist_rotation_enabled);
+  const predictions = useLatestPredictions();
+  const benchmark = settings.benchmark_symbol ?? "";
+
+  const changeBySymbol = useMemo(() => {
+    const moves = watchlistMovesFromPredictions(predictions, symbols, benchmark);
+    return new Map(moves.map((move) => [move.symbol.toUpperCase(), move.change5m]));
+  }, [predictions, symbols, benchmark]);
+
+  const hasMoveData = changeBySymbol.size > 0;
+
   return (
     <Card className="min-w-0">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
-          <CardTitle>Your watchlist</CardTitle>
+          <CardTitle>{rotating ? "Active list" : "Your watchlist"}</CardTitle>
           <p className="text-xs leading-snug text-zinc-500">
-            Symbols Jev monitors for entries. Add from the S&amp;P 500 or any ticker.
+            {rotating
+              ? "Jev checks these names. The bot swaps up to two every 15 minutes."
+              : "Symbols Jev monitors for entries. Add from the S&P 500 or any ticker."}
           </p>
+          {rotating && settings.watchlist_last_rotation_note ? (
+            <p className="text-xs text-zinc-400">Last change: {settings.watchlist_last_rotation_note}</p>
+          ) : null}
+          {hasMoveData ? (
+            <p className="text-xs text-zinc-500">
+              Green / amber / red = 5m move from the last bot scan.
+            </p>
+          ) : null}
         </div>
         <Link
           href="/settings#watchlist"
@@ -65,27 +89,31 @@ export function OverviewWatchlistCard({ settings }: Props) {
       <div className="mt-3 flex flex-wrap gap-1.5">
         {symbols.length ? (
           symbols.map((symbol) => (
-            <span
+            <WatchlistMoveChip
               key={symbol}
-              className="inline-flex items-center gap-1 rounded border border-zinc-700/80 bg-zinc-950/60 px-2 py-1 font-mono text-xs text-zinc-200"
-            >
-              {symbol}
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => removeSymbol(symbol)}
-                className="rounded px-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-40"
-                aria-label={`Remove ${symbol} from watchlist`}
-              >
-                ×
-              </button>
-            </span>
+              symbol={symbol}
+              change5m={changeBySymbol.get(symbol.toUpperCase())}
+              trailing={
+                rotating ? null : (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => removeSymbol(symbol)}
+                    className="rounded px-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-40"
+                    aria-label={`Remove ${symbol} from watchlist`}
+                  >
+                    ×
+                  </button>
+                )
+              }
+            />
           ))
         ) : (
           <span className="text-xs text-zinc-500">No symbols configured</span>
         )}
       </div>
 
+      {rotating ? null : (
       <div
         className={`mt-4 border-t border-zinc-800/70 pt-4 ${pending ? "pointer-events-none opacity-60" : ""}`}
       >
@@ -97,6 +125,7 @@ export function OverviewWatchlistCard({ settings }: Props) {
           compact
         />
       </div>
+      )}
 
       {saveError ? <p className="mt-2 text-xs text-red-400">{saveError}</p> : null}
       {pending ? <p className="mt-2 text-xs text-zinc-500">Saving watchlist…</p> : null}

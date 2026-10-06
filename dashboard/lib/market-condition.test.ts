@@ -5,6 +5,8 @@ import {
   marketConditionFromLiveData,
   median,
   mergeEvalScopeSymbols,
+  openPositionMoves,
+  watchlistMoveTone,
   watchlistMovesFromPredictions,
 } from "@/lib/market-condition";
 import type { Prediction } from "@/lib/types/database";
@@ -69,6 +71,26 @@ describe("extractBenchmarkChange5m", () => {
     expect(extractBenchmarkChange5m([prediction("BABA", { spy_change_5m: -0.4 })], "EEM")).toBe(
       -0.4,
     );
+  });
+});
+
+describe("watchlistMoveTone", () => {
+  it("classifies boundary moves for chips", () => {
+    expect(watchlistMoveTone(null)).toBe("neutral");
+    expect(watchlistMoveTone(0.01)).toBe("good");
+    expect(watchlistMoveTone(0)).toBe("neutral");
+    expect(watchlistMoveTone(-0.05)).toBe("warn");
+    expect(watchlistMoveTone(-0.15)).toBe("bad");
+  });
+});
+
+describe("openPositionMoves", () => {
+  it("returns moves for symbols not on the watchlist", () => {
+    const moves = [
+      { symbol: "BABA", change5m: 0.2 },
+      { symbol: "VALE", change5m: -0.1 },
+    ];
+    expect(openPositionMoves(moves, ["BABA"])).toEqual([{ symbol: "VALE", change5m: -0.1 }]);
   });
 });
 

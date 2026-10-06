@@ -21,6 +21,7 @@ export type MarketCondition = {
   summary: string;
   hint: string;
   factors: MarketConditionFactor[];
+  moves: WatchlistMove[];
   medianChange5m: number | null;
   symbolCount: number;
   isMarketOpen: boolean;
@@ -107,9 +108,54 @@ function moveTone(change: number | null, floor: number): MarketConditionFactor["
   return "good";
 }
 
-function formatSignedPct(value: number): string {
+/** Per-symbol chip tone (flat is neutral; median summary treats flat as good). */
+export function watchlistMoveTone(
+  change: number | null | undefined,
+  floor: number = WATCHLIST_HEADWIND_FLOOR,
+): MarketConditionFactor["tone"] {
+  if (change == null || !Number.isFinite(change)) return "neutral";
+  if (change < floor) return "bad";
+  if (change < 0) return "warn";
+  if (change > 0) return "good";
+  return "neutral";
+}
+
+export function formatSignedPct(value: number): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}%`;
+}
+
+export function watchlistMoveChipClass(tone: MarketConditionFactor["tone"]): string {
+  switch (tone) {
+    case "good":
+      return "border-emerald-700/80 bg-emerald-950/40 text-emerald-300";
+    case "warn":
+      return "border-amber-700/80 bg-amber-950/40 text-amber-300";
+    case "bad":
+      return "border-red-700/80 bg-red-950/40 text-red-300";
+    default:
+      return "border-zinc-700/80 bg-zinc-950/60 text-zinc-200";
+  }
+}
+
+export function watchlistMoveTitle(
+  symbol: string,
+  change: number | null | undefined,
+): string {
+  if (change == null || !Number.isFinite(change)) {
+    return `${symbol}: no 5-minute reading yet`;
+  }
+  const direction = change > 0 ? "up" : change < 0 ? "down" : "flat";
+  return `${symbol}: ${direction} ${formatSignedPct(change)} in the last 5 minutes (last scan)`;
+}
+
+/** Open holdings counted in condition but not on the effective watchlist. */
+export function openPositionMoves(
+  moves: WatchlistMove[],
+  watchlistSymbols: string[],
+): WatchlistMove[] {
+  const onWatchlist = new Set(watchlistSymbols.map((symbol) => symbol.toUpperCase()));
+  return moves.filter((move) => !onWatchlist.has(move.symbol.toUpperCase()));
 }
 
 function breadthDetail(moves: WatchlistMove[]): string {
@@ -186,10 +232,15 @@ export function assessMarketCondition(options: {
 
   const base = {
     factors,
+    moves,
     medianChange5m: medianChange,
     symbolCount: nameCount,
     isMarketOpen: isOpen,
   };
+
+  const symbolDetailHint =
+    " Each ticker’s 5m % is on your watchlist chips" +
+    (nameCount > 0 ? " (and open positions below when held off-list)." : ".");
 
   if (!isOpen) {
     return {
@@ -197,7 +248,9 @@ export function assessMarketCondition(options: {
       level: "closed",
       label: "Closed",
       summary: "The US market is closed. The numbers below are the last readings we had.",
-      hint: "The bot will not open new trades until the US session reopens. It still manages open positions.",
+      hint:
+        "The bot will not open new trades until the US session reopens. It still manages open positions." +
+        symbolDetailHint,
     };
   }
 
@@ -219,7 +272,9 @@ export function assessMarketCondition(options: {
       level,
       label: "Headwind",
       summary: `Your watchlist is down more than ${Math.abs(floor)}% on a typical stock over the last 5 minutes.`,
-      hint: "Many stocks are weak at once. If you set a benchmark ETF in settings, a sharp drop there can also block new buys.",
+      hint:
+        "Many stocks are weak at once. If you set a benchmark ETF in settings, a sharp drop there can also block new buys." +
+        symbolDetailHint,
     };
   }
 
@@ -229,7 +284,9 @@ export function assessMarketCondition(options: {
       level,
       label: "Caution",
       summary: "Your watchlist is down slightly over the last 5 minutes.",
-      hint: "Conditions are a bit weak. The bot may still skip individual stocks; a configured benchmark drop can block entries too.",
+      hint:
+        "Conditions are a bit weak. The bot may still skip individual stocks; a configured benchmark drop can block entries too." +
+        symbolDetailHint,
     };
   }
 
@@ -238,7 +295,9 @@ export function assessMarketCondition(options: {
     level: "favorable",
     label: "Favorable",
     summary: "Your watchlist is flat or up over the last 5 minutes.",
-    hint: "This only reflects your watchlist. Bad news, spread, or a configured benchmark headwind can still stop new buys.",
+    hint:
+      "This only reflects your watchlist. Bad news, spread, or a configured benchmark headwind can still stop new buys." +
+      symbolDetailHint,
   };
 }
 

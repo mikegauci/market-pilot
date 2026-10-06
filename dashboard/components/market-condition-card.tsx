@@ -9,11 +9,13 @@ import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import { LIVE_SETTINGS_POLL_MS } from "@/lib/live-data-config";
 import { useLatestPredictions } from "@/lib/latest-predictions-context";
 import { getMarketStatus } from "@/lib/market-hours";
+import { WatchlistMoveChip } from "@/components/watchlist-move-chip";
 import {
   marketConditionDotClass,
   marketConditionFactorClass,
   marketConditionFromLiveData,
   marketConditionToneClass,
+  openPositionMoves,
   type MarketCondition,
 } from "@/lib/market-condition";
 import type { Prediction, Settings } from "@/lib/types/database";
@@ -30,7 +32,7 @@ function useLiveMarketCondition(
   predictions: Prediction[],
   settings: Settings | null,
   openSymbols: string[],
-): MarketCondition {
+): { condition: MarketCondition; watchlist: string[] } {
   const livePredictions = useLatestPredictions(predictions);
   const loadSettings = useCallback(() => fetchSettings(), []);
 
@@ -56,7 +58,7 @@ function useLiveMarketCondition(
     [liveSettings],
   );
 
-  return useMemo(
+  const condition = useMemo(
     () =>
       marketConditionFromLiveData({
         isMarketOpen,
@@ -67,6 +69,8 @@ function useLiveMarketCondition(
       }),
     [isMarketOpen, livePredictions, watchlist, openSymbols, liveSettings?.benchmark_symbol],
   );
+
+  return { condition, watchlist };
 }
 
 export function MarketConditionCard({
@@ -75,7 +79,11 @@ export function MarketConditionCard({
   openSymbols = [],
   className,
 }: Props) {
-  const condition = useLiveMarketCondition(predictions, settings, openSymbols);
+  const { condition, watchlist } = useLiveMarketCondition(predictions, settings, openSymbols);
+  const heldOffWatchlist = useMemo(
+    () => openPositionMoves(condition.moves, watchlist),
+    [condition.moves, watchlist],
+  );
 
   return (
     <Card className={cn("h-full", className)}>
@@ -83,7 +91,7 @@ export function MarketConditionCard({
         <div>
           <CardTitle>Watchlist condition</CardTitle>
           <p className="mt-1 text-xs text-zinc-500">
-            How your watchlist and open positions moved in the last 5 minutes.
+            Summary of 5-minute moves. Each watchlist ticker shows its % on the watchlist card.
           </p>
         </div>
         <Link href="/strategy" className="shrink-0 text-xs text-emerald-400 hover:text-emerald-300">
@@ -122,6 +130,17 @@ export function MarketConditionCard({
           </div>
         ))}
       </div>
+
+      {heldOffWatchlist.length > 0 ? (
+        <div className="mt-4 border-t border-zinc-800/60 pt-3">
+          <p className="text-xs text-zinc-500">Open positions (not on watchlist)</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {heldOffWatchlist.map((move) => (
+              <WatchlistMoveChip key={move.symbol} symbol={move.symbol} change5m={move.change5m} />
+            ))}
+          </div>
+        </div>
+      ) : null}
     </Card>
   );
 }
