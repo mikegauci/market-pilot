@@ -5,7 +5,7 @@ import { makeParseableTextFormat } from "openai/lib/parser";
 import { openAiBriefModel, requireOpenAiKey } from "@/lib/session-brief/openai.server";
 import type { SymbolDayExplainPacket } from "@/lib/symbol-day-explainer/packet";
 import {
-  parseSymbolDayExplanation,
+  parseSymbolDayExplanationText,
   SYMBOL_DAY_EXPLANATION_JSON_SCHEMA,
   type SymbolDayExplanation,
 } from "@/lib/symbol-day-explainer/schema";
@@ -25,7 +25,7 @@ const symbolDayExplanationTextFormat = makeParseableTextFormat(
     schema: SYMBOL_DAY_EXPLANATION_JSON_SCHEMA,
     strict: true,
   },
-  parseSymbolDayExplanation,
+  parseSymbolDayExplanationText,
 );
 
 export async function generateSymbolDayExplanation(

@@ -34,3 +34,19 @@ export function parsePositionExplanation(value: unknown): PositionExplanation {
     story: row.story.trim(),
   };
 }
+
+export function parsePositionExplanationText(content: string): PositionExplanation {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error("OpenAI returned an empty position explanation.");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(
+      "OpenAI returned a position explanation we could not read. Try again.",
+    );
+  }
+  return parsePositionExplanation(parsed);
+}

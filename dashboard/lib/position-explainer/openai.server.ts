@@ -5,7 +5,7 @@ import { makeParseableTextFormat } from "openai/lib/parser";
 import { openAiBriefModel, requireOpenAiKey } from "@/lib/session-brief/openai.server";
 import type { PositionExplainPacket } from "@/lib/position-explainer/packet";
 import {
-  parsePositionExplanation,
+  parsePositionExplanationText,
   POSITION_EXPLANATION_JSON_SCHEMA,
   type PositionExplanation,
 } from "@/lib/position-explainer/schema";
@@ -26,7 +26,7 @@ const positionExplanationTextFormat = makeParseableTextFormat(
     schema: POSITION_EXPLANATION_JSON_SCHEMA,
     strict: true,
   },
-  parsePositionExplanation,
+  parsePositionExplanationText,
 );
 
 export async function generatePositionExplanation(
@@ -51,7 +51,10 @@ export async function generatePositionExplanation(
 
   const explanation = response.output_parsed;
   if (!explanation) {
-    throw new Error("OpenAI did not return a position explanation. Try again.");
+    const status = "status" in response ? String(response.status) : "unknown";
+    throw new Error(
+      `OpenAI did not return a position explanation (status: ${status}). Try again.`,
+    );
   }
 
   return { explanation, model };

@@ -5,7 +5,7 @@ import { makeParseableTextFormat } from "openai/lib/parser";
 import { openAiBriefModel, requireOpenAiKey } from "@/lib/session-brief/openai.server";
 import type { TradeRecapPacket } from "@/lib/trade-recap/packet";
 import {
-  parseTradeRecap,
+  parseTradeRecapText,
   TRADE_RECAP_JSON_SCHEMA,
   type TradeRecap,
 } from "@/lib/trade-recap/schema";
@@ -26,7 +26,7 @@ const tradeRecapTextFormat = makeParseableTextFormat(
     schema: TRADE_RECAP_JSON_SCHEMA,
     strict: true,
   },
-  parseTradeRecap,
+  parseTradeRecapText,
 );
 
 export async function generateTradeRecap(

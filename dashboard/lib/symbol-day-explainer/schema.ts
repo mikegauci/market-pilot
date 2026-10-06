@@ -38,3 +38,17 @@ export function parseSymbolDayExplanation(value: unknown): SymbolDayExplanation 
     main_blockers: row.main_blockers.map((item) => item.trim()).filter(Boolean),
   };
 }
+
+export function parseSymbolDayExplanationText(content: string): SymbolDayExplanation {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error("OpenAI returned an empty symbol summary.");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error("OpenAI returned a symbol summary we could not read. Try again.");
+  }
+  return parseSymbolDayExplanation(parsed);
+}
