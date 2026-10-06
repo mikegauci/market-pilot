@@ -2,6 +2,7 @@ import "server-only";
 
 import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
 import { createClient } from "@/lib/supabase/server";
+import { tradingEquityFromSnapshot } from "@/lib/trading-equity";
 
 /** Resolve live equity from portfolio snapshot, falling back to account_capital. */
 export async function resolveCurrentEquity(): Promise<number> {
@@ -16,16 +17,24 @@ export async function resolveCurrentEquity(): Promise<number> {
     return settings?.account_capital ?? 0;
   }
 
+  const { data: settingsRow } = await supabase
+    .from("settings")
+    .select("trading_mode")
+    .eq("id", 1)
+    .single();
+  const tradingMode =
+    settingsRow?.trading_mode === "live" ? "live" : "paper";
+
   const { data: portfolio } = await supabase
     .from("portfolio_history")
-    .select("equity")
+    .select("equity, ibkr_accrued_cash")
     .eq("ibkr_account_id", accountId)
     .order("timestamp", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (portfolio?.equity != null && portfolio.equity > 0) {
-    return portfolio.equity;
+    return tradingEquityFromSnapshot(portfolio, tradingMode);
   }
 
   if (accountId) {

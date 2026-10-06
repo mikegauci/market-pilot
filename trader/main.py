@@ -375,7 +375,9 @@ def run() -> int:
                     "Startup reconciliation complete — %s orphan IBKR position(s) adopted",
                     reconciled,
                 )
-                sync_portfolio_state(db, ibkr, risk_manager, execution_mode, [])
+                sync_portfolio_state(
+                    db, ibkr, risk_manager, execution_mode, [], trading_mode
+                )
 
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)

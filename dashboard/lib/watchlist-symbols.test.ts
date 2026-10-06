@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseWatchlistSymbols } from "@/lib/validate-settings";
 import {
   isValidWatchlistSymbol,
   mergeWatchlistSymbolLists,
@@ -25,5 +26,10 @@ describe("watchlist-symbols", () => {
   it("validates ticker pattern", () => {
     expect(isValidWatchlistSymbol("BRK.B")).toBe(true);
     expect(isValidWatchlistSymbol("123")).toBe(false);
+  });
+
+  it("matches server parseWatchlistSymbols validation", () => {
+    expect(() => parseWatchlistSymbols("123")).toThrow(/Invalid ticker/);
+    expect(parseWatchlistSymbols("brk.b, MSFT")).toEqual(["BRK.B", "MSFT"]);
   });
 });

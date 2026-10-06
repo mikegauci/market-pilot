@@ -285,24 +285,26 @@ class SupabaseTradesMixin:
         account: Optional[AccountSummary] = None,
         simulated_portfolio: Optional[SimulatedPortfolio] = None,
         unrealized_pnl: float = 0.0,
+        trading_mode: TradingMode = TradingMode.PAPER,
     ) -> None:
         if account is not None:
+            trading_equity = account.equity_for_trading_mode(trading_mode)
             profile = self.ensure_account_profile(
                 account.account_id,
-                account.net_liquidation,
+                trading_equity,
                 unrealized_pnl=unrealized_pnl,
             )
-            baseline = float(profile.get("baseline_equity", account.net_liquidation))
+            baseline = float(profile.get("baseline_equity", trading_equity))
             if account.ibkr_daily_pnl is not None:
                 daily_pnl = account.ibkr_daily_pnl
             else:
                 daily_pnl = (
                     self.get_daily_realized_pnl(account.account_id) + unrealized_pnl
                 )
-            total_pnl = account.net_liquidation - baseline
+            total_pnl = trading_equity - baseline
             self.sync_account_capital_for_profile(
                 account.account_id,
-                account.net_liquidation,
+                trading_equity,
             )
             self.insert_portfolio_snapshot(
                 account,
@@ -321,12 +323,14 @@ class SupabaseTradesMixin:
         ibkr_positions: Optional[List[Position]] = None,
         simulated_portfolio: Optional[SimulatedPortfolio] = None,
         open_trades: Optional[List[TradeRecord]] = None,
+        trading_mode: TradingMode = TradingMode.PAPER,
     ) -> None:
         """Persist equity and positions immediately (e.g. on trade open/close)."""
         self._write_portfolio_snapshot(
             account=account,
             simulated_portfolio=simulated_portfolio,
             unrealized_pnl=self._unrealized_pnl_from_positions(ibkr_positions),
+            trading_mode=trading_mode,
         )
         self._sync_positions(
             quotes,
@@ -346,12 +350,14 @@ class SupabaseTradesMixin:
         open_trades: Optional[List[TradeRecord]] = None,
         include_portfolio_history: bool = True,
         include_market_snapshots: bool = False,
+        trading_mode: TradingMode = TradingMode.PAPER,
     ) -> None:
         if include_portfolio_history:
             self._write_portfolio_snapshot(
                 account=account,
                 simulated_portfolio=simulated_portfolio,
                 unrealized_pnl=self._unrealized_pnl_from_positions(ibkr_positions),
+                trading_mode=trading_mode,
             )
         self._sync_positions(
             quotes,

@@ -30,7 +30,7 @@ export default function LoginPage() {
       return;
     }
 
-    // Full navigation so middleware sees the new session cookies (more reliable on mobile).
+    // Full navigation so the auth proxy sees the new session cookies (more reliable on mobile).
     window.location.assign("/");
   }
 

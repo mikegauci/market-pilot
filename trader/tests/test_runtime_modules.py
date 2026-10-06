@@ -48,6 +48,72 @@ class CapitalSyncTests(unittest.TestCase):
         self.assertEqual(manager.effective_capital, 25_000.0)
         self.assertEqual(manager._available_cash(), 12_000.0)
 
+    def test_sync_excludes_accrued_cash_from_effective_capital(self) -> None:
+        ibkr = MagicMock(spec=IBKRClient)
+        ibkr.is_connected.return_value = True
+        ibkr.get_account_summary.return_value = AccountSummary(
+            account_id="DU123",
+            net_liquidation=25_000.0,
+            total_cash=24_900.0,
+            buying_power=12_000.0,
+            ibkr_accrued_cash=100.0,
+        )
+        manager = RiskManager(
+            settings=RiskSettings(
+                minimum_jev_confidence=0.85,
+                signal_record_threshold=0.75,
+                risk_per_trade=100.0,
+                max_position_size=10_000.0,
+                max_daily_loss=500.0,
+                max_open_positions=5,
+                stop_loss_percentage=0.01,
+                take_profit_percentage=0.015,
+                max_hold_minutes=0.0,
+                account_capital=10_000.0,
+                risk_sync_equity=None,
+                watchlist=["NVDA"],
+            ),
+            trading_mode=TradingMode.PAPER,
+            effective_capital=10_000.0,
+        )
+
+        sync_risk_manager_capital(manager, ibkr, fallback_capital=10_000.0)
+
+        self.assertEqual(manager.effective_capital, 24_900.0)
+
+    def test_sync_keeps_accrued_cash_in_live_mode(self) -> None:
+        ibkr = MagicMock(spec=IBKRClient)
+        ibkr.is_connected.return_value = True
+        ibkr.get_account_summary.return_value = AccountSummary(
+            account_id="DU123",
+            net_liquidation=25_000.0,
+            total_cash=24_900.0,
+            buying_power=12_000.0,
+            ibkr_accrued_cash=100.0,
+        )
+        manager = RiskManager(
+            settings=RiskSettings(
+                minimum_jev_confidence=0.85,
+                signal_record_threshold=0.75,
+                risk_per_trade=100.0,
+                max_position_size=10_000.0,
+                max_daily_loss=500.0,
+                max_open_positions=5,
+                stop_loss_percentage=0.01,
+                take_profit_percentage=0.015,
+                max_hold_minutes=0.0,
+                account_capital=10_000.0,
+                risk_sync_equity=None,
+                watchlist=["NVDA"],
+            ),
+            trading_mode=TradingMode.LIVE,
+            effective_capital=10_000.0,
+        )
+
+        sync_risk_manager_capital(manager, ibkr, fallback_capital=10_000.0)
+
+        self.assertEqual(manager.effective_capital, 25_000.0)
+
 
 class StartupConnectTests(unittest.TestCase):
     def test_connect_retries_until_success(self) -> None:

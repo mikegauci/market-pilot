@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from broker.ibkr import IBKRClient
+from models.types import TradingMode
 
 
 def _value(tag: str, value: str, currency: str = "EUR") -> SimpleNamespace:
@@ -34,6 +35,13 @@ class TestIBKRAccountSummary(unittest.TestCase):
         self.assertEqual(summary.account_id, "DUR217910")
         self.assertAlmostEqual(summary.net_liquidation, 999980.68)
         self.assertAlmostEqual(summary.ibkr_accrued_cash or 0, 186.80)
+        self.assertAlmostEqual(summary.trading_equity, 999793.88)
+        self.assertAlmostEqual(
+            summary.equity_for_trading_mode(TradingMode.PAPER), 999793.88
+        )
+        self.assertAlmostEqual(
+            summary.equity_for_trading_mode(TradingMode.LIVE), 999980.68
+        )
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from ib_insync import IB, Stock
 
 from broker.ibkr._sync import ibkr_synchronized

@@ -233,7 +233,7 @@ UPDATE bot_status SET enabled = true WHERE id = 1;
 | `profit_take_jev_sell_threshold` | 0.70 | Optional soft Jev SELL (dominant) for early exit; 0 = off. Requires progress ≥ min fraction |
 | `account_capital` | 1000 | Fallback capital when IBKR offline |
 
-When IBKR is connected, **effective capital** uses your paper account `NetLiquidation` (e.g. €1M). Tune absolute limits in Supabase or the dashboard Settings page.
+When IBKR is connected in **paper** mode, **effective capital** uses `NetLiquidation` minus `AccruedCash` (simulated credit interest), so sizing and equity charts track trading P&L. **Live** mode uses full `NetLiquidation`. Tune absolute limits in Supabase or the dashboard Settings page.
 
 **Position sizing:** `risk_per_trade` is authoritative — notional is `risk_per_trade / stop_loss_percentage`, clipped by `max_position_size`. If you raise `max_position_size` without raising `risk_per_trade`, risk per trade does not increase.
 

@@ -7,6 +7,7 @@ import { fetchLatestPortfolio } from "@/lib/data-client";
 import { useEquityFlash } from "@/lib/hooks/use-equity-flash";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import type { PortfolioSnapshot } from "@/lib/types/database";
+import { tradingEquityFromSnapshot } from "@/lib/trading-equity";
 import { cn, formatCurrency } from "@/lib/utils";
 
 type NavEquityProps = {
@@ -29,7 +30,10 @@ export function NavEquity({ className }: NavEquityProps) {
     },
   );
 
-  const equity = portfolio?.equity ?? null;
+  const equity =
+    portfolio != null
+      ? tradingEquityFromSnapshot(portfolio, tradingMode)
+      : null;
   const currency = portfolio?.currency ?? "USD";
   const { flashKey, flashClassName } = useEquityFlash(equity);
 
