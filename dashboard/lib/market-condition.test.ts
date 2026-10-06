@@ -153,9 +153,7 @@ describe("assessMarketCondition", () => {
     });
     expect(result.level).toBe("headwind");
     expect(result.summary).toMatch(/more than 0\.12%/i);
-    expect(result.factors.find((factor) => factor.key === "names")?.detail).toBe(
-      "1 steady or up · 0 down a little · 2 down a lot",
-    );
+    expect(result.factors.find((factor) => factor.key === "names")?.detail).toBe("1 up · 2 down");
   });
 
   it("marks unknown when no name has a 5-minute reading", () => {

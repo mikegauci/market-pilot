@@ -112,16 +112,20 @@ function formatSignedPct(value: number): string {
   return `${sign}${value.toFixed(2)}%`;
 }
 
-function breadthDetail(moves: WatchlistMove[], floor: number): string {
+function breadthDetail(moves: WatchlistMove[]): string {
   let up = 0;
+  let flat = 0;
   let down = 0;
-  let downHard = 0;
   for (const move of moves) {
-    if (move.change5m < floor) downHard += 1;
+    if (move.change5m > 0) up += 1;
     else if (move.change5m < 0) down += 1;
-    else up += 1;
+    else flat += 1;
   }
-  return `${up} steady or up · ${down} down a little · ${downHard} down a lot`;
+  const parts: string[] = [];
+  if (up > 0) parts.push(`${up} up`);
+  if (flat > 0) parts.push(`${flat} flat`);
+  if (down > 0) parts.push(`${down} down`);
+  return parts.join(" · ");
 }
 
 function breadthTone(moves: WatchlistMove[], floor: number): MarketConditionFactor["tone"] {
@@ -175,7 +179,7 @@ export function assessMarketCondition(options: {
     {
       key: "names",
       label: "Each stock",
-      detail: nameCount === 0 ? "Waiting for data" : breadthDetail(moves, floor),
+      detail: nameCount === 0 ? "Waiting for data" : breadthDetail(moves),
       tone: breadthTone(moves, floor),
     },
   ];
