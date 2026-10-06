@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  formatGaugePercent,
+  formatPriceMoveFromEntry,
+  slProximityPct,
+  tpProgressPct,
+} from "@/lib/position-risk";
 import type { Position, Settings, Trade } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
@@ -34,7 +40,7 @@ function GaugeBar({
     <div>
       <div className="flex items-baseline justify-between gap-2 text-[11px]">
         <span className="text-zinc-500">{label}</span>
-        <span className="tabular-nums text-zinc-400">{Math.round(value)}%</span>
+        <span className="tabular-nums text-zinc-400">{formatGaugePercent(value)}</span>
       </div>
       <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-800">
         <div
@@ -45,21 +51,6 @@ function GaugeBar({
       {detail && <p className="mt-0.5 text-[10px] text-zinc-600">{detail}</p>}
     </div>
   );
-}
-
-/** 0% = at/above entry (safe); 100% = at/below stop-loss. */
-function slProximityPct(entry: number, stopLoss: number, price: number): number | null {
-  const range = entry - stopLoss;
-  if (range <= 0) return null;
-  const distanceFromEntry = entry - price;
-  return Math.max(0, Math.min(100, (distanceFromEntry / range) * 100));
-}
-
-function tpProgressPct(entry: number, takeProfit: number, price: number): number | null {
-  const range = takeProfit - entry;
-  if (range <= 0) return null;
-  const progress = price - entry;
-  return Math.max(0, Math.min(100, (progress / range) * 100));
 }
 
 function formatCountdown(remainingMs: number): string {
@@ -84,6 +75,7 @@ export function PositionRiskGauge({ position, trade, settings }: Props) {
   if (!trade) return null;
 
   const price = position.market_price ?? trade.entry_price;
+  const moveFromEntry = formatPriceMoveFromEntry(trade.entry_price, price);
   const slProximity =
     trade.stop_loss != null
       ? slProximityPct(trade.entry_price, trade.stop_loss, price)
@@ -112,12 +104,12 @@ export function PositionRiskGauge({ position, trade, settings }: Props) {
     <div className="mt-3 space-y-2 border-t border-zinc-800/60 pt-3">
       <p className="text-[11px] font-medium text-zinc-500">Exit proximity</p>
       <GaugeBar
-        label="Distance to stop"
+        label="Stop progress"
         value={slProximity}
         tone={slProximity != null && slProximity >= 70 ? "danger" : "neutral"}
         detail={
           trade.stop_loss != null
-            ? `SL ${trade.stop_loss.toFixed(2)} · entry ${trade.entry_price.toFixed(2)}`
+            ? [`Stop ${trade.stop_loss.toFixed(2)}`, moveFromEntry].filter(Boolean).join(" · ")
             : undefined
         }
       />
@@ -126,7 +118,9 @@ export function PositionRiskGauge({ position, trade, settings }: Props) {
         value={tpProgress}
         tone="success"
         detail={
-          trade.take_profit != null ? `TP ${trade.take_profit.toFixed(2)}` : undefined
+          trade.take_profit != null
+            ? [`Target ${trade.take_profit.toFixed(2)}`, moveFromEntry].filter(Boolean).join(" · ")
+            : undefined
         }
       />
       {holdProgress != null && (
