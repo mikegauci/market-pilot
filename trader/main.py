@@ -37,7 +37,7 @@ from runtime.startup import connect_ibkr_with_retries, run_ibkr_startup_backfill
 from runtime.state import TraderRuntimeState
 from runtime.status_log import log_trader_running
 from runtime.trader_ops import (
-    all_symbols as merge_watchlist_symbols,
+    merge_watchlist_symbols,
     configure_logging,
     init_risk_manager,
     pulse_bot_status,

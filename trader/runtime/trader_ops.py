@@ -48,7 +48,7 @@ def interruptible_sleep(seconds: float, runtime: TraderRuntimeState) -> None:
         time.sleep(min(SHUTDOWN_SLEEP_CHUNK_SEC, remaining))
 
 
-def all_symbols(watchlist: list[str], benchmark: str = "") -> list[str]:
+def merge_watchlist_symbols(watchlist: list[str], benchmark: str = "") -> list[str]:
     merged = list(watchlist)
     benchmark_symbol = (benchmark or "").strip().upper()
     if benchmark_symbol:
@@ -63,7 +63,7 @@ def apply_watchlist_update(
     ibkr: IBKRClient,
     settings: Settings,
 ) -> List[str]:
-    symbols = all_symbols(watchlist, benchmark_symbol)
+    symbols = merge_watchlist_symbols(watchlist, benchmark_symbol)
     mock.ensure_symbols(symbols)
     if settings.data_source == DataSource.IBKR and ibkr.is_connected():
         ibkr.sync_watchlist_subscriptions(symbols)

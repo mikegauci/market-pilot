@@ -39,7 +39,13 @@ from runtime.sim_close import persist_simulated_closes
 from runtime.state import TraderRuntimeState
 from runtime.status_log import log_trader_running
 from runtime.timing import compute_loop_sleep_sec, should_refresh
-from runtime.trader_ops import get_quotes, interruptible_sleep, sync_portfolio_state, sync_watchlist_symbols, all_symbols
+from runtime.trader_ops import (
+    get_quotes,
+    interruptible_sleep,
+    merge_watchlist_symbols,
+    sync_portfolio_state,
+    sync_watchlist_symbols,
+)
 from strategy.config import StrategyConfig, strategy_config_with_risk_overrides
 from strategy.confirmation import ConfirmationTracker
 from strategy.filters import check_entry_filters
@@ -221,7 +227,7 @@ def run_eval_cycle(
             else:
                 watchlist = manual_watchlist
                 quote_symbols = list(dict.fromkeys(watchlist + open_symbols))
-            all_symbols = all_symbols(quote_symbols, benchmark_symbol)
+            all_symbols = merge_watchlist_symbols(quote_symbols, benchmark_symbol)
             new_watchlist_symbols = sync_watchlist_symbols(
                 all_symbols,
                 mock,
@@ -355,9 +361,11 @@ def run_eval_cycle(
                         + rot_open
                     )
                 )
-                rotall_symbols = all_symbols(rot_quote_symbols, rot_benchmark)
+                rot_all_symbols = merge_watchlist_symbols(
+                    rot_quote_symbols, rot_benchmark
+                )
                 new_rot_symbols = sync_watchlist_symbols(
-                    rotall_symbols,
+                    rot_all_symbols,
                     mock,
                     minute_bars,
                     bar_store,
@@ -368,7 +376,7 @@ def run_eval_cycle(
                     settings.data_source == DataSource.IBKR
                     and ibkr.is_connected()
                 ):
-                    ibkr.sync_watchlist_subscriptions(rotall_symbols)
+                    ibkr.sync_watchlist_subscriptions(rot_all_symbols)
                     if new_rot_symbols:
                         backfill_watchlist_symbols(
                             settings,
