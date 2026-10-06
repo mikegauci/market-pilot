@@ -8,7 +8,6 @@ import { fetchLatestPortfolio, fetchPositions } from "@/lib/data-client";
 import { useEquityFlash } from "@/lib/hooks/use-equity-flash";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import type { PortfolioSnapshot, Position } from "@/lib/types/database";
-import { tradingEquityFromSnapshot } from "@/lib/trading-equity";
 import { cn, formatCurrency } from "@/lib/utils";
 
 type Props = {
@@ -64,10 +63,7 @@ export function OverviewStats({ portfolio, positions, currency, className }: Pro
   const livePositions = useLiveQuery(positions, fetchPositionsList, ["positions"]);
 
   const displayCurrency = livePortfolio?.currency ?? currency;
-  const equity =
-    livePortfolio != null
-      ? tradingEquityFromSnapshot(livePortfolio, tradingMode)
-      : null;
+  const equity = livePortfolio?.equity ?? null;
   const dailyPnl = livePortfolio?.daily_pnl ?? 0;
   const totalPnl = livePortfolio?.total_pnl ?? 0;
   const { flashKey, flashClassName } = useEquityFlash(equity);

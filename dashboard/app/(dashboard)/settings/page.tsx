@@ -6,7 +6,6 @@ import {
   getLatestSessionBriefForUser,
   getSettings,
 } from "@/lib/queries";
-import { tradingEquityFromSnapshot } from "@/lib/trading-equity";
 import { formatCurrency } from "@/lib/utils";
 
 export default async function SettingsPage() {
@@ -20,11 +19,7 @@ export default async function SettingsPage() {
     return <p className="text-zinc-500">Settings not found.</p>;
   }
 
-  const tradingMode = settings.trading_mode === "live" ? "live" : "paper";
-  const currentEquity =
-    portfolio != null
-      ? tradingEquityFromSnapshot(portfolio, tradingMode)
-      : settings.account_capital;
+  const currentEquity = portfolio?.equity ?? settings.account_capital;
   const baselineEquity = resolveBaselineEquity(
     settings.risk_sync_equity,
     currentEquity,

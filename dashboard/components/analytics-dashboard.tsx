@@ -13,7 +13,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useLiveBotStatus } from "@/components/bot-status-provider";
 import { Card, CardTitle } from "@/components/ui/card";
 import {
   fetchClosedTrades,
@@ -111,8 +110,6 @@ export function AnalyticsDashboard({
   currency,
 }: Props) {
   const [range, setRange] = useState<PortfolioRange>("1d");
-  const botStatus = useLiveBotStatus();
-  const tradingMode = botStatus.trading_mode === "live" ? "live" : "paper";
 
   const loadHistory = useCallback(
     () => fetchPortfolioHistory(ANALYTICS_PORTFOLIO_HISTORY_LIMIT),
@@ -138,8 +135,8 @@ export function AnalyticsDashboard({
   );
 
   const dailyEquitySeries = useMemo(
-    () => buildDailyEquitySeries(filteredHistory, tradingMode),
-    [filteredHistory, tradingMode],
+    () => buildDailyEquitySeries(filteredHistory),
+    [filteredHistory],
   );
   const equityChartData = useMemo(
     () =>

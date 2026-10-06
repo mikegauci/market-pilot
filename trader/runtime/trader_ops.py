@@ -141,7 +141,6 @@ def sync_portfolio_state(
     risk_manager: Optional[RiskManager],
     execution_mode: ExecutionMode,
     quotes: list[Quote],
-    trading_mode: TradingMode,
 ) -> None:
     """Push equity and positions to Supabase for dashboard Realtime updates."""
     account = None
@@ -169,7 +168,6 @@ def sync_portfolio_state(
         ibkr_positions=ibkr_positions,
         simulated_portfolio=simulated_portfolio,
         open_trades=open_trades,
-        trading_mode=trading_mode,
     )
 
 
@@ -182,9 +180,7 @@ def init_risk_manager(
 ) -> RiskManager:
     if risk_settings is None:
         risk_settings = db.get_risk_settings()
-    capital, currency = resolve_effective_capital(
-        ibkr, risk_settings.account_capital, trading_mode
-    )
+    capital, currency = resolve_effective_capital(ibkr, risk_settings.account_capital)
     manager = RiskManager(
         settings=risk_settings,
         trading_mode=trading_mode,

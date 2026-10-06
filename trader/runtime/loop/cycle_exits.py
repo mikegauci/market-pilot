@@ -112,6 +112,5 @@ def run_cycle_exits(
             risk_manager,
             scratch.execution_mode,
             scratch.quotes,
-            scratch.trading_mode,
         )
         scratch.portfolio_dirty = False

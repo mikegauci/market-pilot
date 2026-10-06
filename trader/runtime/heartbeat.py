@@ -107,14 +107,13 @@ def run_heartbeat_cycle(
         open_trades=open_trades,
         include_portfolio_history=include_portfolio_history,
         include_market_snapshots=settings.market_snapshots_enabled,
-        trading_mode=trading_mode,
     )
     if include_portfolio_history:
         last_portfolio_history = now
 
     heartbeat_equity = None
     if account is not None:
-        heartbeat_equity = account.equity_for_trading_mode(trading_mode)
+        heartbeat_equity = account.net_liquidation
     if heartbeat_equity is None and risk_manager is not None:
         snapshot = simulated_portfolio or risk_manager.get_portfolio_snapshot(
             quotes_by_symbol

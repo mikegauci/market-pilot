@@ -1,8 +1,4 @@
 import type { PortfolioSnapshot } from "@/lib/types/database";
-import {
-  tradingEquityFromSnapshot,
-  type TradingMode,
-} from "@/lib/trading-equity";
 
 export type PortfolioRange = "1d" | "1w" | "1m" | "all";
 
@@ -81,13 +77,8 @@ export function equityChartDomain(equities: number[]): [number, number] {
   return [min - pad, max + pad];
 }
 
-export function buildDailyEquitySeries(
-  history: PortfolioSnapshot[],
-  tradingMode: TradingMode = "paper",
-): DailyEquityPoint[] {
-  const byDay = lastSnapshotValuePerDay(history, (row) =>
-    tradingEquityFromSnapshot(row, tradingMode),
-  );
+export function buildDailyEquitySeries(history: PortfolioSnapshot[]): DailyEquityPoint[] {
+  const byDay = lastSnapshotValuePerDay(history, (row) => row.equity ?? 0);
   const days = [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b));
   let priorEquity: number | null = null;
   return days.map(([date, equity]) => {

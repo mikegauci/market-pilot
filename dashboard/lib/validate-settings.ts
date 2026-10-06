@@ -1,8 +1,6 @@
 import { isRiskProfile, type RiskProfile } from "@/lib/risk-recommendations";
-import {
-  isValidWatchlistSymbol,
-  normalizeWatchlistSymbols,
-} from "@/lib/watchlist-symbols";
+
+const WATCHLIST_SYMBOL_PATTERN = /^[A-Z][A-Z0-9.]{0,9}$/;
 
 /** Normalize and validate watchlist tickers (comma-separated string or array). */
 export function parseWatchlistSymbols(
@@ -10,11 +8,17 @@ export function parseWatchlistSymbols(
   options?: { allowEmpty?: boolean },
 ): string[] {
   const parts = Array.isArray(raw) ? raw : raw.split(",");
-  const watchlist = normalizeWatchlistSymbols(parts);
+  const watchlist = [
+    ...new Set(
+      parts
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ];
   if (watchlist.length === 0 && !options?.allowEmpty) {
     throw new Error("Watchlist must include at least one symbol");
   }
-  const invalidWatchlist = watchlist.filter((s) => !isValidWatchlistSymbol(s));
+  const invalidWatchlist = watchlist.filter((s) => !WATCHLIST_SYMBOL_PATTERN.test(s));
   if (invalidWatchlist.length > 0) {
     throw new Error(`Invalid ticker(s): ${invalidWatchlist.join(", ")}`);
   }

@@ -198,7 +198,6 @@ export type PortfolioSnapshot = {
   id: string;
   timestamp: string;
   balance: number;
-  /** IBKR NetLiquidation; paper UI subtracts ibkr_accrued_cash via tradingEquityFromSnapshot. */
   equity: number;
   daily_pnl: number;
   total_pnl: number;

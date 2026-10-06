@@ -33,17 +33,6 @@ class AccountSummary:
     realized_pnl: float = 0.0
     ibkr_accrued_cash: Optional[float] = None
 
-    @property
-    def trading_equity(self) -> float:
-        """Net liquidation excluding IBKR credit interest (AccruedCash)."""
-        accrued = self.ibkr_accrued_cash or 0.0
-        return self.net_liquidation - accrued
-
-    def equity_for_trading_mode(self, mode: TradingMode) -> float:
-        if mode == TradingMode.LIVE:
-            return self.net_liquidation
-        return self.trading_equity
-
 
 @dataclass
 class Position:
