@@ -23,3 +23,27 @@ export function removeEntryBlockedSymbol(
     .map((item) => item.trim().toUpperCase())
     .filter((item) => item && item !== target);
 }
+
+export function stampEntryBlockedAt(
+  current: Record<string, string> | null | undefined,
+  symbols: string[],
+  blockedAtIso: string,
+): Record<string, string> {
+  const next = { ...(current ?? {}) };
+  for (const raw of symbols) {
+    const symbol = raw.trim().toUpperCase();
+    if (!symbol) continue;
+    next[symbol] = blockedAtIso;
+  }
+  return next;
+}
+
+export function clearEntryBlockedAt(
+  current: Record<string, string> | null | undefined,
+  symbol: string,
+): Record<string, string> {
+  const target = symbol.trim().toUpperCase();
+  const next = { ...(current ?? {}) };
+  delete next[target];
+  return next;
+}

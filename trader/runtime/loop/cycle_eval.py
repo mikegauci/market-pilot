@@ -76,9 +76,14 @@ def run_cycle_market_gate(
             [t.symbol for t in risk_manager.open_trades] if risk_manager else []
         )
         scratch.open_symbols = open_symbols
+        from watchlist.resolution import entry_blocked_symbol_set
+
         scratch.eval_symbols = build_eval_symbols(
             scratch.watchlist, open_symbols, scratch.risk_settings
         )
+        for symbol in sorted(entry_blocked_symbol_set(scratch.risk_settings)):
+            if symbol not in scratch.eval_symbols:
+                scratch.eval_symbols.append(symbol)
 
     scratch.open_symbol_set = (
         {s.upper() for s in scratch.open_symbols} if scratch.market_open else set()

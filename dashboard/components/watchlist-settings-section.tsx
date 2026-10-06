@@ -150,7 +150,11 @@ export function WatchlistSettingsSection({ settings }: Props) {
         required={rotating}
       />
 
-      <EntryBlockedSymbols symbols={settings.entry_blocked_symbols ?? []} />
+      <EntryBlockedSymbols
+        settings={settings}
+        symbols={settings.entry_blocked_symbols ?? []}
+        changeBySymbol={new Map()}
+      />
 
       {rotating ? (
         <div className="space-y-2">

@@ -5,8 +5,10 @@ import { resolveCurrentEquity } from "@/lib/resolve-current-equity";
 import { createClient } from "@/lib/supabase/server";
 import { isTraderOnline } from "@/lib/trader-status";
 import {
+  clearEntryBlockedAt,
   mergeEntryBlockedSymbols,
   removeEntryBlockedSymbol,
+  stampEntryBlockedAt,
 } from "@/lib/entry-blocked-symbols";
 import { seedActiveWatchlistFromPool } from "@/lib/seed-active-watchlist";
 import { parseSettingsForm, parseWatchlistSymbols } from "@/lib/validate-settings";
@@ -45,7 +47,7 @@ export async function blockSymbolFromEntries(symbol: string) {
   const { data: settings, error: readError } = await supabase
     .from("settings")
     .select(
-      "entry_blocked_symbols, watchlist_active, watchlist_rotation_enabled, watchlist, watchlist_pool, watchlist_active_size",
+      "entry_blocked_symbols, entry_blocked_at, watchlist_active, watchlist_rotation_enabled, watchlist, watchlist_pool, watchlist_active_size",
     )
     .eq("id", 1)
     .single();
@@ -59,9 +61,15 @@ export async function blockSymbolFromEntries(symbol: string) {
     [normalized],
   );
 
+  const nowIso = new Date().toISOString();
   const payload: Record<string, unknown> = {
     entry_blocked_symbols,
-    updated_at: new Date().toISOString(),
+    entry_blocked_at: stampEntryBlockedAt(
+      settings.entry_blocked_at as Record<string, string> | null,
+      [normalized],
+      nowIso,
+    ),
+    updated_at: nowIso,
   };
 
   if (settings.watchlist_rotation_enabled) {
@@ -97,7 +105,7 @@ export async function unblockSymbolFromEntries(symbol: string) {
 
   const { data: settings, error: readError } = await supabase
     .from("settings")
-    .select("entry_blocked_symbols")
+    .select("entry_blocked_symbols, entry_blocked_at")
     .eq("id", 1)
     .single();
 
@@ -114,6 +122,10 @@ export async function unblockSymbolFromEntries(symbol: string) {
     .from("settings")
     .update({
       entry_blocked_symbols,
+      entry_blocked_at: clearEntryBlockedAt(
+        settings.entry_blocked_at as Record<string, string> | null,
+        normalized,
+      ),
       updated_at: new Date().toISOString(),
     })
     .eq("id", 1);

@@ -58,6 +58,8 @@ export async function getBotStatus(): Promise<BotStatus | null> {
 
 export async function getSettings(): Promise<Settings | null> {
   const supabase = await createClient();
+  const { expireEntryBlocksIfDue } = await import("@/lib/entry-block-expire.server");
+  await expireEntryBlocksIfDue(supabase);
   const { data } = await readSettings(supabase);
   return data;
 }

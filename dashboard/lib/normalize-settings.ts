@@ -24,6 +24,7 @@ export type SettingsRow = Omit<
   | "watchlist_max_swaps_per_rotation"
   | "watchlist_last_rotation_note"
   | "entry_blocked_symbols"
+  | "entry_blocked_at"
 > &
   Partial<
     Pick<
@@ -49,6 +50,7 @@ export type SettingsRow = Omit<
       | "watchlist_max_swaps_per_rotation"
       | "watchlist_last_rotation_note"
       | "entry_blocked_symbols"
+      | "entry_blocked_at"
     >
   >;
 
@@ -85,5 +87,18 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     entry_blocked_symbols: (raw.entry_blocked_symbols ?? []).map((symbol) =>
       symbol.toUpperCase(),
     ),
+    entry_blocked_at: normalizeEntryBlockedAtRecord(raw.entry_blocked_at),
   };
+}
+
+function normalizeEntryBlockedAtRecord(
+  raw: Record<string, string> | null | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw ?? {})) {
+    const symbol = key.trim().toUpperCase();
+    if (!symbol || !value) continue;
+    out[symbol] = value;
+  }
+  return out;
 }

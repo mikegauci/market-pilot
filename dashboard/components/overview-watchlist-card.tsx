@@ -13,6 +13,8 @@ import { useLatestPredictions } from "@/lib/latest-predictions-context";
 import { watchlistMovesFromPredictions } from "@/lib/market-condition";
 import type { Settings } from "@/lib/types/database";
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
+import { formatCountdown } from "@/lib/entry-block-timing";
+import { useCountdownTo } from "@/lib/hooks/use-countdown-ms";
 
 type Props = {
   settings: Settings;
@@ -30,8 +32,11 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
   const [optimisticSymbols, setOptimisticSymbols] = useState<string[] | null>(null);
   const symbols = optimisticSymbols ?? serverSymbols;
   const [optimisticBlocked, setOptimisticBlocked] = useState<string[] | null>(null);
-  const blockedSymbols =
-    optimisticBlocked ?? settings.entry_blocked_symbols ?? [];
+  const serverBlocked = useMemo(
+    () => settings.entry_blocked_symbols ?? [],
+    [settings.entry_blocked_symbols],
+  );
+  const blockedSymbols = optimisticBlocked ?? serverBlocked;
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const openSymbolSet = useMemo(
@@ -94,12 +99,26 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
   const predictions = useLatestPredictions();
   const benchmark = settings.benchmark_symbol ?? "";
 
+  const moveScope = useMemo(
+    () => [...new Set([...symbols, ...blockedSymbols].map((s) => s.toUpperCase()))],
+    [symbols, blockedSymbols],
+  );
+
   const changeBySymbol = useMemo(() => {
-    const moves = watchlistMovesFromPredictions(predictions, symbols, benchmark);
+    const moves = watchlistMovesFromPredictions(predictions, moveScope, benchmark);
     return new Map(moves.map((move) => [move.symbol.toUpperCase(), move.change5m]));
-  }, [predictions, symbols, benchmark]);
+  }, [predictions, moveScope, benchmark]);
 
   const hasMoveData = changeBySymbol.size > 0;
+
+  const nextRotationAtMs = useMemo(() => {
+    const last = settings.watchlist_last_rotation_at;
+    if (!last) return null;
+    const lastMs = Date.parse(last);
+    if (!Number.isFinite(lastMs)) return null;
+    return lastMs + rotationIntervalMin * 60_000;
+  }, [settings.watchlist_last_rotation_at, rotationIntervalMin]);
+  const rotationCountdownMs = useCountdownTo(rotating ? nextRotationAtMs : null);
 
   function blockButton(symbol: string) {
     const key = symbol.toUpperCase();
@@ -138,6 +157,13 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
           </p>
           {rotating && settings.watchlist_last_rotation_note ? (
             <p className="text-xs text-zinc-400">Last change: {settings.watchlist_last_rotation_note}</p>
+          ) : null}
+          {rotating ? (
+            <p className="text-xs text-zinc-400">
+              {rotationCountdownMs != null
+                ? `Next list scan in ${formatCountdown(rotationCountdownMs)}`
+                : `List scan every ${rotationIntervalMin} minutes (first run pending)`}
+            </p>
           ) : null}
           {hasMoveData ? (
             <p className="text-xs text-zinc-500">
@@ -187,7 +213,11 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
         )}
       </div>
 
-      <EntryBlockedSymbols symbols={blockedSymbols} />
+      <EntryBlockedSymbols
+        settings={settings}
+        symbols={blockedSymbols}
+        changeBySymbol={changeBySymbol}
+      />
 
       {rotating ? null : (
       <div

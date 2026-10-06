@@ -34,7 +34,7 @@ class SupabaseSettingsMixin:
         "watchlist_pool, watchlist_active, watchlist_rotation_enabled, "
         "watchlist_active_size, watchlist_rotation_interval_minutes, "
         "watchlist_max_swaps_per_rotation, watchlist_last_rotation_note, "
-        "entry_blocked_symbols"
+        "entry_blocked_symbols, entry_blocked_at"
     )
 
     @staticmethod
@@ -56,6 +56,7 @@ class SupabaseSettingsMixin:
         data.setdefault("watchlist_max_swaps_per_rotation", 2)
         data.setdefault("watchlist_last_rotation_note", "")
         data.setdefault("entry_blocked_symbols", [])
+        data.setdefault("entry_blocked_at", {})
 
     @staticmethod
     def _normalize_symbol_list(raw: object) -> list[str]:
@@ -196,7 +197,42 @@ class SupabaseSettingsMixin:
             entry_blocked_symbols=self._normalize_symbol_list(
                 data.get("entry_blocked_symbols")
             ),
+            entry_blocked_at=self._normalize_entry_blocked_at(
+                data.get("entry_blocked_at")
+            ),
         )
+
+    @staticmethod
+    def _normalize_entry_blocked_at(raw: object) -> dict[str, str]:
+        if not isinstance(raw, dict):
+            return {}
+        normalized: dict[str, str] = {}
+        for key, value in raw.items():
+            symbol = str(key).strip().upper()
+            if not symbol or value is None:
+                continue
+            normalized[symbol] = str(value)
+        return normalized
+
+    @_db_synchronized
+    def save_entry_block_state(
+        self,
+        symbols: List[str],
+        blocked_at: dict[str, str],
+        *,
+        watchlist_active: Optional[List[str]] = None,
+        rotation_note: Optional[str] = None,
+    ) -> None:
+        payload: dict = {
+            "entry_blocked_symbols": [symbol.upper() for symbol in symbols],
+            "entry_blocked_at": blocked_at,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if watchlist_active is not None:
+            payload["watchlist_active"] = [symbol.upper() for symbol in watchlist_active]
+        if rotation_note:
+            payload["watchlist_last_rotation_note"] = rotation_note[:240]
+        self.client.table("settings").update(payload).eq("id", 1).execute()
 
     @_db_synchronized
     def save_watchlist_rotation(self, active: List[str], note: str) -> None:

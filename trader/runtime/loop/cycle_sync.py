@@ -21,6 +21,7 @@ from strategy.config import strategy_config_with_risk_overrides
 from strategy.confirmation import ConfirmationTracker
 from strategy.profit_take_tracker import ProfitTakeBandTracker
 from watchlist.backfill import backfill_watchlist_symbols
+from watchlist.entry_blocks import apply_expired_entry_blocks
 from watchlist.resolution import (
     effective_benchmark,
     resolve_rotation_scan_watchlist,
@@ -108,6 +109,21 @@ def run_cycle_sync(
             scratch.risk_settings.profit_take_band_window_cycles,
         )
         scratch.last_settings_sync = now_mono
+
+    updated_blocks, expired_blocks = apply_expired_entry_blocks(scratch.risk_settings)
+    if expired_blocks and db is not None:
+        note = f"unblocked {', '.join(expired_blocks)} (timed)"
+        db.save_entry_block_state(
+            updated_blocks.entry_blocked_symbols,
+            updated_blocks.entry_blocked_at,
+            watchlist_active=updated_blocks.watchlist_active
+            if updated_blocks.watchlist_rotation_enabled
+            else None,
+            rotation_note=note
+            if updated_blocks.watchlist_rotation_enabled
+            else None,
+        )
+        scratch.risk_settings = updated_blocks
 
     benchmark_symbol = effective_benchmark(scratch.risk_settings)
     scratch.benchmark_symbol = benchmark_symbol
