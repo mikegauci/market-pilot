@@ -564,8 +564,8 @@ class IBKRClient:
             if bid is not None and ask is not None and ask >= bid:
                 spread = round(ask - bid, 6)
 
-            volume_raw = ticker.volume
-            volume = int(volume_raw) if volume_raw and not math.isnan(float(volume_raw)) else None
+            volume_parsed = safe_float(ticker.volume)
+            volume = int(volume_parsed) if volume_parsed is not None else None
 
             quotes.append(
                 Quote(
