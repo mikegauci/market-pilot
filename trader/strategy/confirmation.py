@@ -39,6 +39,10 @@ class ConfirmationTracker:
     def progress(self, symbol: str) -> tuple[int, int]:
         return self._counts.get(symbol.upper(), 0), self.required_cycles
 
+    def confirming_symbols(self) -> set[str]:
+        """Symbols that already have a buy confirmation in progress."""
+        return {symbol for symbol, count in self._counts.items() if count > 0}
+
     def seconds_remaining(self, symbol: str) -> Optional[float]:
         key = symbol.upper()
         started = self._first_eligible_mono.get(key)

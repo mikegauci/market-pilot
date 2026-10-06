@@ -3,7 +3,10 @@ import { isRiskProfile, type RiskProfile } from "@/lib/risk-recommendations";
 const WATCHLIST_SYMBOL_PATTERN = /^[A-Z][A-Z0-9.]{0,9}$/;
 
 /** Normalize and validate watchlist tickers (comma-separated string or array). */
-export function parseWatchlistSymbols(raw: string | string[]): string[] {
+export function parseWatchlistSymbols(
+  raw: string | string[],
+  options?: { allowEmpty?: boolean },
+): string[] {
   const parts = Array.isArray(raw) ? raw : raw.split(",");
   const watchlist = [
     ...new Set(
@@ -12,7 +15,7 @@ export function parseWatchlistSymbols(raw: string | string[]): string[] {
         .filter(Boolean),
     ),
   ];
-  if (watchlist.length === 0) {
+  if (watchlist.length === 0 && !options?.allowEmpty) {
     throw new Error("Watchlist must include at least one symbol");
   }
   const invalidWatchlist = watchlist.filter((s) => !WATCHLIST_SYMBOL_PATTERN.test(s));
@@ -52,6 +55,11 @@ function labelFor(name: string): string {
     confirmation_cycles: "Confirmation cycles",
     confirmation_seconds: "Confirmation seconds",
     watchlist: "Watchlist",
+    watchlist_pool: "Candidate pool",
+    watchlist_active_size: "Active list size",
+    watchlist_rotation_interval_minutes: "Rotation interval (minutes)",
+    watchlist_max_swaps_per_rotation: "Max swaps",
+    benchmark_symbol: "Benchmark",
     min_volume_ratio: "Min volume ratio",
     min_share_price: "Min share price ($)",
     min_dollar_volume: "Min dollar volume ($)",
@@ -80,6 +88,11 @@ export type ParsedSettings = {
   risk_profile: RiskProfile;
   watchlist: string[];
   benchmark_symbol: string;
+  watchlist_pool: string[];
+  watchlist_rotation_enabled: boolean;
+  watchlist_active_size: number;
+  watchlist_rotation_interval_minutes: number;
+  watchlist_max_swaps_per_rotation: number;
   profit_take_enabled: boolean;
   profit_take_min_fraction: number;
   profit_take_max_fraction: number;
@@ -256,8 +269,46 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     throw new Error("Min dollar volume must be between 0 (off) and 1,000,000,000");
   }
 
+  const watchlist_rotation_enabled =
+    String(formData.get("watchlist_rotation_enabled") ?? "") === "on";
+
   const watchlistRaw = String(formData.get("watchlist") ?? "");
-  const watchlist = parseWatchlistSymbols(watchlistRaw);
+  const watchlist = parseWatchlistSymbols(watchlistRaw, {
+    allowEmpty: watchlist_rotation_enabled,
+  });
+
+  const poolRaw = String(formData.get("watchlist_pool") ?? "");
+  const watchlist_pool = poolRaw.trim() ? parseWatchlistSymbols(poolRaw) : [];
+  if (watchlist_rotation_enabled && watchlist_pool.length === 0) {
+    throw new Error("Add at least one symbol to the candidate pool");
+  }
+
+  const watchlist_active_size = Math.round(
+    Number(formData.get("watchlist_active_size") ?? 12),
+  );
+  const watchlist_rotation_interval_minutes = Math.round(
+    Number(formData.get("watchlist_rotation_interval_minutes") ?? 15),
+  );
+  const watchlist_max_swaps_per_rotation = Math.round(
+    Number(formData.get("watchlist_max_swaps_per_rotation") ?? 2),
+  );
+  if (!Number.isInteger(watchlist_active_size) || watchlist_active_size < 1 || watchlist_active_size > 20) {
+    throw new Error("Active list size must be between 1 and 20");
+  }
+  if (
+    !Number.isInteger(watchlist_rotation_interval_minutes) ||
+    watchlist_rotation_interval_minutes < 5 ||
+    watchlist_rotation_interval_minutes > 120
+  ) {
+    throw new Error("Rotation interval must be between 5 and 120 minutes");
+  }
+  if (
+    !Number.isInteger(watchlist_max_swaps_per_rotation) ||
+    watchlist_max_swaps_per_rotation < 1 ||
+    watchlist_max_swaps_per_rotation > 5
+  ) {
+    throw new Error("Max swaps must be between 1 and 5");
+  }
 
   const benchmark_symbol = String(formData.get("benchmark_symbol") ?? "")
     .trim()
@@ -290,6 +341,11 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     risk_profile: parseRiskProfile(formData),
     watchlist,
     benchmark_symbol,
+    watchlist_pool,
+    watchlist_rotation_enabled,
+    watchlist_active_size,
+    watchlist_rotation_interval_minutes,
+    watchlist_max_swaps_per_rotation,
     profit_take_enabled,
     profit_take_min_fraction,
     profit_take_max_fraction,

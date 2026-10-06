@@ -200,12 +200,16 @@ def compute_intraday_from_five_min_bars(
     )
 
 
-def benchmark_change_from_five_min(bars: Sequence[Bar]) -> Optional[float]:
+def benchmark_change_from_five_min(
+    bars: Sequence[Bar],
+    *,
+    bars_back: int = 1,
+) -> Optional[float]:
     sorted_bars = sorted(bars, key=lambda item: item.ts)
     if len(sorted_bars) < 2:
         return None
     closes = [bar.close for bar in sorted_bars]
-    return _change_pct_from_closes(closes, 1)
+    return _change_pct_from_closes(closes, bars_back)
 
 
 def build_market_state(
@@ -235,6 +239,9 @@ def build_market_state(
     else:
         return None
 
+    if intraday is None:
+        return None
+
     if benchmark_change_5m_override is not None:
         benchmark_change_5m = benchmark_change_5m_override
     elif benchmark_intraday_bars:
@@ -243,6 +250,26 @@ def build_market_state(
         benchmark_change_5m = benchmark_minute_bars.change_pct(5)
     else:
         benchmark_change_5m = None
+
+    if benchmark_minute_bars is not None:
+        benchmark_change_15m = benchmark_minute_bars.change_pct(15)
+    elif benchmark_intraday_bars:
+        benchmark_change_15m = benchmark_change_from_five_min(
+            benchmark_intraday_bars, bars_back=3
+        )
+    else:
+        benchmark_change_15m = None
+
+    relative_strength_5m = (
+        None
+        if intraday.change_5m is None or benchmark_change_5m is None
+        else intraday.change_5m - benchmark_change_5m
+    )
+    relative_strength_15m = (
+        None
+        if intraday.change_15m is None or benchmark_change_15m is None
+        else intraday.change_15m - benchmark_change_15m
+    )
 
     avg_dv = average_dollar_volume(cached_bars) if cached_bars else None
     trends = trend_changes or TrendChanges()
@@ -264,5 +291,7 @@ def build_market_state(
         change_1w=trends.change_1w,
         benchmark_change_5m=benchmark_change_5m,
         avg_dollar_volume_5m=avg_dv,
+        relative_strength_5m=relative_strength_5m,
+        relative_strength_15m=relative_strength_15m,
     )
 

@@ -16,6 +16,13 @@ export type SettingsRow = Omit<
   | "profit_take_jev_sell_threshold"
   | "confirmation_cycles"
   | "confirmation_seconds"
+  | "watchlist_pool"
+  | "watchlist_active"
+  | "watchlist_rotation_enabled"
+  | "watchlist_active_size"
+  | "watchlist_rotation_interval_minutes"
+  | "watchlist_max_swaps_per_rotation"
+  | "watchlist_last_rotation_note"
 > &
   Partial<
     Pick<
@@ -33,6 +40,13 @@ export type SettingsRow = Omit<
       | "profit_take_min_band_hits"
       | "profit_take_band_window_cycles"
       | "profit_take_jev_sell_threshold"
+      | "watchlist_pool"
+      | "watchlist_active"
+      | "watchlist_rotation_enabled"
+      | "watchlist_active_size"
+      | "watchlist_rotation_interval_minutes"
+      | "watchlist_max_swaps_per_rotation"
+      | "watchlist_last_rotation_note"
     >
   >;
 
@@ -59,5 +73,12 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     confirmation_seconds: raw.confirmation_seconds ?? 30,
     benchmark_symbol: raw.benchmark_symbol ?? "",
     watchlist: raw.watchlist ?? [],
+    watchlist_pool: raw.watchlist_pool ?? [],
+    watchlist_active: raw.watchlist_active ?? [],
+    watchlist_rotation_enabled: raw.watchlist_rotation_enabled ?? false,
+    watchlist_active_size: raw.watchlist_active_size ?? 12,
+    watchlist_rotation_interval_minutes: raw.watchlist_rotation_interval_minutes ?? 15,
+    watchlist_max_swaps_per_rotation: raw.watchlist_max_swaps_per_rotation ?? 2,
+    watchlist_last_rotation_note: raw.watchlist_last_rotation_note ?? "",
   };
 }

@@ -93,6 +93,8 @@ class MarketState:
     change_1w: Optional[float] = None
     benchmark_change_5m: Optional[float] = None
     avg_dollar_volume_5m: Optional[float] = None
+    relative_strength_5m: Optional[float] = None
+    relative_strength_15m: Optional[float] = None
     news_sentiment: Optional[float] = None
     news_headline_count: Optional[int] = None
     news_top_headline: Optional[str] = None
@@ -157,6 +159,13 @@ class RiskSettings:
     reentry_cooldown_minutes: float = 45.0
     confirmation_cycles: int = 2
     confirmation_seconds: float = 30.0
+    watchlist_pool: List[str] = field(default_factory=list)
+    watchlist_active: List[str] = field(default_factory=list)
+    watchlist_rotation_enabled: bool = False
+    watchlist_active_size: int = 12
+    watchlist_rotation_interval_minutes: int = 15
+    watchlist_max_swaps_per_rotation: int = 2
+    watchlist_last_rotation_note: str = ""
 
 
 @dataclass

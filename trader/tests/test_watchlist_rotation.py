@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+import unittest
+
+from watchlist.rotation import (
+    RotationCandidate,
+    backfill_order,
+    capped_active_size,
+    rotate_active,
+    score_candidate,
+)
+
+
+class RotationScoreTests(unittest.TestCase):
+    def test_overbought_ranks_below_a_calmer_leader(self) -> None:
+        hot = score_candidate(
+            RotationCandidate("NVDA", change_5m=1.2, change_15m=2.0, rsi=78, price=100, ema_20=90),
+            benchmark_change_5m=0.1,
+            benchmark_change_15m=0.2,
+            min_volume_ratio=0.5,
+            max_rsi=70,
+        )
+        calm = score_candidate(
+            RotationCandidate("AAPL", change_5m=0.4, change_15m=0.6, rsi=55, price=100, ema_20=98, volume_ratio=1.2),
+            benchmark_change_5m=0.1,
+            benchmark_change_15m=0.2,
+            min_volume_ratio=0.5,
+            max_rsi=70,
+        )
+        self.assertGreater(calm, hot)
+
+    def test_relative_strength_uses_benchmark(self) -> None:
+        leading = score_candidate(
+            RotationCandidate("AMD", change_5m=0.3),
+            benchmark_change_5m=-0.2,
+            benchmark_change_15m=None,
+            min_volume_ratio=0,
+            max_rsi=70,
+        )
+        lagging = score_candidate(
+            RotationCandidate("INTC", change_5m=-0.1),
+            benchmark_change_5m=-0.2,
+            benchmark_change_15m=None,
+            min_volume_ratio=0,
+            max_rsi=70,
+        )
+        self.assertGreater(leading, lagging)
+
+
+class RotateActiveTests(unittest.TestCase):
+    def test_seed_takes_the_top_names(self) -> None:
+        result = rotate_active(
+            ["AAA", "BBB", "CCC"],
+            [],
+            {"AAA": 1, "BBB": 3, "CCC": 2},
+            active_size=2,
+            max_swaps=2,
+        )
+        self.assertEqual(result.active, ["BBB", "CCC"])
+        self.assertIn("seeded", result.note)
+
+    def test_swap_is_capped_and_needs_a_clear_lead(self) -> None:
+        result = rotate_active(
+            ["AAA", "BBB", "CCC", "DDD"],
+            ["AAA", "BBB"],
+            {"AAA": 1.0, "BBB": 1.05, "CCC": 1.06, "DDD": 5.0},
+            active_size=2,
+            max_swaps=1,
+        )
+        self.assertEqual(result.swapped_in, ["DDD"])
+        self.assertEqual(len(result.swapped_out), 1)
+        self.assertEqual(len(result.active), 2)
+        self.assertIn("DDD", result.active)
+
+    def test_open_position_is_never_dropped(self) -> None:
+        result = rotate_active(
+            ["AAA", "BBB", "CCC"],
+            ["AAA", "BBB"],
+            {"AAA": 0.1, "BBB": 3, "CCC": 4},
+            active_size=2,
+            max_swaps=2,
+            protected=["AAA"],
+        )
+        self.assertIn("AAA", result.active)
+        self.assertNotIn("AAA", result.swapped_out)
+
+    def test_backfill_puts_active_and_benchmark_first(self) -> None:
+        ordered = backfill_order(["NVDA", "AAPL"], ["AMD", "NVDA", "COST"], "QQQ", ["AAPL"])
+        self.assertEqual(ordered[:3], ["NVDA", "AAPL", "QQQ"])
+        self.assertIn("COST", ordered)
+
+    def test_slow_scan_does_not_grow_the_list(self) -> None:
+        self.assertEqual(capped_active_size(12, 9, 40), 9)
+        self.assertEqual(capped_active_size(12, 9, 16), 12)
+
+
+if __name__ == "__main__":
+    unittest.main()

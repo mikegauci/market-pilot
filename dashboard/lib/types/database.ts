@@ -46,6 +46,16 @@ export type Settings = {
   risk_sync_equity: number | null;
   risk_profile?: "low" | "medium" | "high" | null;
   watchlist: string[];
+  /** Candidate symbols rotation can promote. Empty uses the manual watchlist only. */
+  watchlist_pool: string[];
+  /** Names Jev evaluates when rotation is on. The bot writes this. */
+  watchlist_active: string[];
+  watchlist_rotation_enabled: boolean;
+  watchlist_active_size: number;
+  watchlist_rotation_interval_minutes: number;
+  watchlist_max_swaps_per_rotation: number;
+  watchlist_last_rotation_note: string;
+  watchlist_last_rotation_at?: string | null;
   benchmark_symbol: string;
   /** Market-sell when price is in the entry→TP path band (fractions 0–1). */
   profit_take_enabled: boolean;

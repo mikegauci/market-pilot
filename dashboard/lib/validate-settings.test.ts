@@ -70,6 +70,20 @@ describe("parseSettingsForm watchlist", () => {
     );
   });
 
+  it("allows empty manual watchlist when rotation is on and pool is set", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        watchlist: "  ",
+        watchlist_rotation_enabled: "on",
+        watchlist_pool: "NVDA, AMD",
+      }),
+    );
+    expect(parsed.watchlist).toEqual([]);
+    expect(parsed.watchlist_pool).toEqual(["NVDA", "AMD"]);
+    expect(parsed.watchlist_rotation_enabled).toBe(true);
+  });
+
   it("rejects malformed tickers", () => {
     expect(() =>
       parseSettingsForm(form({ ...baseFields, watchlist: "AAPL, bad ticker" })),

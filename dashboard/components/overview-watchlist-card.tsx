@@ -50,6 +50,8 @@ export function OverviewWatchlistCard({ settings }: Props) {
   }
 
   const rotating = Boolean(settings.watchlist_rotation_enabled);
+  const rotationIntervalMin = settings.watchlist_rotation_interval_minutes ?? 15;
+  const maxSwapsPerRotation = settings.watchlist_max_swaps_per_rotation ?? 2;
   const predictions = useLatestPredictions();
   const benchmark = settings.benchmark_symbol ?? "";
 
@@ -67,7 +69,7 @@ export function OverviewWatchlistCard({ settings }: Props) {
           <CardTitle>{rotating ? "Active list" : "Your watchlist"}</CardTitle>
           <p className="text-xs leading-snug text-zinc-500">
             {rotating
-              ? "Jev checks these names. The bot swaps up to two every 15 minutes."
+              ? `Jev checks these names. The bot swaps up to ${maxSwapsPerRotation} every ${rotationIntervalMin} minutes.`
               : "Symbols Jev monitors for entries. Add from the S&P 500 or any ticker."}
           </p>
           {rotating && settings.watchlist_last_rotation_note ? (

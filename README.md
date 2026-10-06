@@ -185,6 +185,10 @@ When `DATA_SOURCE=ibkr`, the trader **skips Jev predictions and new entries** ou
 
 Tune the closed-market poll interval with `CLOSED_MARKET_EVAL_INTERVAL_SEC` (default `300`).
 
+### Watchlist rotation
+
+Settings can hold a **candidate pool** and a smaller **active list**. When rotation is on, Jev only evaluates the active names (about 12). The bot refreshes that list every 15 minutes during the US session, swapping at most two names, and always keeps open positions. `benchmark_symbol` (QQQ) is subscribed for the headwind check and is never bought. Quote subscriptions cover the whole pool so a promoted name already has price history. The manual watchlist is used only when rotation is off.
+
 ### End-of-day flatten (day trading)
 
 IBKR bracket legs use **DAY** time-in-force and expire at the regular close. To avoid naked overnight longs, the trader:

@@ -11,7 +11,12 @@ export function stripBenchmark(settings: Settings, symbols: string[]): string[] 
 
 /** Symbols Jev evaluates for entries (benchmark excluded). */
 export function resolveEffectiveWatchlist(settings: Settings): string[] {
-  const raw = settings.watchlist ?? [];
+  const rotating = Boolean(settings.watchlist_rotation_enabled);
+  const raw = rotating
+    ? (settings.watchlist_active?.length ?? 0) > 0
+      ? settings.watchlist_active
+      : (settings.watchlist_pool ?? [])
+    : (settings.watchlist ?? []);
   return stripBenchmark(settings, raw.map((symbol) => symbol.toUpperCase()).filter(Boolean));
 }
 

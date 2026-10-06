@@ -507,6 +507,11 @@ class SupabaseRepository:
     _SETTINGS_SELECT_BASE = (
         f"{_SETTINGS_SELECT_WITH_PROFIT_TAKE}, confirmation_cycles, confirmation_seconds"
     )
+    _SETTINGS_SELECT_ROTATION = (
+        "watchlist_pool, watchlist_active, watchlist_rotation_enabled, "
+        "watchlist_active_size, watchlist_rotation_interval_minutes, "
+        "watchlist_max_swaps_per_rotation, watchlist_last_rotation_note"
+    )
 
     @staticmethod
     def _apply_profit_take_defaults(data: dict) -> None:
@@ -516,6 +521,16 @@ class SupabaseRepository:
         data.setdefault("profit_take_min_band_hits", 3)
         data.setdefault("profit_take_band_window_cycles", 10)
         data.setdefault("profit_take_jev_sell_threshold", 0.70)
+
+    @staticmethod
+    def _apply_rotation_defaults(data: dict) -> None:
+        data.setdefault("watchlist_pool", [])
+        data.setdefault("watchlist_active", [])
+        data.setdefault("watchlist_rotation_enabled", False)
+        data.setdefault("watchlist_active_size", 12)
+        data.setdefault("watchlist_rotation_interval_minutes", 15)
+        data.setdefault("watchlist_max_swaps_per_rotation", 2)
+        data.setdefault("watchlist_last_rotation_note", "")
 
     def _select_settings_row(self, columns: str) -> Optional[dict]:
         try:
@@ -531,8 +546,18 @@ class SupabaseRepository:
             return None
 
     def _load_settings_row(self) -> dict:
+        data = self._select_settings_row(
+            f"{self._SETTINGS_SELECT_BASE}, min_dollar_volume, {self._SETTINGS_SELECT_ROTATION}"
+        )
+        if data is not None:
+            return data
+
+        logger.warning(
+            "Settings read without rotation columns — using defaults",
+        )
         data = self._select_settings_row(f"{self._SETTINGS_SELECT_BASE}, min_dollar_volume")
         if data is not None:
+            self._apply_rotation_defaults(data)
             return data
 
         logger.warning(
@@ -577,6 +602,7 @@ class SupabaseRepository:
     @_db_synchronized
     def get_risk_settings(self) -> RiskSettings:
         data = self._load_settings_row()
+        self._apply_rotation_defaults(data)
         watchlist = data.get("watchlist") or []
         risk_sync_equity = (
             float(data["risk_sync_equity"])
@@ -620,7 +646,30 @@ class SupabaseRepository:
             profit_take_jev_sell_threshold=float(
                 data.get("profit_take_jev_sell_threshold", 0.70)
             ),
+            watchlist_pool=[str(s).upper() for s in (data.get("watchlist_pool") or []) if str(s).strip()],
+            watchlist_active=[str(s).upper() for s in (data.get("watchlist_active") or []) if str(s).strip()],
+            watchlist_rotation_enabled=bool(data.get("watchlist_rotation_enabled", False)),
+            watchlist_active_size=int(data.get("watchlist_active_size", 12)),
+            watchlist_rotation_interval_minutes=int(
+                data.get("watchlist_rotation_interval_minutes", 15)
+            ),
+            watchlist_max_swaps_per_rotation=int(
+                data.get("watchlist_max_swaps_per_rotation", 2)
+            ),
+            watchlist_last_rotation_note=str(data.get("watchlist_last_rotation_note") or ""),
         )
+
+    @_db_synchronized
+    def save_watchlist_rotation(self, active: List[str], note: str) -> None:
+        """Persist the bot-owned active list. Does not touch the manual watchlist or pool."""
+        self.client.table("settings").update(
+            {
+                "watchlist_active": [symbol.upper() for symbol in active],
+                "watchlist_last_rotation_note": note[:240],
+                "watchlist_last_rotation_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).eq("id", 1).execute()
 
     def _query_bars(
         self,

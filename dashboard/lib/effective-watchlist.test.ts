@@ -11,12 +11,31 @@ describe("resolveEffectiveWatchlist", () => {
     expect(resolveEffectiveWatchlist(settingsFixture())).toEqual(["BABA", "VALE", "NVDA"]);
   });
 
-  it("strips benchmark symbol from watchlist", () => {
+  it("uses the active list when rotation is on", () => {
     expect(
       resolveEffectiveWatchlist(
-        settingsFixture({ watchlist: ["BABA", "EEM", "VALE"], benchmark_symbol: "EEM" }),
+        settingsFixture({
+          watchlist: ["BABA"],
+          watchlist_rotation_enabled: true,
+          watchlist_active: ["NVDA", "AMD"],
+          benchmark_symbol: "QQQ",
+        }),
       ),
-    ).toEqual(["BABA", "VALE"]);
+    ).toEqual(["NVDA", "AMD"]);
+  });
+
+  it("falls back to the pool when rotation is on but active is empty", () => {
+    expect(
+      resolveEffectiveWatchlist(
+        settingsFixture({
+          watchlist: ["BABA"],
+          watchlist_rotation_enabled: true,
+          watchlist_active: [],
+          watchlist_pool: ["NVDA", "AMD", "QQQ"],
+          benchmark_symbol: "QQQ",
+        }),
+      ),
+    ).toEqual(["NVDA", "AMD"]);
   });
 });
 

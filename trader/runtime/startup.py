@@ -11,6 +11,7 @@ from market.bars import BarStore
 from models.types import RiskSettings
 from watchlist.backfill import backfill_watchlist_symbols
 from watchlist.resolution import effective_benchmark, resolve_trading_watchlist
+from watchlist.rotation import backfill_order
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +46,20 @@ def run_ibkr_startup_backfill(
 ) -> None:
     """Watchlist bar backfill after IBKR connect."""
     open_symbols = [trade.symbol for trade in db.get_open_trades()]
-    priority_symbols = list(
-        dict.fromkeys(resolve_trading_watchlist(risk_settings, open_symbols))
-    )
     benchmark = effective_benchmark(risk_settings)
-    if benchmark and benchmark not in priority_symbols:
-        priority_symbols.append(benchmark)
+    if risk_settings.watchlist_rotation_enabled and risk_settings.watchlist_pool:
+        priority_symbols = backfill_order(
+            risk_settings.watchlist_active,
+            risk_settings.watchlist_pool,
+            benchmark,
+            open_symbols,
+        )
+    else:
+        priority_symbols = list(
+            dict.fromkeys(resolve_trading_watchlist(risk_settings, open_symbols))
+        )
+        if benchmark and benchmark not in priority_symbols:
+            priority_symbols.append(benchmark)
     backfill_watchlist_symbols(
         settings,
         bar_store,

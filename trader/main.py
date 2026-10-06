@@ -66,7 +66,9 @@ from watchlist.resolution import (
     strip_benchmark_symbol,
 )
 from runtime.capital import resolve_effective_capital, sync_risk_manager_capital
+from database.prediction_payload import build_filter_skip_payload
 from runtime.entry_eval import process_ready_states
+from strategy.filters import check_entry_filters
 from runtime.heartbeat import run_heartbeat_cycle
 from runtime.sim_close import persist_simulated_closes
 from runtime.periodic import periodic_callback
@@ -327,6 +329,149 @@ def _fetch_jev_predictions(
             except Exception as exc:
                 logger.error("Jev prediction failed for %s: %s", symbol, exc)
     return predictions
+
+
+def _rotation_candidate(symbol: str, quote: Optional[Quote], minute_bars: MinuteBarStore, bar_store: Optional[BarStore]):
+    from market.indicators import compute_intraday_from_five_min_bars
+    from watchlist.rotation import RotationCandidate
+
+    aggregator = minute_bars.get(symbol)
+    price = quote.price if quote is not None else None
+    change_5m = aggregator.change_pct(5, price) if aggregator.bar_count() else None
+    change_15m = aggregator.change_pct(15, price) if aggregator.bar_count() else None
+    rsi = None
+    ema_20 = None
+    volume_ratio = None
+    cached = bar_store.get_intraday_bars(symbol) if bar_store is not None else []
+    if price is not None and cached:
+        intraday = compute_intraday_from_five_min_bars(cached, price)
+        if change_5m is None:
+            change_5m = intraday.change_5m
+        if change_15m is None:
+            change_15m = intraday.change_15m
+        rsi = intraday.rsi
+        ema_20 = intraday.ema_20
+        volume_ratio = intraday.volume_ratio
+    return RotationCandidate(
+        symbol=symbol,
+        change_5m=change_5m,
+        change_15m=change_15m,
+        volume_ratio=volume_ratio,
+        rsi=rsi,
+        price=price,
+        ema_20=ema_20,
+    )
+
+
+def _maybe_rotate_watchlist(
+    *,
+    db: Optional[SupabaseRepository],
+    risk_settings: RiskSettings,
+    minute_bars: MinuteBarStore,
+    bar_store: Optional[BarStore],
+    quotes_by_symbol: Dict[str, Quote],
+    benchmark_minute_bars,
+    confirmation_tracker: ConfirmationTracker,
+    open_symbols: Sequence[str],
+    runtime: TraderRuntimeState,
+    now_mono: float,
+    market_open: bool,
+    strategy_config,
+) -> tuple[RiskSettings, list[str]]:
+    """Swap at most a few active names. Returns settings and symbols newly swapped in."""
+    from dataclasses import replace
+
+    from watchlist.rotation import (
+        capped_active_size,
+        median_cycle_sec,
+        rotate_active,
+        score_candidate,
+    )
+
+    if not risk_settings.watchlist_rotation_enabled or not risk_settings.watchlist_pool:
+        return risk_settings, []
+    if not market_open:
+        return risk_settings, []
+
+    interval_sec = max(1, risk_settings.watchlist_rotation_interval_minutes) * 60
+    due = not risk_settings.watchlist_active or (
+        now_mono - runtime.last_rotation_mono
+    ) >= interval_sec
+    if not due:
+        return risk_settings, []
+
+    benchmark_change_5m = None
+    benchmark_change_15m = None
+    if benchmark_minute_bars is not None:
+        benchmark_change_5m = benchmark_minute_bars.change_pct(5)
+        benchmark_change_15m = benchmark_minute_bars.change_pct(15)
+
+    protected = {
+        symbol.upper()
+        for symbol in list(open_symbols) + list(confirmation_tracker.confirming_symbols())
+    }
+    scores: Dict[str, float] = {}
+    for symbol in risk_settings.watchlist_pool:
+        candidate = _rotation_candidate(
+            symbol, quotes_by_symbol.get(symbol), minute_bars, bar_store
+        )
+        scores[symbol.upper()] = score_candidate(
+            candidate,
+            benchmark_change_5m=benchmark_change_5m,
+            benchmark_change_15m=benchmark_change_15m,
+            min_volume_ratio=strategy_config.min_volume_ratio,
+            max_rsi=strategy_config.max_rsi,
+        )
+
+    requested = capped_active_size(
+        risk_settings.watchlist_active_size,
+        len(risk_settings.watchlist_active),
+        median_cycle_sec(runtime.cycle_elapsed_sec),
+    )
+    if requested < risk_settings.watchlist_active_size:
+        gap = median_cycle_sec(runtime.cycle_elapsed_sec)
+        logger.warning(
+            "Scan gap %.0fs — keeping active list at %s names (requested %s)",
+            gap or 0,
+            requested,
+            risk_settings.watchlist_active_size,
+        )
+
+    result = rotate_active(
+        risk_settings.watchlist_pool,
+        risk_settings.watchlist_active,
+        scores,
+        active_size=requested,
+        max_swaps=risk_settings.watchlist_max_swaps_per_rotation,
+        protected=protected,
+    )
+    runtime.last_rotation_mono = now_mono
+    if result.active == list(risk_settings.watchlist_active):
+        logger.info("Watchlist rotation: %s", result.note)
+        return risk_settings, []
+
+    logger.info("Watchlist rotation: %s -> %s", result.note, ", ".join(result.active))
+    gap = median_cycle_sec(runtime.cycle_elapsed_sec)
+    if gap:
+        window_min = risk_settings.profit_take_band_window_cycles * gap / 60
+        logger.info(
+            "Early take-profit lookback is %s cycles (about %.1f min at the current scan gap)",
+            risk_settings.profit_take_band_window_cycles,
+            window_min,
+        )
+    if db is not None:
+        try:
+            db.save_watchlist_rotation(result.active, result.note)
+        except Exception as exc:
+            logger.warning("Could not save watchlist rotation: %s", exc)
+    return (
+        replace(
+            risk_settings,
+            watchlist_active=result.active,
+            watchlist_last_rotation_note=result.note,
+        ),
+        list(result.swapped_in),
+    )
 
 
 def run() -> int:
@@ -659,6 +804,7 @@ def run() -> int:
     active_ibkr_account_id: str | None = startup_ibkr_account_id
     last_live_bar_flush = 0.0
     last_general_news_refresh = 0.0
+    runtime.last_rotation_mono = startup_mono
     general_news_running = False
     general_news_lock = threading.Lock()
     data_source_label = "ibkr" if ibkr.is_connected() else "mock"
@@ -807,15 +953,30 @@ def run() -> int:
                     if risk_manager
                     else []
                 )
-                watchlist = resolve_runtime_watchlist(
+                manual_watchlist = resolve_runtime_watchlist(
                     risk_settings,
                     open_symbols,
                     env_fallback=settings.watchlist_symbols,
                 )
-                all_symbols = _all_symbols(
-                    list(dict.fromkeys(watchlist + open_symbols)),
-                    benchmark_symbol,
-                )
+                if (
+                    risk_settings.watchlist_rotation_enabled
+                    and risk_settings.watchlist_pool
+                ):
+                    watchlist = strip_benchmark_symbol(
+                        risk_settings.watchlist_active or risk_settings.watchlist_pool,
+                        risk_settings,
+                    )
+                    quote_symbols = list(
+                        dict.fromkeys(
+                            list(risk_settings.watchlist_pool)
+                            + watchlist
+                            + open_symbols
+                        )
+                    )
+                else:
+                    watchlist = manual_watchlist
+                    quote_symbols = list(dict.fromkeys(watchlist + open_symbols))
+                all_symbols = _all_symbols(quote_symbols, benchmark_symbol)
                 new_watchlist_symbols = _sync_watchlist_symbols(
                     all_symbols,
                     mock,
@@ -906,6 +1067,71 @@ def run() -> int:
 
             for quote in quotes:
                 minute_bars.record(quote)
+
+            if (
+                db
+                and risk_settings.watchlist_rotation_enabled
+                and risk_settings.watchlist_pool
+            ):
+                benchmark_agg = (
+                    minute_bars.get(benchmark_symbol) if benchmark_symbol else None
+                )
+                risk_settings, rotation_swapped_in = _maybe_rotate_watchlist(
+                    db=db,
+                    risk_settings=risk_settings,
+                    minute_bars=minute_bars,
+                    bar_store=bar_store,
+                    quotes_by_symbol=quotes_by_symbol,
+                    benchmark_minute_bars=benchmark_agg,
+                    confirmation_tracker=confirmation_tracker,
+                    open_symbols=open_symbols,
+                    runtime=runtime,
+                    now_mono=time.monotonic(),
+                    market_open=market_open
+                    if settings.data_source != DataSource.IBKR
+                    else is_us_regular_session_open(),
+                    strategy_config=strategy_config,
+                )
+                watchlist = strip_benchmark_symbol(
+                    risk_settings.watchlist_active or risk_settings.watchlist_pool,
+                    risk_settings,
+                )
+                if rotation_swapped_in:
+                    rot_open = (
+                        [t.symbol for t in risk_manager.open_trades]
+                        if risk_manager
+                        else []
+                    )
+                    rot_benchmark = effective_benchmark(risk_settings)
+                    rot_quote_symbols = list(
+                        dict.fromkeys(
+                            list(risk_settings.watchlist_pool)
+                            + watchlist
+                            + rot_open
+                        )
+                    )
+                    rot_all_symbols = _all_symbols(rot_quote_symbols, rot_benchmark)
+                    new_rot_symbols = _sync_watchlist_symbols(
+                        rot_all_symbols,
+                        mock,
+                        minute_bars,
+                        bar_store,
+                        settings.data_source,
+                        runtime,
+                    )
+                    if (
+                        settings.data_source == DataSource.IBKR
+                        and ibkr.is_connected()
+                    ):
+                        ibkr.sync_watchlist_subscriptions(rot_all_symbols)
+                        if new_rot_symbols:
+                            backfill_watchlist_symbols(
+                                settings,
+                                bar_store,
+                                ibkr,
+                                new_rot_symbols,
+                                open_symbols=rot_open,
+                            )
 
             now_mono = time.monotonic()
             if (
@@ -1099,12 +1325,24 @@ def run() -> int:
                     data_source_label,
                 )
 
+                state = enrich_market_state_with_news(state, news_service)
+                if not is_open_position:
+                    entry_filter = check_entry_filters(state, strategy_config)
+                    if not entry_filter.passed:
+                        logger.info(
+                            "Filter: skipped Jev for %s — %s",
+                            symbol,
+                            entry_filter.reason,
+                        )
+                        prediction_rows.append(
+                            build_filter_skip_payload(state, entry_filter.reason)
+                        )
+                        continue
+
                 if jev is None:
                     continue
 
-                ready_states.append(
-                    (symbol, enrich_market_state_with_news(state, news_service))
-                )
+                ready_states.append((symbol, state))
 
             if jev is not None and ready_states:
                 predictions_by_symbol = _fetch_jev_predictions(
@@ -1135,7 +1373,7 @@ def run() -> int:
                 daily_pnl_account_id=daily_pnl_account_id,
                 runtime=runtime,
             )
-            prediction_rows = eval_outcome.prediction_rows
+            prediction_rows = prediction_rows + eval_outcome.prediction_rows
             if eval_outcome.portfolio_dirty:
                 portfolio_dirty = True
             jev_sell_symbols.update(eval_outcome.jev_sell_symbols)
@@ -1245,6 +1483,10 @@ def run() -> int:
                 )
 
         elapsed = time.monotonic() - loop_start
+        if market_open:
+            runtime.cycle_elapsed_sec.append(elapsed)
+            if len(runtime.cycle_elapsed_sec) > 30:
+                runtime.cycle_elapsed_sec = runtime.cycle_elapsed_sec[-30:]
         interval = (
             settings.eval_interval_sec
             if market_open
