@@ -129,9 +129,7 @@ def _portfolio_lines(
         prefix = f"{d_emoji} " if d_emoji else ""
         lines.append(f"Daily P&L {prefix}{format_pnl(d)}".rstrip())
     if e is not None:
-        e_emoji = _signed_emoji(e)
-        prefix = f"{e_emoji} " if e_emoji else ""
-        lines.append(f"Equity {prefix}{format_equity(e)}".rstrip())
+        lines.append(f"Equity 💰 {format_equity(e)}")
     return lines
 
 

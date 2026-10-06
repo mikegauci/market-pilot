@@ -84,7 +84,7 @@ class MessageFormatTests(unittest.TestCase):
             "OPENED AAPL\n"
             "Stop $180.10 · target $186.20\n"
             "Daily P&L 🟢 +$42.50\n"
-            "Equity 🟢 $10,042.50",
+            "Equity 💰 $10,042.50",
         )
 
     def test_close_labels_emojis_and_pnl(self) -> None:
@@ -109,7 +109,7 @@ class MessageFormatTests(unittest.TestCase):
         update_portfolio_alert_context(-15.0, 9_985.0)
         text = format_close_message("AAPL", "stop_loss", -28.2)
         self.assertIn("Daily P&L 🔴 -$15.00", text)
-        self.assertIn("Equity 🟢 $9,985.00", text)
+        self.assertIn("Equity 💰 $9,985.00", text)
 
     def test_exit_reason_labels_match_dashboard(self) -> None:
         expected = {
