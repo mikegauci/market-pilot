@@ -92,7 +92,7 @@ class EvalCycleSmokeTests(unittest.TestCase):
             data_source_label="mock",
         )
 
-    @patch("runtime.loop.eval_cycle.is_us_regular_session_open", return_value=False)
+    @patch("market.hours.is_us_regular_session_open", return_value=False)
     def test_cycle_with_news_client_does_not_record_error(
         self, _market_open: MagicMock
     ) -> None:
@@ -100,7 +100,7 @@ class EvalCycleSmokeTests(unittest.TestCase):
         run_eval_cycle(ctx, start_general_news_refresh=MagicMock())
         ctx.db.record_error.assert_not_called()
 
-    @patch("runtime.loop.eval_cycle.is_us_regular_session_open", return_value=False)
+    @patch("market.hours.is_us_regular_session_open", return_value=False)
     def test_cycle_without_news_client_does_not_record_error(
         self, _market_open: MagicMock
     ) -> None:

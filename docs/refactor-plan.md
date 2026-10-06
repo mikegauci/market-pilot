@@ -2,9 +2,9 @@
 
 | Field | Value |
 | --- | --- |
-| Baseline revision | `6bcf09a` |
-| Scope | `trader/` Phase D |
-| Latest pytest | 243 passed (`.venv` Python 3.9.6) |
+| Baseline revision | `2d9dc93` |
+| Scope | `trader/` Phase E (in progress) |
+| Latest pytest | 247 passed (`.venv` Python 3.9.6) |
 | Updated | 2026-10-06 |
 
 ## Phase A — Defect fixes (complete)
@@ -49,5 +49,15 @@ Runtime extraction (`runtime/*`), `process_ready_states`, heartbeat/startup modu
 | --- | --- | --- |
 | Phase D baseline | `cd trader && .venv/bin/python -m pytest tests -q` | 232 passed |
 | After Phase D | same | 243 passed |
+| After Phase E1 slices | same | 247 passed |
+
+## Phase E — Eval cycle slices (in progress)
+
+| ID | Status | Notes |
+| --- | --- | --- |
+| E1 Cycle module split | done | `runtime/loop/eval_cycle_state.py`, `cycle_sync`, `cycle_quotes`, `cycle_rotation`, `cycle_exits`, `cycle_eval`, `cycle_tail`; `eval_cycle.py` orchestrates |
+| E2 Dashboard D1–D3 | pending | queries/data-client dedupe, settings normalization, ibkr-trade-scope tests |
+| E3 Deep splits (optional) | pending | Supabase repository domains, IBKR client submodules |
+| E4 Dashboard D4–D6 | pending | settings form, watchlist symbol module, server/client guards |
 
 **Runtime:** Restart the trader after pull when Python changes affect the eval loop, rotation, IBKR client layout, or Supabase repository wiring (`python main.py` in `trader/`).
