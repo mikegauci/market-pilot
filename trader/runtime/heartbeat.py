@@ -11,6 +11,7 @@ from database.supabase import SupabaseRepository
 from runtime.capital import sync_risk_manager_capital
 from runtime.timing import should_refresh
 from models.types import BotStatusUpdate, ExecutionMode, Quote, RiskSettings, TradingMode
+from notify.telegram import update_portfolio_alert_context
 from risk.manager import RiskManager
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,21 @@ def run_heartbeat_cycle(
     )
     if include_portfolio_history:
         last_portfolio_history = now
+
+    if simulated_portfolio is not None:
+        update_portfolio_alert_context(
+            simulated_portfolio.daily_pnl,
+            simulated_portfolio.equity,
+        )
+    elif account is not None:
+        unrealized = sum(
+            float(p.unrealized_pnl or 0.0) for p in (ibkr_positions or [])
+        )
+        if account.ibkr_daily_pnl is not None:
+            daily_pnl = account.ibkr_daily_pnl
+        else:
+            daily_pnl = db.get_daily_realized_pnl(account.account_id) + unrealized
+        update_portfolio_alert_context(daily_pnl, account.net_liquidation)
 
     heartbeat_equity = None
     if account is not None:

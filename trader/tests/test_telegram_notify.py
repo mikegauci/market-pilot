@@ -17,6 +17,7 @@ from notify.telegram import (
     format_open_message,
     notify_trade_closed,
     notify_trade_opened,
+    update_portfolio_alert_context,
 )
 
 
@@ -48,6 +49,16 @@ def _trade() -> TradeRecord:
 
 
 class MessageFormatTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._saved_daily = telegram_module._context_daily_pnl
+        self._saved_equity = telegram_module._context_equity
+        telegram_module._context_daily_pnl = None
+        telegram_module._context_equity = None
+
+    def tearDown(self) -> None:
+        telegram_module._context_daily_pnl = self._saved_daily
+        telegram_module._context_equity = self._saved_equity
+
     def test_open_includes_jev_stop_and_target(self) -> None:
         text = format_open_message("AAPL", 0.87, 180.10, 186.20)
         self.assertEqual(
@@ -59,19 +70,46 @@ class MessageFormatTests(unittest.TestCase):
         text = format_open_message("AAPL", None, 180.10, 186.20)
         self.assertEqual(text, "OPENED AAPL\nStop $180.10 · target $186.20")
 
-    def test_close_labels_and_pnl(self) -> None:
+    def test_open_includes_portfolio_metrics(self) -> None:
+        text = format_open_message(
+            "AAPL",
+            None,
+            180.10,
+            186.20,
+            daily_pnl=42.5,
+            equity=10_042.50,
+        )
+        self.assertEqual(
+            text,
+            "OPENED AAPL\n"
+            "Stop $180.10 · target $186.20\n"
+            "Daily P&L 🟢 +$42.50\n"
+            "Equity 🟢 $10,042.50",
+        )
+
+    def test_close_labels_emojis_and_pnl(self) -> None:
         self.assertEqual(
             format_close_message("AAPL", "stop_loss", -28.2),
-            "CLOSED AAPL — Stop loss\nNet PnL -$28.20",
+            "CLOSED AAPL — 🛑 Stop loss\nNet PnL -$28.20",
         )
         self.assertEqual(
             format_close_message("AAPL", "profit_take", 12.5),
-            "CLOSED AAPL — Soft Sell\nNet PnL +$12.50",
+            "CLOSED AAPL — ✳️ Soft Sell\nNet PnL +$12.50",
+        )
+        self.assertEqual(
+            format_close_message("AAPL", "take_profit", 50.0),
+            "CLOSED AAPL — 🤑 Top profit take\nNet PnL +$50.00",
         )
         self.assertEqual(
             format_close_message("AAPL", "jev_sell", 0),
             "CLOSED AAPL — JEV hard sell\nNet PnL $0.00",
         )
+
+    def test_portfolio_context_footer_on_close(self) -> None:
+        update_portfolio_alert_context(-15.0, 9_985.0)
+        text = format_close_message("AAPL", "stop_loss", -28.2)
+        self.assertIn("Daily P&L 🔴 -$15.00", text)
+        self.assertIn("Equity 🟢 $9,985.00", text)
 
     def test_exit_reason_labels_match_dashboard(self) -> None:
         expected = {
@@ -155,8 +193,12 @@ class RepositoryHookTests(unittest.TestCase):
             MagicMock(data=[])
         )
         trade = _trade()
-        repo.insert_trade(trade)
-        notify.assert_called_once_with(trade)
+        repo.insert_trade(trade, alert_daily_pnl=10.0, alert_equity=5000.0)
+        notify.assert_called_once_with(
+            trade,
+            daily_pnl=10.0,
+            equity=5000.0,
+        )
 
     @patch("database.repository._base.create_client")
     @patch("database.repository._trades.notify_trade_opened")
@@ -188,8 +230,23 @@ class RepositoryHookTests(unittest.TestCase):
         update_chain = self._close_update_chain(table)
         update_chain.execute.return_value = MagicMock(data=[{"symbol": "AAPL"}])
         now = datetime.now(timezone.utc)
-        repo.close_trade("trade-1", 180.05, now, -28.2, -28.2, exit_reason="stop_loss")
-        notify.assert_called_once_with("AAPL", -28.2, "stop_loss")
+        repo.close_trade(
+            "trade-1",
+            180.05,
+            now,
+            -28.2,
+            -28.2,
+            exit_reason="stop_loss",
+            alert_daily_pnl=-5.0,
+            alert_equity=9995.0,
+        )
+        notify.assert_called_once_with(
+            "AAPL",
+            -28.2,
+            "stop_loss",
+            daily_pnl=-5.0,
+            equity=9995.0,
+        )
         update_chain.eq.assert_any_call("status", "open")
 
         notify.reset_mock()

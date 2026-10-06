@@ -115,6 +115,7 @@ def process_ready_states(
                         risk_manager,
                         [closed],
                         daily_pnl_account_id=daily_pnl_account_id,
+                        quotes_by_symbol=quotes_by_symbol,
                     ):
                         result.portfolio_dirty = True
 
@@ -307,8 +308,17 @@ def process_ready_states(
                     else:
                         trade.execution_mode = "simulated"
                         trade.ibkr_account_id = active_ibkr_account_id
-                        db.insert_trade(trade)
                         risk_manager.register_open_trade(trade)
+                        snap = risk_manager.get_portfolio_snapshot(quotes_by_symbol)
+                        try:
+                            db.insert_trade(
+                                trade,
+                                alert_daily_pnl=snap.daily_pnl,
+                                alert_equity=snap.equity,
+                            )
+                        except Exception:
+                            risk_manager.remove_open_trade(trade.id)
+                            raise
                         confirmation_tracker.reset(trade.symbol)
                         trade_created = True
                         result.portfolio_dirty = True

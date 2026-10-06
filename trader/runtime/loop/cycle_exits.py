@@ -52,6 +52,7 @@ def run_cycle_exits(
         risk_manager,
         closed,
         daily_pnl_account_id=scratch.daily_pnl_account_id,
+        quotes_by_symbol=scratch.quotes_by_symbol,
     ):
         scratch.portfolio_dirty = True
 
@@ -71,6 +72,7 @@ def run_cycle_exits(
             risk_manager,
             eod_closed,
             daily_pnl_account_id=scratch.daily_pnl_account_id,
+            quotes_by_symbol=scratch.quotes_by_symbol,
         ):
             scratch.portfolio_dirty = True
         if (

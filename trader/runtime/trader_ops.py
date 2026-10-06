@@ -19,6 +19,7 @@ from models.types import (
     RiskSettings,
     TradingMode,
 )
+from notify.telegram import update_portfolio_alert_context
 from risk.manager import RiskManager
 from runtime.capital import resolve_effective_capital, sync_risk_manager_capital
 from runtime.state import TraderRuntimeState
@@ -169,6 +170,19 @@ def sync_portfolio_state(
         simulated_portfolio=simulated_portfolio,
         open_trades=open_trades,
     )
+
+    if simulated_portfolio is not None:
+        update_portfolio_alert_context(
+            simulated_portfolio.daily_pnl,
+            simulated_portfolio.equity,
+        )
+    elif account is not None:
+        unrealized = sum(float(p.unrealized_pnl or 0.0) for p in (ibkr_positions or []))
+        if account.ibkr_daily_pnl is not None:
+            daily_pnl = account.ibkr_daily_pnl
+        else:
+            daily_pnl = db.get_daily_realized_pnl(account.account_id) + unrealized
+        update_portfolio_alert_context(daily_pnl, account.net_liquidation)
 
 
 def init_risk_manager(

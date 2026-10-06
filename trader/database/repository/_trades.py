@@ -106,7 +106,13 @@ class SupabaseTradesMixin:
         return bool(result.data)
 
     @_db_synchronized
-    def insert_trade(self, trade: TradeRecord) -> str:
+    def insert_trade(
+        self,
+        trade: TradeRecord,
+        *,
+        alert_daily_pnl: Optional[float] = None,
+        alert_equity: Optional[float] = None,
+    ) -> str:
         if self._trade_exists(trade.id):
             logger.warning(
                 "insert_trade skipped — %s already persisted (idempotent)",
@@ -150,7 +156,11 @@ class SupabaseTradesMixin:
             raise
         if trade.ibkr_account_id:
             self.invalidate_legacy_untagged_cache()
-        self._schedule_open_alert(trade)
+        self._schedule_open_alert(
+            trade,
+            daily_pnl=alert_daily_pnl,
+            equity=alert_equity,
+        )
         return trade.id
 
     @_db_synchronized
@@ -177,6 +187,8 @@ class SupabaseTradesMixin:
         *,
         filled_quantity: Optional[float] = None,
         exit_reason: Optional[str] = None,
+        alert_daily_pnl: Optional[float] = None,
+        alert_equity: Optional[float] = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         payload = {
@@ -204,12 +216,23 @@ class SupabaseTradesMixin:
         if rows:
             symbol = rows[0].get("symbol")
             if symbol:
-                self._schedule_close_alert(str(symbol), net_pnl, exit_reason)
+                self._schedule_close_alert(
+                    str(symbol),
+                    net_pnl,
+                    exit_reason,
+                    daily_pnl=alert_daily_pnl,
+                    equity=alert_equity,
+                )
 
     @staticmethod
-    def _schedule_open_alert(trade: TradeRecord) -> None:
+    def _schedule_open_alert(
+        trade: TradeRecord,
+        *,
+        daily_pnl: Optional[float] = None,
+        equity: Optional[float] = None,
+    ) -> None:
         try:
-            notify_trade_opened(trade)
+            notify_trade_opened(trade, daily_pnl=daily_pnl, equity=equity)
         except Exception:
             logger.warning(
                 "Trade open alert failed to schedule for %s",
@@ -221,9 +244,18 @@ class SupabaseTradesMixin:
         symbol: str,
         net_pnl: float,
         exit_reason: Optional[str],
+        *,
+        daily_pnl: Optional[float] = None,
+        equity: Optional[float] = None,
     ) -> None:
         try:
-            notify_trade_closed(symbol, net_pnl, exit_reason)
+            notify_trade_closed(
+                symbol,
+                net_pnl,
+                exit_reason,
+                daily_pnl=daily_pnl,
+                equity=equity,
+            )
         except Exception:
             logger.warning("Trade close alert failed to schedule for %s", symbol)
 

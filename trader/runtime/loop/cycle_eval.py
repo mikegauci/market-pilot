@@ -222,6 +222,7 @@ def run_cycle_eval_and_exits_after_jev(
             risk_manager,
             closed_profit_take_sim,
             daily_pnl_account_id=scratch.daily_pnl_account_id,
+            quotes_by_symbol=scratch.quotes_by_symbol,
         ):
             scratch.portfolio_dirty = True
 
