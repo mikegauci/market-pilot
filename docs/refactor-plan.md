@@ -2,10 +2,10 @@
 
 | Field | Value |
 | --- | --- |
-| Baseline revision | `2d9dc93` |
-| Scope | Phase E complete (E1–E4) |
+| Baseline revision | `dc29099` |
+| Scope | Phase E complete (E1–E4); review follow-ups |
 | Latest pytest | 247 passed (`.venv` Python 3.9.6) |
-| Latest vitest | 161 passed (`dashboard`) |
+| Latest vitest | 166 passed (`dashboard`) |
 | Updated | 2026-10-06 |
 
 ## Phase A — Defect fixes (complete)
@@ -52,14 +52,16 @@ Runtime extraction (`runtime/*`), `process_ready_states`, heartbeat/startup modu
 | After Phase D | same | 243 passed |
 | After Phase E1 slices | same | 247 passed |
 | After Phase E3 deep splits | same | 247 passed |
+| After Phase E4 + review fixes | `cd dashboard && npm run test` | 166 passed |
 
-## Phase E — Eval cycle slices (in progress)
+## Phase E — Maintainability (complete 2026-10-06)
 
 | ID | Status | Notes |
 | --- | --- | --- |
 | E1 Cycle module split | done | `runtime/loop/eval_cycle_state.py`, `cycle_sync`, `cycle_quotes`, `cycle_rotation`, `cycle_exits`, `cycle_eval`, `cycle_tail`; `eval_cycle.py` orchestrates |
 | E2 Dashboard D1–D3 | done | `lib/supabase/data-reads.ts` shared reads; `fetchSettings` + RSC `getPredictions` use normalize/feed select; `ibkr-trade-scope.test.ts` |
 | E3 Deep splits | done | `database/repository/*` mixins; `broker/ibkr/_connection`, `_contracts`, `_market_data`, `_orders`, `_sync` |
-| E4 Dashboard D4–D6 | pending | settings form, watchlist symbol module, server/client guards |
+| E4 Dashboard D4–D6 | done | `settings-form-descriptions`, `settings-form-fields`, `watchlist-symbols`; `server-only` on RSC reads |
+| E4r Review follow-ups | done | Removed unused `repository/_common.py`; `prediction-feed-read.test.ts` for shared feed read |
 
 **Runtime:** Restart the trader after pull when Python changes affect the eval loop, rotation, IBKR client layout, or Supabase repository wiring (`python main.py` in `trader/`).
