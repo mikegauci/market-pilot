@@ -10,30 +10,22 @@ import {
   formatPredictingWatchlistHeadline,
   resolveEffectiveWatchlist,
 } from "@/lib/effective-watchlist";
+import {
+  normalizeWatchlistSymbols,
+  watchlistSymbolsHiddenValue,
+} from "@/lib/watchlist-symbols";
 
 type Props = {
   settings: Settings;
 };
 
-function normalizeSymbolList(symbols: string[] | undefined): string[] {
-  return [
-    ...new Set(
-      (symbols ?? []).map((symbol) => symbol.trim().toUpperCase()).filter(Boolean),
-    ),
-  ];
-}
-
-function symbolsHiddenValue(symbols: string[]): string {
-  return symbols.join(", ");
-}
-
 export function WatchlistSettingsSection({ settings }: Props) {
   const [rotating, setRotating] = useState(Boolean(settings.watchlist_rotation_enabled));
   const [poolSymbols, setPoolSymbols] = useState(() =>
-    normalizeSymbolList(settings.watchlist_pool),
+    normalizeWatchlistSymbols(settings.watchlist_pool ?? []),
   );
   const [manualWatchlist, setManualWatchlist] = useState(() =>
-    normalizeSymbolList(settings.watchlist),
+    normalizeWatchlistSymbols(settings.watchlist ?? []),
   );
 
   const previewSettings = useMemo(
@@ -147,13 +139,13 @@ export function WatchlistSettingsSection({ settings }: Props) {
       <input
         type="hidden"
         name="watchlist"
-        value={symbolsHiddenValue(manualWatchlist)}
+        value={watchlistSymbolsHiddenValue(manualWatchlist)}
         required={!rotating}
       />
       <input
         type="hidden"
         name="watchlist_pool"
-        value={symbolsHiddenValue(poolSymbols)}
+        value={watchlistSymbolsHiddenValue(poolSymbols)}
         required={rotating}
       />
 

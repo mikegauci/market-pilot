@@ -27,8 +27,9 @@ Open [http://localhost:3000](http://localhost:3000) and sign in.
 
 ## Data fetching
 
-- **`lib/queries.ts`** — Server Components (RSC initial load via `createClient()` from `@/lib/supabase/server`).
-- **`lib/data-client.ts`** — Client Components (`"use client"`) polling and live refresh via the browser Supabase client.
+- **`lib/queries.ts`** — Server Components (RSC initial load via `createClient()` from `@/lib/supabase/server`; `server-only`).
+- **`lib/data-client.ts`** — Client Components (`"use client"`) polling and live refresh via `@/lib/supabase/client` and shared `lib/supabase/data-reads.ts`.
+- **`lib/watchlist-symbols.ts`** — Normalize/parse/validate watchlist tickers (picker + settings).
 
 Analytics uses SSR for the first paint, then **slow** client refresh (120s) for equity/trades. Skip-reason stats on Predictions load once per visit (48h window). See `lib/analytics-data.ts`.
 

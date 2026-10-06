@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { SymbolChartPanel } from "@/components/symbol-chart-panel";
 import { Card, CardTitle } from "@/components/ui/card";
+import { mergeWatchlistSymbolLists } from "@/lib/watchlist-symbols";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -14,11 +15,6 @@ type Props = {
   onSelectedSymbolChange?: (symbol: string) => void;
 };
 
-function mergeSymbols(symbols: string[], extraSymbols?: string[]): string[] {
-  const merged = [...symbols, ...(extraSymbols ?? [])];
-  return [...new Set(merged.map((s) => s.trim().toUpperCase()).filter(Boolean))].sort();
-}
-
 export function WatchlistCharts({
   symbols,
   extraSymbols,
@@ -28,7 +24,7 @@ export function WatchlistCharts({
   onSelectedSymbolChange,
 }: Props) {
   const sorted = useMemo(
-    () => mergeSymbols(symbols, extraSymbols),
+    () => [...mergeWatchlistSymbolLists(symbols, extraSymbols)].sort(),
     [symbols, extraSymbols],
   );
   const [internalSelected, setInternalSelected] = useState(sorted[0] ?? "");

@@ -6,23 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { resolveSearchCommit, shouldWarnLargeWatchlist } from "@/lib/watchlist-commit";
+import {
+  isValidWatchlistSymbol,
+  normalizeWatchlistSymbols,
+  parseWatchlistCsv,
+} from "@/lib/watchlist-symbols";
 
-const SYMBOL_PATTERN = /^[A-Z][A-Z0-9.]{0,9}$/;
 const MAX_SEARCH_RESULTS = 50;
 
 type EquityEntry = { symbol: string; name: string };
-
-function normalizeSymbols(symbols: string[]): string[] {
-  return [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
-}
-
-function isValidSymbol(symbol: string): boolean {
-  return SYMBOL_PATTERN.test(symbol);
-}
-
-function parseSymbolList(raw: string): string[] {
-  return normalizeSymbols(raw.split(","));
-}
 
 export function WatchlistPicker({
   defaultValue,
@@ -45,7 +37,7 @@ export function WatchlistPicker({
   compact?: boolean;
 }) {
   const [selectedInternal, setSelectedInternal] = useState<string[]>(() =>
-    normalizeSymbols(defaultValue ?? []),
+    normalizeWatchlistSymbols(defaultValue ?? []),
   );
   const selected = value ?? selectedInternal;
 
@@ -80,7 +72,7 @@ export function WatchlistPicker({
   function addSymbol(raw: string) {
     const symbol = raw.trim().toUpperCase();
     if (!symbol) return;
-    if (!isValidSymbol(symbol)) {
+    if (!isValidWatchlistSymbol(symbol)) {
       setInputError("Use 1–10 uppercase letters, digits, or dots (e.g. SPY, BRK.B).");
       return;
     }
@@ -94,7 +86,7 @@ export function WatchlistPicker({
   }
 
   function addSymbolsFromInput(raw: string, clearInput: () => void) {
-    const candidates = parseSymbolList(raw);
+    const candidates = parseWatchlistCsv(raw);
     if (candidates.length === 0) return;
 
     if (candidates.length === 1) {
@@ -108,7 +100,7 @@ export function WatchlistPicker({
     const seen = new Set(selected);
 
     for (const symbol of candidates) {
-      if (!isValidSymbol(symbol)) {
+      if (!isValidWatchlistSymbol(symbol)) {
         invalid.push(symbol);
         continue;
       }
@@ -145,7 +137,7 @@ export function WatchlistPicker({
     const outcome = resolveSearchCommit(
       raw,
       filtered.map((entry) => entry.symbol),
-      { isValidSymbol: isValidSymbol },
+      { isValidSymbol: isValidWatchlistSymbol },
     );
     if (outcome.kind === "noop") return;
     if (outcome.kind === "bulk") {
@@ -245,7 +237,7 @@ export function WatchlistPicker({
 
       {search.trim() && search.includes(",") ? (
         <p className="rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-xs text-zinc-400">
-          Press Enter to add {parseSymbolList(search).length} symbols (existing ones are skipped).
+          Press Enter to add {parseWatchlistCsv(search).length} symbols (existing ones are skipped).
         </p>
       ) : search.trim() ? (
         <ul className="max-h-48 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950/50">

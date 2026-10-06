@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Baseline revision | `2d9dc93` |
-| Scope | Phase E — E1–E3 done; E4 dashboard pending |
+| Scope | Phase E complete (E1–E4) |
 | Latest pytest | 247 passed (`.venv` Python 3.9.6) |
 | Latest vitest | 161 passed (`dashboard`) |
 | Updated | 2026-10-06 |

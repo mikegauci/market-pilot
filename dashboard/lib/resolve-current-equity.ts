@@ -1,3 +1,5 @@
+import "server-only";
+
 import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
 import { createClient } from "@/lib/supabase/server";
 

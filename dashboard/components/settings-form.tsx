@@ -2,6 +2,11 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { BriefSettingDiff } from "@/components/brief-setting-diff";
+import {
+  RiskField,
+  StrategyHintLine,
+  StrategyPercentField,
+} from "@/components/settings-form-fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RiskProfilePicker } from "@/components/risk-profile-picker";
@@ -15,16 +20,15 @@ import { updateSettings } from "@/lib/actions";
 import {
   areAllRecommendationsApplied,
   detectMatchingProfile,
-  formatRiskPct,
   getRecommendedValuesForProfile,
-  isNearRecommended,
-  pctOfEquity,
   resolveRiskProfile,
-  RISK_PROFILES,
   validateProfileSelection,
   type RiskProfile,
-  type RiskRecommendationKey,
 } from "@/lib/risk-recommendations";
+import {
+  SETTING_DESCRIPTIONS,
+  SETTING_DESCRIPTIONS_FULL,
+} from "@/lib/settings-form-descriptions";
 import {
   fractionToDisplayPercent,
   getMaxHoldHints,
@@ -32,7 +36,6 @@ import {
   getTakeProfitHints,
   isNearStrategyPercent,
   STRATEGY_RECOMMENDATIONS,
-  type StrategyHint,
 } from "@/lib/strategy-recommendations";
 import { confidencePercentFromDecimal } from "@/lib/settings-display";
 import {
@@ -42,235 +45,6 @@ import {
 import { buildSettingDiffs } from "@/lib/session-brief/setting-diff";
 import type { SessionBriefSuggestion } from "@/lib/session-brief/schema";
 import type { Settings } from "@/lib/types/database";
-import { cn, formatCurrency } from "@/lib/utils";
-
-const SETTING_DESCRIPTIONS_FULL = {
-  minimum_jev_confidence:
-    "The AI must be at least this confident before the bot will actually buy — higher means fewer, pickier trades.",
-  signal_record_threshold:
-    "Buy signals above this level are marked as worth watching, so you can spot near-misses below your trade threshold.",
-  confirmation_cycles:
-    "After Jev BUY clears your min confidence, the bot waits for this many eval cycles in a row before buying — higher means fewer false starts. Saved changes apply to in-progress confirmations without resetting the streak.",
-  confirmation_seconds:
-    "Eligible BUY must stay high for at least this many seconds (0 = cycle count only, no time wait). Helps ignore one-tick spikes. Changes apply to in-progress confirmations without resetting the streak.",
-  risk_per_trade:
-    "Most you are willing to lose on one trade if the stop loss is hit.",
-  max_position_size: "Largest amount the bot will put into a single trade.",
-  max_daily_loss:
-    "If today's losses reach this amount, the bot stops opening new trades until tomorrow.",
-  max_open_positions:
-    "How many trades the bot can hold at the same time. Set at or above dynamic top-N to avoid slot blocking when names rotate off.",
-  stop_loss_percentage:
-    "Auto-sell if the price drops this % below your entry — also controls how large each trade is for a given risk budget.",
-  take_profit_percentage:
-    "Auto-sell when the price rises this % above your entry to lock in gains.",
-  profit_take_enabled:
-    "When on, the bot can market-sell after price keeps visiting the early band toward take profit, on a soft Jev SELL, or on a fast spike (see fields below).",
-  profit_take_min_fraction:
-    "Lower bound of the early take-profit band, as % of the distance from entry to take profit (e.g. 70 = sell when price has reached 70% of the way to TP).",
-  profit_take_max_fraction:
-    "Upper bound of the ideal band (% of distance to take profit). If price jumps above this but is still below full TP, the bot still exits early.",
-  profit_take_min_band_hits:
-    "How many recent eval cycles must land in the early band before a market exit (reduces one-tick false exits).",
-  profit_take_band_window_cycles:
-    "How many recent eval cycles to count band touches in (one cycle ≈ your eval interval).",
-  profit_take_jev_sell_threshold:
-    "Optional: also exit early when Jev SELL reaches this % (dominant) and price is at least at the min band. 0 = off.",
-  max_hold_minutes:
-    "Force-close open trades after this many minutes (0 = off). When off, exits use stop loss, take profit, and Jev SELL only.",
-  min_hold_minutes:
-    "Block Jev SELL and early take-profit exits until a trade has been open this many minutes (0 = off). Stop loss and bracket take profit still work immediately.",
-  jev_sell_exit_threshold:
-    "Only soft-exit on a Jev SELL when sell probability reaches this % (and sell is dominant). Higher values let bracket take-profit work more often.",
-  reentry_cooldown_minutes:
-    "After exiting a symbol, block new entries in that symbol for this many minutes (0 = off). Reduces immediate re-chase after winners or stops.",
-  min_volume_ratio:
-    "Block new entries when latest 1-min volume is below this fraction of the 10-bar average (0 = off). Example: 0.5 requires at least half the recent average volume.",
-  min_share_price:
-    "Block entries below this USD share price (0 = off). Filters out thin/low-priced names.",
-  min_dollar_volume:
-    "Minimum average dollar volume per 5-minute bar for new entries (0 = off). Example: 250000 filters illiquid names.",
-  watchlist: "Symbols Jev monitors for entries (plus open positions at runtime).",
-} as const;
-
-const SETTING_DESCRIPTIONS = {
-  minimum_jev_confidence: "Minimum AI confidence before the bot opens a trade.",
-  signal_record_threshold: "Log buy signals above this % as watchlist-worthy near-misses.",
-  confirmation_cycles: "Eligible BUY cycles in a row before entry.",
-  confirmation_seconds: "Min seconds eligible BUY must persist (0 = cycles only).",
-  risk_per_trade: "Max loss per trade if stop loss hits.",
-  max_position_size: "Cap on capital deployed in one position.",
-  max_daily_loss: "Stop new trades after today's losses reach this amount.",
-  max_open_positions: "Concurrent open trades allowed (recommend ≥ max dynamic symbols).",
-  stop_loss_percentage: "Exit when price falls this % below entry.",
-  take_profit_percentage: "Exit when price rises this % above entry.",
-  profit_take_enabled: "Early take profit along the path to full TP.",
-  profit_take_min_fraction: "Min % of entry→TP distance to start early exit band.",
-  profit_take_max_fraction: "Max % of entry→TP distance for early exit band.",
-  profit_take_min_band_hits: "Band touches required before early exit.",
-  profit_take_band_window_cycles: "Eval cycles to count band touches.",
-  profit_take_jev_sell_threshold: "Soft Jev SELL % for early exit (0 = off).",
-  max_hold_minutes: "Force-close after N minutes (0 = off).",
-  min_hold_minutes: "No Jev SELL exit until N minutes (0 = off).",
-  jev_sell_exit_threshold: "Min Jev SELL % required to soft-exit.",
-  reentry_cooldown_minutes: "No re-entry in same symbol for N minutes (0 = off).",
-  min_volume_ratio: "Block entries when volume is below this fraction of average (0 = off).",
-  min_share_price: "Block entries below this USD price (0 = off).",
-  min_dollar_volume: "Min avg $ volume per 5m bar for entries (0 = off).",
-  watchlist: "Symbols the trader evaluates each cycle.",
-} as const;
-
-function StrategyHintLine({ hint }: { hint: StrategyHint }) {
-  return (
-    <p
-      className={cn(
-        "text-xs leading-relaxed",
-        hint.tone === "ok" && "text-emerald-400/90",
-        hint.tone === "info" && "text-zinc-500",
-        hint.tone === "warn" && "text-amber-400/90",
-      )}
-    >
-      {hint.message}
-    </p>
-  );
-}
-
-type RiskFieldProps = {
-  id: RiskRecommendationKey;
-  label: string;
-  description: string;
-  descriptionFull: string;
-  value: number;
-  onChange: (value: number) => void;
-  baselineEquity: number;
-  currency: string;
-  profile: RiskProfile;
-};
-
-function RiskField({
-  id,
-  label,
-  description,
-  descriptionFull,
-  value,
-  onChange,
-  baselineEquity,
-  currency,
-  profile,
-}: RiskFieldProps) {
-  const targetPct = RISK_PROFILES[profile][id];
-  const pct = pctOfEquity(value, baselineEquity);
-  const recommended = getRecommendedValuesForProfile(baselineEquity, profile)[id];
-  const matchesRecommended = isNearRecommended(value, baselineEquity, targetPct);
-
-  return (
-    <SettingsField
-      id={id}
-      label={label}
-      description={description}
-      descriptionTitle={descriptionFull}
-    >
-      <div className="space-y-1.5">
-        <Input
-          id={id}
-          name={id}
-          type="number"
-          step="0.01"
-          value={value}
-          onChange={(e) => {
-            const next = parseFloat(e.target.value);
-            if (!Number.isFinite(next)) return;
-            onChange(next);
-          }}
-          required
-          className={cn(
-            matchesRecommended && "border-emerald-800/50 focus:border-emerald-600",
-          )}
-        />
-        {matchesRecommended && baselineEquity > 0 && (
-          <span className="block text-[10px] font-medium uppercase tracking-wide text-emerald-400">
-            Recommended
-          </span>
-        )}
-        {baselineEquity > 0 && pct != null && (
-          <p
-            className={cn(
-              "text-xs",
-              matchesRecommended ? "text-emerald-400/90" : "text-amber-400/90",
-            )}
-          >
-            {formatRiskPct(pct)} of {formatCurrency(baselineEquity, currency)}
-            {!matchesRecommended &&
-              ` · Suggested ${formatCurrency(recommended, currency)}`}
-          </p>
-        )}
-      </div>
-    </SettingsField>
-  );
-}
-
-type StrategyPercentFieldProps = {
-  id: "stop_loss_percentage" | "take_profit_percentage";
-  label: string;
-  description: string;
-  descriptionFull: string;
-  value: number;
-  onChange: (value: number) => void;
-  hints: StrategyHint[];
-  matchesRecommended: boolean;
-};
-
-function StrategyPercentField({
-  id,
-  label,
-  description,
-  descriptionFull,
-  value,
-  onChange,
-  hints,
-  matchesRecommended,
-}: StrategyPercentFieldProps) {
-  return (
-    <SettingsField
-      id={id}
-      label={label}
-      description={description}
-      descriptionTitle={descriptionFull}
-    >
-      <div className="space-y-1.5">
-        <Input
-          id={id}
-          name={id}
-          type="number"
-          step="0.1"
-          min="0.1"
-          max="25"
-          value={value}
-          onChange={(e) => {
-            const next = parseFloat(e.target.value);
-            if (!Number.isFinite(next)) return;
-            onChange(next);
-          }}
-          required
-          className={cn(
-            matchesRecommended && "border-emerald-800/50 focus:border-emerald-600",
-          )}
-        />
-        {matchesRecommended && (
-          <span className="block text-[10px] font-medium uppercase tracking-wide text-emerald-400">
-            Recommended
-          </span>
-        )}
-        <div className="space-y-1">
-          {hints.map((hint) => (
-            <StrategyHintLine key={hint.message} hint={hint} />
-          ))}
-        </div>
-      </div>
-    </SettingsField>
-  );
-}
-
 export function SettingsForm({
   settings,
   baselineEquity,

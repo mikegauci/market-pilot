@@ -1,3 +1,5 @@
+import "server-only";
+
 import {
   ANALYTICS_SKIP_LOOKBACK_HOURS,
   ANALYTICS_SKIP_REASON_LIMIT,
