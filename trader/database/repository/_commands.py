@@ -1,0 +1,131 @@
+from __future__ import annotations
+
+from database.supabase_support import *  # noqa: F403
+from database.trade_account_scope import apply_trade_account_filter
+
+class SupabaseCommandsMixin:
+    @_db_synchronized
+    def reclaim_stale_trade_commands(self, stale_after_sec: float = 120.0) -> int:
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(seconds=stale_after_sec)
+        ).isoformat()
+        result = (
+            self.client.table("trade_commands")
+            .update({"status": "pending", "processed_at": None, "error": None})
+            .eq("status", "processing")
+            .lt("processed_at", cutoff)
+            .execute()
+        )
+        return len(result.data or [])
+
+    @_db_synchronized
+    def get_pending_trade_commands(self) -> List[dict]:
+        result = (
+            self.client.table("trade_commands")
+            .select("id, trade_id, command, reason, requested_at")
+            .eq("status", "pending")
+            .order("requested_at")
+            .limit(10)
+            .execute()
+        )
+        return list(result.data or [])
+
+    @_db_synchronized
+    def claim_trade_command(self, command_id: str) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        result = (
+            self.client.table("trade_commands")
+            .update({"status": "processing", "processed_at": now})
+            .eq("id", command_id)
+            .eq("status", "pending")
+            .execute()
+        )
+        return bool(result.data)
+
+    @_db_synchronized
+    def complete_trade_command(self, command_id: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("trade_commands").update(
+            {"status": "completed", "processed_at": now, "error": None}
+        ).eq("id", command_id).execute()
+
+    @_db_synchronized
+    def fail_trade_command(self, command_id: str, error: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("trade_commands").update(
+            {"status": "failed", "processed_at": now, "error": error[:500]}
+        ).eq("id", command_id).execute()
+
+    @_db_synchronized
+    def reclaim_stale_position_commands(self, stale_after_sec: float = 120.0) -> int:
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(seconds=stale_after_sec)
+        ).isoformat()
+        result = (
+            self.client.table("position_commands")
+            .update({"status": "pending", "processed_at": None, "error": None})
+            .eq("status", "processing")
+            .lt("processed_at", cutoff)
+            .execute()
+        )
+        return len(result.data or [])
+
+    @_db_synchronized
+    def get_pending_position_commands(self) -> List[dict]:
+        result = (
+            self.client.table("position_commands")
+            .select("id, symbol, quantity, command, reason, requested_at")
+            .eq("status", "pending")
+            .order("requested_at")
+            .limit(10)
+            .execute()
+        )
+        return list(result.data or [])
+
+    @_db_synchronized
+    def claim_position_command(self, command_id: str) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        result = (
+            self.client.table("position_commands")
+            .update({"status": "processing", "processed_at": now})
+            .eq("id", command_id)
+            .eq("status", "pending")
+            .execute()
+        )
+        return bool(result.data)
+
+    @_db_synchronized
+    def complete_position_command(self, command_id: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("position_commands").update(
+            {"status": "completed", "processed_at": now, "error": None}
+        ).eq("id", command_id).execute()
+
+    @_db_synchronized
+    def fail_position_command(self, command_id: str, error: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("position_commands").update(
+            {"status": "failed", "processed_at": now, "error": error[:500]}
+        ).eq("id", command_id).execute()
+
+    @_db_synchronized
+    def record_error(
+        self,
+        message: str,
+        enabled: bool,
+        trading_mode: TradingMode,
+        execution_mode: ExecutionMode = ExecutionMode.IBKR,
+    ) -> None:
+        try:
+            self.update_bot_status(
+                BotStatusUpdate(
+                    enabled=enabled,
+                    trading_mode=trading_mode,
+                    ibkr_connected=False,
+                    jev_connected=False,
+                    execution_mode=execution_mode,
+                    last_error=message,
+                )
+            )
+        except Exception:
+            logger.exception("Failed to record error to Supabase")

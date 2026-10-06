@@ -8,7 +8,7 @@ from database.supabase import SupabaseRepository
 
 
 class SymbolBarsMetaTests(unittest.TestCase):
-    @patch("database.supabase.create_client")
+    @patch("database.repository._base.create_client")
     def test_get_last_fetched_at_returns_none_when_no_rows(self, create_client: MagicMock) -> None:
         response = MagicMock()
         response.data = []
@@ -23,7 +23,7 @@ class SymbolBarsMetaTests(unittest.TestCase):
         repo = SupabaseRepository("https://example.supabase.co", "service-role-key")
         self.assertIsNone(repo.get_last_fetched_at("NU", "1 day"))
 
-    @patch("database.supabase.create_client")
+    @patch("database.repository._base.create_client")
     def test_get_last_fetched_at_returns_none_when_execute_returns_none(
         self, create_client: MagicMock
     ) -> None:
@@ -38,7 +38,7 @@ class SymbolBarsMetaTests(unittest.TestCase):
         repo = SupabaseRepository("https://example.supabase.co", "service-role-key")
         self.assertIsNone(repo.get_last_fetched_at("NU", "5 mins"))
 
-    @patch("database.supabase.create_client")
+    @patch("database.repository._base.create_client")
     def test_get_last_fetched_at_parses_timestamp(self, create_client: MagicMock) -> None:
         ts = "2026-09-29T06:54:07.794+00:00"
         response = MagicMock()

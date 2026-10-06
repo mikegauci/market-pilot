@@ -145,8 +145,8 @@ class RepositoryHookTests(unittest.TestCase):
         repo = SupabaseRepository("https://example.supabase.co", "service-role-key")
         return repo, table
 
-    @patch("database.supabase.create_client")
-    @patch("database.supabase.notify_trade_opened")
+    @patch("database.repository._base.create_client")
+    @patch("database.repository._trades.notify_trade_opened")
     def test_insert_notifies_once(
         self, notify: MagicMock, create_client: MagicMock
     ) -> None:
@@ -158,8 +158,8 @@ class RepositoryHookTests(unittest.TestCase):
         repo.insert_trade(trade)
         notify.assert_called_once_with(trade)
 
-    @patch("database.supabase.create_client")
-    @patch("database.supabase.notify_trade_opened")
+    @patch("database.repository._base.create_client")
+    @patch("database.repository._trades.notify_trade_opened")
     def test_idempotent_insert_does_not_notify(
         self, notify: MagicMock, create_client: MagicMock
     ) -> None:
@@ -179,8 +179,8 @@ class RepositoryHookTests(unittest.TestCase):
         update_chain.select.return_value = update_chain
         return update_chain
 
-    @patch("database.supabase.create_client")
-    @patch("database.supabase.notify_trade_closed")
+    @patch("database.repository._base.create_client")
+    @patch("database.repository._trades.notify_trade_closed")
     def test_close_notifies_only_when_still_open(
         self, notify: MagicMock, create_client: MagicMock
     ) -> None:

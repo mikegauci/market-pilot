@@ -10,7 +10,7 @@ from models.types import TradeRecord, TradingMode
 
 
 class InsertTradeIdempotentTests(unittest.TestCase):
-    @patch("database.supabase.create_client")
+    @patch("database.repository._base.create_client")
     def test_skips_insert_when_trade_id_already_exists(
         self, create_client: MagicMock
     ) -> None:
