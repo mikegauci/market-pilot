@@ -25,11 +25,11 @@ Rules:
   moved into profit on the way toward take profit (never say "reached 0%" or "0% path"). Otherwise
   use max_path_progress_pct vs early_exit_band_path_pct (min–max), reached_early_exit_min,
   entered_early_exit_band, and band_touch_cycles vs min_band_hits_required when early exit did not fire.
-- When loss_cut_path is present, loss_cut_enabled, and never_went_underwater_on_stop_path is false,
-  add one short sentence in exit_story about how far toward the hard stop the trade drew down
-  (max_stop_path_progress_pct vs early_loss_cut_band_path_pct, band touches vs required). If
-  never_went_underwater_on_stop_path is true, omit stop-path detail (price stayed at or above entry).
-  Never say "reached 0%" toward stop.
+- When loss_cut_path is present and loss_cut_enabled: if never_went_underwater_on_stop_path is false,
+  add one short sentence in exit_story (even when net_pnl is positive) with max_stop_path_progress_pct
+  — how far toward the hard stop it dipped — vs early_loss_cut_band_path_pct and band touches vs
+  required. If never_went_underwater_on_stop_path is true, say briefly that price stayed at or above
+  entry (no drawdown toward stop). Never say "reached 0%" toward stop.
 - verdict: one sentence sanity-check (worked as designed / stopped out / still open).
 - Do not promise profit or suggest live trading.`;
 

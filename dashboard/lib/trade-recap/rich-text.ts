@@ -10,7 +10,16 @@ export const RECAP_MONEY_NEUTRAL_CLASS = "tabular-nums text-zinc-200";
 
 /** Split recap prose into alternating plain and highlightable tokens. */
 export const RECAP_TOKEN_PATTERN =
-  /(\$\d[\d,]*(?:\.\d+)?|\d+(?:\.\d+)?%|\bnet loss of \$\d[\d,]*(?:\.\d+)?\b|\bgain of \$\d[\d,]*(?:\.\d+)?\b|\b(?:stopped out|stop loss|take profit|Soft Sell|Soft Stop|in the green|never moved into profit|hard stop)\b)/gi;
+  /(\$\d[\d,]*(?:\.\d+)?|\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?%|\d+(?:\.\d+)?%|\bnet loss of \$\d[\d,]*(?:\.\d+)?\b|\bgain of \$\d[\d,]*(?:\.\d+)?\b|\b(?:stopped out|stop loss|take profit|Soft Sell|Soft Stop|in the green|never moved into profit|hard stop)\b)/gi;
+
+/** Band label like 65–99% — keep whole range neutral (do not green the max alone). */
+export function isRecapBandRangeToken(part: string): boolean {
+  return /^\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?%$/.test(part.trim());
+}
+
+export function isRecapRangeMaxPercent(part: string, textBefore: string): boolean {
+  return /^\d+(?:\.\d+)?%$/.test(part) && /[-–]\s*$/.test(textBefore);
+}
 
 export function recapHeadlineClass(netPnl: number | null | undefined): string {
   if (netPnl == null) return "font-medium text-zinc-200";
@@ -112,6 +121,9 @@ export function styleRecapToken(
     if (cls === RECAP_PROFIT_CLASS) return "profit";
     if (cls === RECAP_LOSS_CLASS) return "loss";
     return "money-neutral";
+  }
+  if (isRecapBandRangeToken(part) || isRecapRangeMaxPercent(part, textBefore)) {
+    return "neutral";
   }
   if (/%/.test(part) && /\d/.test(part)) {
     const cls = classForRecapPercent(textBefore);

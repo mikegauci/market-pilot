@@ -24,4 +24,9 @@ describe("trade recap rich text", () => {
   it("marks net loss phrase as loss", () => {
     expect(styleRecapToken("net loss of $17.45", "", undefined)).toBe("loss");
   });
+
+  it("keeps exit band ranges neutral", () => {
+    expect(styleRecapToken("65-99%", "band of ", undefined)).toBe("neutral");
+    expect(styleRecapToken("99%", "band of 65-", undefined)).toBe("neutral");
+  });
 });
