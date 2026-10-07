@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SettingsAiSummaryCard } from "@/components/settings-ai-summary-card";
 import { SettingsForm } from "@/components/settings-form";
 import { resolveBaselineEquity } from "@/lib/risk-recommendations";
 import {
@@ -69,6 +70,8 @@ export default async function SettingsPage() {
           Watchlist
         </a>
       </nav>
+
+      <SettingsAiSummaryCard />
 
       <SettingsForm
         settings={settings}

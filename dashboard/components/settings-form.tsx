@@ -63,6 +63,7 @@ export function SettingsForm({
 }) {
   const [pending, startTransition] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [riskPerTrade, setRiskPerTrade] = useState(settings.risk_per_trade);
   const [maxPositionSize, setMaxPositionSize] = useState(settings.max_position_size);
   const [maxDailyLoss, setMaxDailyLoss] = useState(settings.max_daily_loss);
@@ -217,6 +218,7 @@ export function SettingsForm({
       className="space-y-6 pb-24"
       action={(formData) => {
         setSaveError(null);
+        setSaveSuccess(false);
         const selectionError = validateProfileSelection(
           riskValues,
           baselineEquity,
@@ -229,6 +231,7 @@ export function SettingsForm({
         startTransition(async () => {
           try {
             await updateSettings(formData);
+            setSaveSuccess(true);
           } catch (err) {
             setSaveError(err instanceof Error ? err.message : "Failed to save settings");
           }
