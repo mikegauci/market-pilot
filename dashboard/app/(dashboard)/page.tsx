@@ -62,7 +62,6 @@ export default async function OverviewPage() {
           {settings ? (
             <OverviewWatchlistCard
               settings={settings}
-              botStatus={botStatus}
               entryCommands={entryCommands}
               openSymbols={openTrades.map((trade) => trade.symbol)}
             />

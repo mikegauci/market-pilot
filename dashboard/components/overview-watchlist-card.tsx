@@ -7,11 +7,12 @@ import { WatchlistPicker } from "@/components/watchlist-picker";
 import { WatchlistMoveChip } from "@/components/watchlist-move-chip";
 import { Card, CardTitle } from "@/components/ui/card";
 import { EntryBlockedSymbols } from "@/components/entry-blocked-symbols";
+import { useLiveBotStatus } from "@/components/bot-status-provider";
 import { useReadOnly } from "@/components/read-only-provider";
 import { ManualBuyButton } from "@/components/manual-buy-button";
 import { blockSymbolFromEntries, updateWatchlist } from "@/lib/actions";
 import { isTraderOnline } from "@/lib/trader-status";
-import type { BotStatus, EntryCommand } from "@/lib/types/database";
+import type { EntryCommand } from "@/lib/types/database";
 import { mergeEntryBlockedSymbols } from "@/lib/entry-blocked-symbols";
 import { fetchActiveEntryCommands } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
@@ -26,7 +27,6 @@ import { normalizeWatchlistRotationHistory } from "@/lib/watchlist-rotation-hist
 
 type Props = {
   settings: Settings;
-  botStatus: BotStatus | null;
   entryCommands?: EntryCommand[];
   /** Symbols with an open long — block is disabled until the position closes. */
   openSymbols?: string[];
@@ -34,7 +34,6 @@ type Props = {
 
 export function OverviewWatchlistCard({
   settings,
-  botStatus,
   entryCommands: initialEntryCommands = [],
   openSymbols = [],
 }: Props) {
@@ -59,7 +58,8 @@ export function OverviewWatchlistCard({
     () => new Set(openSymbols.map((symbol) => symbol.toUpperCase())),
     [openSymbols],
   );
-  const traderOnline = isTraderOnline(botStatus?.last_heartbeat ?? null);
+  const liveBotStatus = useLiveBotStatus();
+  const traderOnline = isTraderOnline(liveBotStatus.last_heartbeat);
   const fetchEntryCommands = useCallback(() => fetchActiveEntryCommands(), []);
   const liveEntryCommands = useLiveQuery(
     initialEntryCommands,
