@@ -1,3 +1,29 @@
+import { formatPercent } from "@/lib/utils";
+
+/** Row stored when entry filters block before Jev runs (zeros are placeholders). */
+export function isPreJevFilterSkip(prediction: {
+  buy_probability: number;
+  hold_probability: number;
+  sell_probability: number;
+  trade_skip_reason: string | null;
+  trade_created: boolean;
+}): boolean {
+  if (prediction.trade_created || !prediction.trade_skip_reason) return false;
+  return (
+    Number(prediction.buy_probability) === 0 &&
+    Number(prediction.hold_probability) === 0 &&
+    Number(prediction.sell_probability) === 0
+  );
+}
+
+export function formatJevProbabilityPercent(
+  value: number | null | undefined,
+  prediction: Parameters<typeof isPreJevFilterSkip>[0],
+): string {
+  if (isPreJevFilterSkip(prediction)) return "—";
+  return formatPercent(value);
+}
+
 const SKIP_REASON_LABELS: Record<string, string> = {
   below_trade_threshold: "Below confidence threshold",
   buy_hold_margin: "BUY–HOLD margin too narrow",

@@ -1,4 +1,8 @@
-import { formatSkipReason } from "@/lib/prediction-skip-reason";
+import {
+  formatSkipReason,
+  isPreJevFilterSkip,
+} from "@/lib/prediction-skip-reason";
+import type { SkipExplanation } from "@/lib/skip-explainer/schema";
 import { traderBuiltInGatesForPacket } from "@/lib/trader-built-in-gates";
 import type { MarketSnapshot, Prediction, Settings } from "@/lib/types/database";
 
@@ -11,6 +15,8 @@ function round3(value: number): number {
 }
 
 export type SkipExplainPacket = {
+  /** False when entry filters blocked before Jev; B/H/S zeros are placeholders. */
+  jev_was_called: boolean;
   note: string;
   symbol: string;
   timestamp: string;
@@ -71,10 +77,13 @@ export function buildSkipExplainPacket(
   }
 
   const reason = prediction.trade_skip_reason?.trim() || "unknown";
+  const jevWasCalled = !isPreJevFilterSkip(prediction);
 
   return {
-    note:
-      "Percents are already in percent (85 means 85%). spread_pct and max_spread_pct are percent of price (0.15 means 0.15%). Explain only this row. Do not invent prices, headlines, or other skips. Gates under settings are the bot's current dashboard settings, not necessarily what applied when this prediction was stored.",
+    jev_was_called: jevWasCalled,
+    note: jevWasCalled
+      ? "Percents are already in percent (85 means 85%). spread_pct and max_spread_pct are percent of price (0.15 means 0.15%). Explain only this row. Do not invent prices, headlines, or other skips. Gates under settings are the bot's current dashboard settings, not necessarily what applied when this prediction was stored."
+      : "jev_was_called is false. Jev did not run on this eval — buy_pct, hold_pct, and sell_pct are storage placeholders (0), not model output. Explain the entry filter in skip_reason_label. Do not say Jev scored or recorded confidence.",
     symbol: prediction.symbol,
     timestamp: prediction.timestamp,
     price,
@@ -112,5 +121,16 @@ export function buildSkipExplainPacket(
       gates_note:
         "Jev confidence, record threshold, max positions, volume, share price, dollar volume, and confirmation are current settings. Spread, RSI, benchmark drop, news sentiment, EMA, buy margins, and news tags are the bot's built-in gates.",
     },
+  };
+}
+
+/** Skip OpenAI when Jev never ran — avoids "Jev recorded 0%" hallucinations. */
+export function buildDeterministicPreJevSkipExplanation(
+  packet: SkipExplainPacket,
+): SkipExplanation {
+  return {
+    closeness: "hard_block",
+    what_blocked_it: `${packet.skip_reason_label} — entry filter blocked ${packet.symbol} before Jev ran.`,
+    summary: `Jev was not called on this eval. The 0% buy, hold, and sell values are placeholders the bot stores for filter skips, not Jev's signal. The bot logged "${packet.skip_reason}" (${packet.skip_reason_label}). Open the row snapshot for spread, RSI, EMA, volume, or news at eval time.`,
   };
 }

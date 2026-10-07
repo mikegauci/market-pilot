@@ -22,7 +22,10 @@ import {
 } from "@/lib/news-feed";
 import type { EvaluateOptions } from "@/lib/prediction-filters";
 import type { MarketSnapshot, Prediction } from "@/lib/types/database";
-import { formatSkipReason } from "@/lib/prediction-skip-reason";
+import {
+  formatJevProbabilityPercent,
+  formatSkipReason,
+} from "@/lib/prediction-skip-reason";
 import { formatCurrency, formatDateTime, formatPercent } from "@/lib/utils";
 
 type SortKey =
@@ -366,13 +369,13 @@ export function PredictionsFeed({
                       <td className="py-2 pr-3 font-medium">{p.symbol}</td>
                       <td className="py-2 pr-3">{formatCurrency(p.price)}</td>
                       <td className="py-2 pr-3 text-emerald-400">
-                        {formatPercent(p.buy_probability)}
+                        {formatJevProbabilityPercent(p.buy_probability, p)}
                       </td>
                       <td className="py-2 pr-3 text-zinc-300">
-                        {formatPercent(p.hold_probability)}
+                        {formatJevProbabilityPercent(p.hold_probability, p)}
                       </td>
                       <td className="py-2 pr-3 text-red-400">
-                        {formatPercent(p.sell_probability)}
+                        {formatJevProbabilityPercent(p.sell_probability, p)}
                       </td>
                       <td className="py-2 pr-3">
                         <NewsCell snapshot={snapshot} />

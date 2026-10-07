@@ -6,7 +6,10 @@ import {
 } from "@/lib/openai-action-cooldown";
 import { normalizeSettings, type SettingsRow } from "@/lib/normalize-settings";
 import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
-import { buildSkipExplainPacket } from "@/lib/skip-explainer/packet";
+import {
+  buildDeterministicPreJevSkipExplanation,
+  buildSkipExplainPacket,
+} from "@/lib/skip-explainer/packet";
 import { generateSkipExplanation } from "@/lib/skip-explainer/openai.server";
 import type { SkipExplanation } from "@/lib/skip-explainer/schema";
 import { canDashboardWrite } from "@/lib/dashboard-role";
@@ -97,6 +100,13 @@ export async function explainSkippedPrediction(
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Could not build explanation.",
+    };
+  }
+
+  if (!packet.jev_was_called) {
+    return {
+      ok: true,
+      explanation: buildDeterministicPreJevSkipExplanation(packet),
     };
   }
 

@@ -175,7 +175,15 @@ def maybe_rotate_watchlist(
     runtime.last_rotation_mono = now_mono
     if result.active == list(current_active):
         logger.info("Watchlist rotation: %s", result.note)
-        return risk_settings, []
+        if db is not None:
+            try:
+                db.save_watchlist_rotation(list(current_active), result.note)
+            except Exception as exc:
+                logger.warning("Could not save watchlist rotation scan: %s", exc)
+        return (
+            replace(risk_settings, watchlist_last_rotation_note=result.note),
+            [],
+        )
 
     logger.info("Watchlist rotation: %s -> %s", result.note, ", ".join(result.active))
     gap = median_cycle_sec(runtime.cycle_elapsed_sec)

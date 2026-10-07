@@ -136,6 +136,53 @@ class MaybeRotateWatchlistTests(unittest.TestCase):
         self.assertEqual(swapped, [])
         db.save_watchlist_rotation.assert_called_once()
 
+    def test_persists_scan_note_when_active_unchanged(self) -> None:
+        risk = RiskSettings(
+            minimum_jev_confidence=0.85,
+            signal_record_threshold=0.75,
+            risk_per_trade=100.0,
+            max_position_size=10_000.0,
+            max_daily_loss=500.0,
+            max_open_positions=5,
+            stop_loss_percentage=0.01,
+            take_profit_percentage=0.015,
+            max_hold_minutes=0.0,
+            account_capital=10_000.0,
+            risk_sync_equity=None,
+            watchlist=["AAA"],
+            watchlist_rotation_enabled=True,
+            watchlist_pool=["AAA", "BBB"],
+            watchlist_active=["AAA", "BBB"],
+            watchlist_active_size=2,
+            watchlist_rotation_interval_minutes=1,
+            watchlist_max_swaps_per_rotation=2,
+        )
+        runtime = TraderRuntimeState()
+        runtime.last_rotation_mono = 0.0
+        db = MagicMock()
+        updated, swapped = maybe_rotate_watchlist(
+            db=db,
+            risk_settings=risk,
+            minute_bars=MinuteBarStore(["AAA", "BBB"]),
+            bar_store=None,
+            quotes_by_symbol={},
+            benchmark_minute_bars=None,
+            confirmation_tracker=ConfirmationTracker(1),
+            open_symbols=[],
+            runtime=runtime,
+            now_mono=100.0,
+            market_open=True,
+            strategy_config=StrategyConfig(
+                min_volume_ratio=0.0,
+                max_rsi=99,
+                rotation_min_session_change_pct=None,
+            ),
+        )
+        self.assertEqual(updated.watchlist_active, ["AAA", "BBB"])
+        self.assertEqual(swapped, [])
+        self.assertEqual(updated.watchlist_last_rotation_note, "no change")
+        db.save_watchlist_rotation.assert_called_once_with(["AAA", "BBB"], "no change")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildSkipExplainPacket } from "@/lib/skip-explainer/packet";
+import {
+  buildDeterministicPreJevSkipExplanation,
+  buildSkipExplainPacket,
+} from "@/lib/skip-explainer/packet";
 import { settingsFixture } from "@/lib/test-support/settings";
 import type { Prediction } from "@/lib/types/database";
 
@@ -45,6 +48,27 @@ describe("buildSkipExplainPacket", () => {
     expect(packet.gates.minimum_jev_confidence_pct).toBe(80);
     expect(packet.gates.max_spread_pct).toBe(0.15);
     expect(packet.gates.min_share_price).toBe(20);
+    expect(packet.jev_was_called).toBe(true);
+  });
+
+  it("marks pre-Jev filter skips so explainers do not treat 0% as Jev output", () => {
+    const packet = buildSkipExplainPacket(
+      prediction({
+        buy_probability: 0,
+        hold_probability: 0,
+        sell_probability: 0,
+        trade_skip_reason: "rsi_overbought (77.0)",
+      }),
+      settingsFixture(),
+    );
+
+    expect(packet.jev_was_called).toBe(false);
+    expect(packet.note).toContain("jev_was_called is false");
+
+    const explanation = buildDeterministicPreJevSkipExplanation(packet);
+    expect(explanation.closeness).toBe("hard_block");
+    expect(explanation.summary).toContain("Jev was not called");
+    expect(explanation.summary).not.toMatch(/Jev recorded/i);
   });
 
   it("marks price below EMA when the snapshot says so", () => {

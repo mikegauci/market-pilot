@@ -159,7 +159,9 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
               : "Symbols Jev monitors for entries. Add from the S&P 500 or any ticker."}
           </p>
           {rotating && settings.watchlist_last_rotation_note ? (
-            <p className="text-xs text-zinc-400">Last change: {settings.watchlist_last_rotation_note}</p>
+            <p className="text-xs text-zinc-400">
+              Last scan: {settings.watchlist_last_rotation_note}
+            </p>
           ) : null}
           {rotating ? (
             <p className="text-xs text-zinc-400">

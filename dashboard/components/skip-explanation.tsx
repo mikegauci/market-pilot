@@ -7,7 +7,7 @@ import type { SkipCloseness, SkipExplanation } from "@/lib/skip-explainer/schema
 
 const CLOSENESS_LABEL: Record<SkipCloseness, string> = {
   near_miss: "Near miss",
-  hard_block: "Hard block",
+  hard_block: "Blocked before trade",
   not_a_signal: "Not a buy signal",
 };
 

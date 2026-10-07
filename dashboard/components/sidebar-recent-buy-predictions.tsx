@@ -4,9 +4,13 @@ import Link from "next/link";
 import { useCallback } from "react";
 import { fetchRecentPredictions } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
-import { formatSkipReason } from "@/lib/prediction-skip-reason";
+import {
+  formatJevProbabilityPercent,
+  formatSkipReason,
+  isPreJevFilterSkip,
+} from "@/lib/prediction-skip-reason";
 import type { Prediction } from "@/lib/types/database";
-import { cn, formatCurrency, formatPercent, formatTimeHms } from "@/lib/utils";
+import { cn, formatCurrency, formatTimeHms } from "@/lib/utils";
 
 const WINDOW_MINUTES = 2;
 const ROW_LIMIT = 30;
@@ -58,7 +62,7 @@ export function SidebarRecentBuyPredictions() {
         </Link>
       </div>
       <p className="mt-1 text-[10px] text-zinc-600">
-        Same rows as Predictions — sorted by highest BUY % in this window.
+        B/H/S are Jev only. Dashes mean entry filters blocked before Jev ran — see Outcome.
       </p>
 
       {rows.length === 0 ? (
@@ -85,14 +89,29 @@ export function SidebarRecentBuyPredictions() {
                   <td className="py-1 pr-1 text-right tabular-nums text-zinc-400">
                     {formatCurrency(p.price)}
                   </td>
-                  <td className="py-1 pr-0.5 text-right tabular-nums text-emerald-400/90">
-                    {formatPercent(p.buy_probability)}
+                  <td
+                    className={cn(
+                      "py-1 pr-0.5 text-right tabular-nums",
+                      isPreJevFilterSkip(p) ? "text-zinc-600" : "text-emerald-400/90",
+                    )}
+                  >
+                    {formatJevProbabilityPercent(p.buy_probability, p)}
                   </td>
-                  <td className="py-1 pr-0.5 text-right tabular-nums text-zinc-400">
-                    {formatPercent(p.hold_probability)}
+                  <td
+                    className={cn(
+                      "py-1 pr-0.5 text-right tabular-nums",
+                      isPreJevFilterSkip(p) ? "text-zinc-600" : "text-zinc-400",
+                    )}
+                  >
+                    {formatJevProbabilityPercent(p.hold_probability, p)}
                   </td>
-                  <td className="py-1 pr-1 text-right tabular-nums text-red-400/80">
-                    {formatPercent(p.sell_probability)}
+                  <td
+                    className={cn(
+                      "py-1 pr-1 text-right tabular-nums",
+                      isPreJevFilterSkip(p) ? "text-zinc-600" : "text-red-400/80",
+                    )}
+                  >
+                    {formatJevProbabilityPercent(p.sell_probability, p)}
                   </td>
                   <td className="py-1 min-w-0">
                     <SidebarOutcome prediction={p} />
