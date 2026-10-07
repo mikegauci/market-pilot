@@ -13,7 +13,23 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 
-export type ToastVariant = "default" | "watchlist" | "trade-open" | "trade-closed";
+export type ToastVariant =
+  | "default"
+  | "watchlist"
+  | "trade-open"
+  | "trade-closed"
+  | "trade-closed-profit"
+  | "trade-closed-loss";
+
+export function tradeClosedToastVariant(netPnl: number | null): ToastVariant {
+  if (netPnl != null && netPnl > 0) {
+    return "trade-closed-profit";
+  }
+  if (netPnl != null && netPnl < 0) {
+    return "trade-closed-loss";
+  }
+  return "trade-closed";
+}
 
 export type ToastRecord = {
   id: string;
@@ -43,7 +59,11 @@ function toastVariantClass(variant: ToastVariant): string {
     case "watchlist":
       return "border-sky-500/40 bg-sky-950/90";
     case "trade-open":
+      return "border-blue-500/45 bg-blue-950/90";
+    case "trade-closed-profit":
       return "border-emerald-500/40 bg-emerald-950/90";
+    case "trade-closed-loss":
+      return "border-red-500/40 bg-red-950/90";
     case "trade-closed":
       return "border-zinc-600 bg-zinc-900/95";
     default:

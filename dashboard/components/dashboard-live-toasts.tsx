@@ -2,10 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLiveBotStatus } from "@/components/bot-status-provider";
-import { useToast } from "@/components/toast-provider";
+import { tradeClosedToastVariant, useToast } from "@/components/toast-provider";
 import { fetchSettings, fetchTradesForTradingDay } from "@/lib/data-client";
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
+import {
+  liveToastEventKey,
+  markLiveToastShown,
+  wasLiveToastShown,
+  watchlistToastEventKey,
+} from "@/lib/live-toast-dedupe";
 import {
   tradeLifecycleDiff,
   tradeStatusSnapshot,
@@ -35,10 +41,13 @@ export function DashboardLiveToasts({
     keepPreviousOnNull: true,
   });
 
-  const loadTrades = useCallback(
-    () => fetchTradesForTradingDay(tradingDayStartUtc()),
-    [],
-  );
+  const tradesLiveFetchDoneRef = useRef(false);
+  const loadTrades = useCallback(async () => {
+    const dayStart = tradingDayStartUtc();
+    const rows = await fetchTradesForTradingDay(dayStart);
+    tradesLiveFetchDoneRef.current = true;
+    return rows;
+  }, []);
   const trades = useLiveQuery(EMPTY_TRADES, loadTrades, ["trades"], undefined, {
     keepPreviousOnEmpty: true,
   });
@@ -105,6 +114,12 @@ export function DashboardLiveToasts({
     if (!diff) {
       return;
     }
+    const tradingDayStart = tradingDayStartUtc();
+    const eventKey = watchlistToastEventKey(diff);
+    if (wasLiveToastShown(tradingDayStart, eventKey)) {
+      return;
+    }
+    markLiveToastShown(tradingDayStart, eventKey);
     push({
       variant: "watchlist",
       title: "Watchlist updated",
@@ -113,7 +128,7 @@ export function DashboardLiveToasts({
   }, [settings, push]);
 
   useEffect(() => {
-    if (!tradesScopeReady) {
+    if (!tradesScopeReady || !tradesLiveFetchDoneRef.current) {
       return;
     }
     if (!tradesReadyRef.current) {
@@ -125,7 +140,14 @@ export function DashboardLiveToasts({
     const { opened, closed } = tradeLifecycleDiff(prevTradeStatusRef.current, trades);
     prevTradeStatusRef.current = tradeStatusSnapshot(trades);
 
+    const tradingDayStart = tradingDayStartUtc();
+
     for (const trade of opened) {
+      const eventKey = liveToastEventKey("trade-open", trade.id);
+      if (wasLiveToastShown(tradingDayStart, eventKey)) {
+        continue;
+      }
+      markLiveToastShown(tradingDayStart, eventKey);
       push({
         variant: "trade-open",
         title: `Opened ${trade.symbol}`,
@@ -133,10 +155,15 @@ export function DashboardLiveToasts({
       });
     }
     for (const trade of closed) {
+      const eventKey = liveToastEventKey("trade-closed", trade.id);
+      if (wasLiveToastShown(tradingDayStart, eventKey)) {
+        continue;
+      }
+      markLiveToastShown(tradingDayStart, eventKey);
       const pnl =
         trade.net_pnl != null ? ` · ${formatCurrency(trade.net_pnl)} net` : "";
       push({
-        variant: "trade-closed",
+        variant: tradeClosedToastVariant(trade.net_pnl),
         title: `Closed ${trade.symbol}`,
         description: `${trade.exit_reason?.trim() || "Position closed"}${pnl}`,
       });
