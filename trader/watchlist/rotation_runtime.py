@@ -5,9 +5,13 @@ from typing import Dict, Optional, Sequence
 
 from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
-from market.indicators import compute_intraday_from_five_min_bars
+from market.indicators import (
+    compute_intraday_from_five_min_bars,
+    compute_intraday_from_live_minute_bars,
+)
 from market.session import session_change_pct_for_rotation
 from models.types import Quote, RiskSettings
+from runtime.eval_symbols import eval_allow_five_min_fallback
 from runtime.state import TraderRuntimeState
 from strategy.config import StrategyConfig
 from strategy.confirmation import ConfirmationTracker
@@ -32,6 +36,8 @@ def build_rotation_candidate(
     quote: Optional[Quote],
     minute_bars: MinuteBarStore,
     bar_store: Optional[BarStore],
+    *,
+    warmup_min_1m_bars: int = 15,
 ) -> RotationCandidate:
     aggregator = minute_bars.get(symbol)
     price = quote.price if quote is not None else None
@@ -50,15 +56,30 @@ def build_rotation_candidate(
     ema_20 = None
     volume_ratio = None
     cached = bar_store.get_intraday_bars(symbol) if bar_store is not None else []
-    if price is not None and cached:
+    live_count = aggregator.live_bar_count() if aggregator is not None else 0
+    entry_aligned = None
+    if price is not None and aggregator is not None and live_count >= warmup_min_1m_bars:
+        entry_aligned = compute_intraday_from_live_minute_bars(aggregator, price)
+    elif price is not None and cached and eval_allow_five_min_fallback(
+        False, cached, warmup_min_1m_bars
+    ):
+        entry_aligned = compute_intraday_from_five_min_bars(cached, price)
+    if entry_aligned is not None:
+        if change_5m is None:
+            change_5m = entry_aligned.change_5m
+        if change_15m is None:
+            change_15m = entry_aligned.change_15m
+        rsi = entry_aligned.rsi
+        ema_9 = entry_aligned.ema_9
+        ema_20 = entry_aligned.ema_20
+        volume_ratio = entry_aligned.volume_ratio
+    elif price is not None and cached:
         intraday = compute_intraday_from_five_min_bars(cached, price)
         if change_5m is None:
             change_5m = intraday.change_5m
         if change_15m is None:
             change_15m = intraday.change_15m
         rsi = intraday.rsi
-        ema_9 = intraday.ema_9
-        ema_20 = intraday.ema_20
         volume_ratio = intraday.volume_ratio
     session_change_pct = session_change_pct_for_rotation(
         price,
@@ -152,7 +173,11 @@ def maybe_rotate_watchlist(
     scores: Dict[str, float] = {}
     for symbol in rotation_pool:
         candidate = build_rotation_candidate(
-            symbol, quotes_by_symbol.get(symbol), minute_bars, bar_store
+            symbol,
+            quotes_by_symbol.get(symbol),
+            minute_bars,
+            bar_store,
+            warmup_min_1m_bars=strategy_config.warmup_min_1m_bars,
         )
         scores[symbol.upper()] = score_candidate(
             candidate,

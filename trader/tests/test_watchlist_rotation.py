@@ -32,14 +32,14 @@ class RotationScoreTests(unittest.TestCase):
 
     def test_relative_strength_uses_benchmark(self) -> None:
         leading = score_candidate(
-            RotationCandidate("AMD", change_5m=0.3),
+            RotationCandidate("AMD", change_5m=0.3, price=100, ema_20=90),
             benchmark_change_5m=-0.2,
             benchmark_change_15m=None,
             min_volume_ratio=0,
             max_rsi=70,
         )
         lagging = score_candidate(
-            RotationCandidate("INTC", change_5m=-0.1),
+            RotationCandidate("INTC", change_5m=-0.1, price=100, ema_20=90),
             benchmark_change_5m=-0.2,
             benchmark_change_15m=None,
             min_volume_ratio=0,
@@ -57,7 +57,9 @@ class RotationScoreTests(unittest.TestCase):
             min_session_change_pct=0.0,
         )
         strong = score_candidate(
-            RotationCandidate("NVDA", change_5m=0.5, session_change_pct=0.2),
+            RotationCandidate(
+                "NVDA", change_5m=0.5, session_change_pct=0.2, price=100, ema_20=90
+            ),
             benchmark_change_5m=0.0,
             benchmark_change_15m=None,
             min_volume_ratio=0,
@@ -77,6 +79,48 @@ class RotationScoreTests(unittest.TestCase):
             min_session_change_pct=0.0,
         )
         self.assertEqual(unknown, SESSION_DISQUALIFIED_SCORE)
+
+    def test_below_ema20_disqualified_for_rotation(self) -> None:
+        below = score_candidate(
+            RotationCandidate("AAA", change_5m=2.0, price=97.0, ema_20=98.0),
+            benchmark_change_5m=0.0,
+            benchmark_change_15m=None,
+            min_volume_ratio=0,
+            max_rsi=70,
+            entry_ema_gate="ema_20",
+        )
+        above = score_candidate(
+            RotationCandidate("BBB", change_5m=1.0, price=100.0, ema_20=98.0),
+            benchmark_change_5m=0.0,
+            benchmark_change_15m=None,
+            min_volume_ratio=0,
+            max_rsi=70,
+            entry_ema_gate="ema_20",
+        )
+        self.assertEqual(below, SESSION_DISQUALIFIED_SCORE)
+        self.assertGreater(above, 0)
+
+    def test_ema_warming_up_disqualified_when_gate_on(self) -> None:
+        score = score_candidate(
+            RotationCandidate("AAA", change_5m=2.0, price=100.0, ema_20=None),
+            benchmark_change_5m=0.0,
+            benchmark_change_15m=None,
+            min_volume_ratio=0,
+            max_rsi=70,
+            entry_ema_gate="ema_20",
+        )
+        self.assertEqual(score, SESSION_DISQUALIFIED_SCORE)
+
+    def test_ema_gate_off_allows_below_ema(self) -> None:
+        score = score_candidate(
+            RotationCandidate("AAA", change_5m=2.0, price=97.0, ema_20=98.0),
+            benchmark_change_5m=0.0,
+            benchmark_change_15m=None,
+            min_volume_ratio=0,
+            max_rsi=70,
+            entry_ema_gate="off",
+        )
+        self.assertGreater(score, 0)
 
 
 class RotateActiveTests(unittest.TestCase):
@@ -104,21 +148,38 @@ class RotateActiveTests(unittest.TestCase):
         self.assertEqual(len(result.active), 2)
         self.assertIn("DDD", result.active)
 
-    def test_red_session_incumbent_is_dropped_when_not_protected(self) -> None:
+    def test_disqualified_incumbent_stays_without_eligible_challenger(self) -> None:
+        scores = {
+            "AAA": SESSION_DISQUALIFIED_SCORE,
+            "BBB": 1.0,
+        }
+        result = rotate_active(
+            ["AAA", "BBB"],
+            ["AAA", "BBB"],
+            scores,
+            active_size=2,
+            max_swaps=2,
+        )
+        self.assertEqual(result.active, ["AAA", "BBB"])
+        self.assertEqual(result.note, "no change")
+
+    def test_disqualified_incumbent_swapped_for_eligible_challenger(self) -> None:
         scores = {
             "AAA": SESSION_DISQUALIFIED_SCORE,
             "BBB": 2.0,
-            "CCC": 1.5,
+            "CCC": 3.0,
         }
         result = rotate_active(
             ["AAA", "BBB", "CCC"],
             ["AAA", "BBB"],
             scores,
             active_size=2,
-            max_swaps=2,
+            max_swaps=1,
         )
         self.assertNotIn("AAA", result.active)
         self.assertIn("BBB", result.active)
+        self.assertIn("CCC", result.active)
+        self.assertIn("CCC", result.swapped_in)
 
     def test_open_position_is_never_dropped(self) -> None:
         result = rotate_active(
@@ -140,6 +201,20 @@ class RotateActiveTests(unittest.TestCase):
     def test_slow_scan_does_not_grow_the_list(self) -> None:
         self.assertEqual(capped_active_size(12, 9, 40), 9)
         self.assertEqual(capped_active_size(12, 9, 16), 12)
+
+    def test_seed_skips_disqualified_symbols(self) -> None:
+        result = rotate_active(
+            ["AAA", "BBB", "CCC"],
+            [],
+            {
+                "AAA": SESSION_DISQUALIFIED_SCORE,
+                "BBB": 3,
+                "CCC": 2,
+            },
+            active_size=2,
+            max_swaps=2,
+        )
+        self.assertEqual(result.active, ["BBB", "CCC"])
 
 
 if __name__ == "__main__":

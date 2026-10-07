@@ -87,7 +87,12 @@ class MaybeRotateWatchlistTests(unittest.TestCase):
             runtime=runtime,
             now_mono=100.0,
             market_open=True,
-            strategy_config=StrategyConfig(min_volume_ratio=0.0, max_rsi=99),
+            strategy_config=StrategyConfig(
+                min_volume_ratio=0.0,
+                max_rsi=99,
+                entry_ema_gate="off",
+                rotation_min_session_change_pct=None,
+            ),
         )
         self.assertNotEqual(updated.watchlist_active, [])
         db.save_watchlist_rotation.assert_called_once()
@@ -176,6 +181,7 @@ class MaybeRotateWatchlistTests(unittest.TestCase):
                 min_volume_ratio=0.0,
                 max_rsi=99,
                 rotation_min_session_change_pct=None,
+                entry_ema_gate="off",
             ),
         )
         self.assertEqual(updated.watchlist_active, ["AAA", "BBB"])

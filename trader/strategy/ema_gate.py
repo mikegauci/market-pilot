@@ -40,3 +40,34 @@ def check_entry_ema_gate(
     if state.price <= state.ema_20:
         return "price_below_ema20"
     return None
+
+
+def entry_ema_gate_blocks_rotation(
+    *,
+    price: Optional[float],
+    ema_9: Optional[float],
+    ema_20: Optional[float],
+    gate: EntryEmaGate | str,
+) -> bool:
+    """True when rotation should exclude this symbol (same fail-closed rules as entry)."""
+    normalized = normalize_entry_ema_gate(gate)
+    if normalized == "off" or price is None:
+        return normalized != "off" and price is None
+    skip = check_entry_ema_gate(
+        MarketState(
+            symbol="",
+            price=price,
+            change_5m=None,
+            change_15m=None,
+            volume_ratio=None,
+            rsi=None,
+            ema_9=ema_9,
+            ema_20=ema_20,
+            bid=None,
+            ask=None,
+            spread=None,
+            spy_change_5m=None,
+        ),
+        normalized,
+    )
+    return skip is not None
