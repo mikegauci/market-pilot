@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useIsClient } from "@/lib/hooks/use-is-client";
 import { getMarketStatus, type MarketStatus } from "@/lib/market-hours";
 import { getBrokerNotice, getTradeModeCopy } from "@/lib/trade-mode";
+import { JevUnavailableBanner } from "@/components/jev-unavailable-banner";
 import { getDisplayStatus, getStableDisplayNow } from "@/lib/trader-status";
 import type { BotStatus } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
@@ -181,6 +182,10 @@ function StatusPanel({
           />
         )}
 
+        {showLiveTimes && market?.isOpen ? (
+          <JevUnavailableBanner compact className="mt-2" />
+        ) : null}
+
         {status.last_error && (
           <p className="mt-2 rounded border border-red-900/50 bg-red-950/30 px-2 py-1.5 text-[10px] leading-snug text-red-300">
             {status.last_error}
@@ -268,6 +273,8 @@ function StatusPanel({
           ibkrConnected={display.ibkrConnected}
         />
       )}
+
+      {showLiveTimes && market?.isOpen ? <JevUnavailableBanner compact className="mt-3" /> : null}
 
       {status.last_error && (
         <p className="mt-3 rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">

@@ -13,6 +13,7 @@ import { IbkrAccountBadge } from "@/components/ibkr-account-badge";
 import { Logo } from "@/components/logo";
 import { OpenPositionsCountProvider } from "@/components/open-positions-count-provider";
 import { DashboardLiveToasts } from "@/components/dashboard-live-toasts";
+import { JevUnavailableBanner } from "@/components/jev-unavailable-banner";
 import { ToastProvider } from "@/components/toast-provider";
 import type { BotStatus, Settings } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
@@ -116,6 +117,7 @@ export function DashboardShell({
                   settings or control the engine.
                 </p>
               ) : null}
+              <JevUnavailableBanner />
               {children}
             </main>
           </div>

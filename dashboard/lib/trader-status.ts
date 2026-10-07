@@ -66,3 +66,33 @@ export function getDisplayStatus(status: BotStatus, now = Date.now()): DisplaySt
     heartbeatLabel: formatHeartbeatLabel(status.last_heartbeat, now),
   };
 }
+
+/** Avoid treating a fresh engine start as a Jev outage. */
+export const JEV_UNAVAILABLE_GRACE_SEC = 90;
+
+export type JevSignalsNotice = {
+  tone: "amber";
+  title: string;
+  message: string;
+};
+
+export function shouldShowJevUnavailableWarning(
+  status: Pick<BotStatus, "last_heartbeat" | "jev_connected">,
+  options: { traderOnline: boolean; marketOpen: boolean },
+  now = Date.now(),
+): boolean {
+  if (!options.traderOnline || !options.marketOpen || status.jev_connected) {
+    return false;
+  }
+  const age = heartbeatAgeSec(status.last_heartbeat, now);
+  return age !== null && age >= JEV_UNAVAILABLE_GRACE_SEC;
+}
+
+export function getJevSignalsNotice(): JevSignalsNotice {
+  return {
+    tone: "amber",
+    title: "Jev signals unavailable",
+    message:
+      "The bot is running but is not getting Jev predictions — often a TypeSafe billing or API quota issue (HTTP 402 in trader logs). New entries will not use Jev until this is fixed. Top up or renew your TypeSafe account, then wait for the next scan.",
+  };
+}
