@@ -12,16 +12,24 @@ import { DashboardRightSidebar } from "@/components/dashboard-right-sidebar";
 import { IbkrAccountBadge } from "@/components/ibkr-account-badge";
 import { Logo } from "@/components/logo";
 import { OpenPositionsCountProvider } from "@/components/open-positions-count-provider";
-import type { BotStatus } from "@/lib/types/database";
+import { DashboardLiveToasts } from "@/components/dashboard-live-toasts";
+import { ToastProvider } from "@/components/toast-provider";
+import type { BotStatus, Settings } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
 type DashboardShellProps = {
   children: ReactNode;
   botStatus: BotStatus;
+  settings: Settings | null;
   readOnly?: boolean;
 };
 
-export function DashboardShell({ children, botStatus, readOnly = false }: DashboardShellProps) {
+export function DashboardShell({
+  children,
+  botStatus,
+  settings,
+  readOnly = false,
+}: DashboardShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [navPath, setNavPath] = useState(pathname);
@@ -53,9 +61,11 @@ export function DashboardShell({ children, botStatus, readOnly = false }: Dashbo
   }, [mobileOpen, closeMobile]);
 
   return (
-    <BotStatusProvider initialStatus={botStatus}>
-      <OpenPositionsCountProvider>
-        <div className="flex min-h-screen">
+    <ToastProvider>
+      <BotStatusProvider initialStatus={botStatus}>
+        <OpenPositionsCountProvider>
+          <DashboardLiveToasts settings={settings} />
+          <div className="flex min-h-screen">
           <aside className="hidden w-64 shrink-0 flex min-h-screen flex-col overflow-y-auto border-r border-zinc-800 bg-zinc-900/50 p-4 lg:flex">
             <DashboardNavContent />
           </aside>
@@ -111,8 +121,9 @@ export function DashboardShell({ children, botStatus, readOnly = false }: Dashbo
           </div>
 
           <DashboardRightSidebar />
-        </div>
-      </OpenPositionsCountProvider>
-    </BotStatusProvider>
+          </div>
+        </OpenPositionsCountProvider>
+      </BotStatusProvider>
+    </ToastProvider>
   );
 }
