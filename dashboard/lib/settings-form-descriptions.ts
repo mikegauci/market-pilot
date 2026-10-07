@@ -97,3 +97,5 @@ export const SETTING_DESCRIPTIONS = {
   min_dollar_volume: "Min avg $ volume per 5m bar for entries (0 = off).",
   watchlist: "Symbols the trader evaluates each cycle.",
 } as const;
+
+export type SettingDescriptionKey = keyof typeof SETTING_DESCRIPTIONS;

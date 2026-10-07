@@ -263,6 +263,7 @@ export function SettingsForm({
         <SettingsFieldGroup className="mt-4">
           <SettingsField
             id="minimum_jev_confidence"
+            fieldKey="minimum_jev_confidence"
             label="Min Jev confidence (%)"
             description={SETTING_DESCRIPTIONS.minimum_jev_confidence}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.minimum_jev_confidence}
@@ -295,6 +296,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="confirmation_cycles"
+            fieldKey="confirmation_cycles"
             label="Confirmation cycles"
             description={SETTING_DESCRIPTIONS.confirmation_cycles}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.confirmation_cycles}
@@ -431,6 +433,11 @@ export function SettingsForm({
 
           <SettingsCollapsible
             summary="Early take profit (optional band exit)"
+            detail={
+              profitTakeEnabled
+                ? `On · ${profitTakeMinPct}–${profitTakeMaxPct}% toward TP`
+                : "Off"
+            }
             defaultOpen={profitTakeEnabled}
           >
             <SettingsFieldGroup className="mt-3">
@@ -548,6 +555,11 @@ export function SettingsForm({
 
           <SettingsCollapsible
             summary="Early loss cut (optional band exit)"
+            detail={
+              lossCutEnabled
+                ? `On · ${lossCutMinPct}–${lossCutMaxPct}% toward stop`
+                : "Off"
+            }
             defaultOpen={lossCutEnabled}
           >
             <SettingsFieldGroup className="mt-3">
@@ -670,6 +682,7 @@ export function SettingsForm({
             <SettingsFieldGroup>
           <SettingsField
             id="max_hold_minutes"
+            fieldKey="max_hold_minutes"
             label="Max hold (minutes)"
             description={SETTING_DESCRIPTIONS.max_hold_minutes}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.max_hold_minutes}
@@ -711,6 +724,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="jev_sell_exit_threshold"
+            fieldKey="jev_sell_exit_threshold"
             label="Jev SELL exit (%)"
             description={SETTING_DESCRIPTIONS.jev_sell_exit_threshold}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.jev_sell_exit_threshold}
@@ -737,6 +751,7 @@ export function SettingsForm({
             <SettingsFieldGroup>
           <SettingsField
             id="reentry_cooldown_minutes"
+            fieldKey="reentry_cooldown_minutes"
             label="Re-entry cooldown (minutes)"
             description={SETTING_DESCRIPTIONS.reentry_cooldown_minutes}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.reentry_cooldown_minutes}
@@ -755,6 +770,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="max_entries_per_symbol_per_day"
+            fieldKey="max_entries_per_symbol_per_day"
             label="Max entries per symbol (day)"
             description={SETTING_DESCRIPTIONS.max_entries_per_symbol_per_day}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.max_entries_per_symbol_per_day}
@@ -778,9 +794,18 @@ export function SettingsForm({
             title="Entry filters"
             description="Hard gates on share price and volume after a qualifying BUY."
           >
+            <p className="text-[11px] leading-relaxed text-zinc-600 sm:col-span-2">
+              RSI max 70, spread 0.15%, and EMA-20 requirement come from trader{" "}
+              <code className="text-zinc-500">.env</code> — edit on the{" "}
+              <a href="/strategy#entry-filters" className="text-emerald-500/80 hover:text-emerald-400">
+                Strategy
+              </a>{" "}
+              page for details.
+            </p>
             <SettingsFieldGroup>
           <SettingsField
             id="min_volume_ratio"
+            fieldKey="min_volume_ratio"
             label="Min volume ratio"
             description={SETTING_DESCRIPTIONS.min_volume_ratio}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.min_volume_ratio}
@@ -798,6 +823,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="min_share_price"
+            fieldKey="min_share_price"
             label="Min share price ($)"
             description={SETTING_DESCRIPTIONS.min_share_price}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.min_share_price}
@@ -816,6 +842,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="min_dollar_volume"
+            fieldKey="min_dollar_volume"
             label="Min dollar volume ($)"
             description={SETTING_DESCRIPTIONS.min_dollar_volume}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.min_dollar_volume}

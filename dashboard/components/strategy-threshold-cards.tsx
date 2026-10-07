@@ -4,10 +4,13 @@ import { formatRotationSessionPct } from "@/lib/format-rotation-session";
 import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
 import type { Settings } from "@/lib/types/database";
 
+type CardSource = "settings" | "env";
+
 type Card = {
   title: string;
   value: string;
   blurb: string;
+  source: CardSource;
   diagram?: Parameters<typeof StrategyDiagram>[0]["type"];
   diagramVariant?: "default" | "blocked" | "low";
   maxEntrySlots?: number;
@@ -25,17 +28,20 @@ function buildCards(settings: Settings, benchmark: string): Card[] {
       title: "RSI max",
       value: String(STRATEGY_FILTER_THRESHOLDS.maxRsi),
       blurb: "Blocks overbought entries",
+      source: "env",
       diagram: "rsi",
     },
     {
       title: "Spread max",
       value: `${(STRATEGY_FILTER_THRESHOLDS.maxSpreadPct * 100).toFixed(2)}%`,
       blurb: "Skips wide quotes",
+      source: "env",
     },
     {
       title: "EMA-20",
       value: STRATEGY_FILTER_THRESHOLDS.requirePriceAboveEma20 ? "Required" : "Off",
       blurb: "Price above trend; warmup until ~20 bars",
+      source: "env",
       diagram: "ema",
     },
     {
@@ -44,11 +50,13 @@ function buildCards(settings: Settings, benchmark: string): Card[] {
         ? `${STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct}%`
         : "Off (no benchmark)",
       blurb: benchmark ? "Broad-market headwind gate" : "Set benchmark in Settings",
+      source: "settings",
     },
     {
       title: "Min volume ratio",
       value: volumeRatio > 0 ? String(volumeRatio) : "Off",
       blurb: "Thin volume filter",
+      source: "settings",
       diagram: "volume",
       diagramVariant: "low",
     },
@@ -59,12 +67,14 @@ function buildCards(settings: Settings, benchmark: string): Card[] {
           ? `${settings.reentry_cooldown_minutes} min`
           : "Off",
       blurb: "After exit, same symbol",
+      source: "settings",
       diagram: "reentry",
     },
     {
       title: "Max entries / symbol / day",
       value: maxEntries > 0 ? String(maxEntries) : "Off",
       blurb: "Stops repeat stop churn",
+      source: "settings",
       diagram: "maxEntries",
       maxEntrySlots: maxEntries > 0 ? maxEntries : 3,
     },
@@ -74,6 +84,7 @@ function buildCards(settings: Settings, benchmark: string): Card[] {
       blurb: settings.watchlist_rotation_enabled
         ? "Active list session gate"
         : "Rotation off in Settings",
+      source: "settings",
       diagram: "sessionOpen",
       diagramVariant: rotation != null ? "default" : undefined,
     },
@@ -99,7 +110,18 @@ export function StrategyThresholdCards({ settings }: { settings: Settings }) {
             className="flex gap-3 rounded-lg border border-zinc-800/80 bg-zinc-950/30 px-3 py-2.5"
           >
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-medium text-zinc-300">{card.title}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[11px] font-medium text-zinc-300">{card.title}</p>
+                <span
+                  className={
+                    card.source === "settings"
+                      ? "rounded border border-emerald-900/40 bg-emerald-950/30 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-emerald-400/90"
+                      : "rounded border border-zinc-700/80 bg-zinc-900/50 px-1 py-px text-[9px] font-medium uppercase tracking-wide text-zinc-500"
+                  }
+                >
+                  {card.source === "settings" ? "Settings" : "Trader .env"}
+                </span>
+              </div>
               <p className="mt-0.5 text-sm tabular-nums text-zinc-100">{card.value}</p>
               <p className="mt-1 text-[11px] text-zinc-500">{card.blurb}</p>
             </div>

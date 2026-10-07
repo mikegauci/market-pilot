@@ -4,6 +4,10 @@ import { useMemo, useState } from "react";
 import { EntryBlockedSymbols } from "@/components/entry-blocked-symbols";
 import { WatchlistPicker } from "@/components/watchlist-picker";
 import {
+  SettingsFieldChipRow,
+  SettingsFieldHelp,
+} from "@/components/settings-field-help";
+import {
   FieldDescription,
   SettingsSubsection,
 } from "@/components/settings-section";
@@ -136,6 +140,8 @@ export function WatchlistSettingsSection({ settings }: Props) {
                 <FieldDescription title="Blank = off. 0 = only flat or green vs the RTH open.">
                   Red-day names score poorly and can leave the active list (open trades stay).
                 </FieldDescription>
+                <SettingsFieldChipRow fieldKey="rotation_min_session_change_pct" />
+                <SettingsFieldHelp fieldKey="rotation_min_session_change_pct" />
               </div>
             </div>
           ) : (

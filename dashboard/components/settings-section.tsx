@@ -1,6 +1,14 @@
+import {
+  SettingsFieldChipRow,
+  SettingsFieldHelp,
+} from "@/components/settings-field-help";
 import { Label } from "@/components/ui/label";
+import type { SettingsFieldMetaKey } from "@/lib/settings-field-meta";
+import type { SettingDescriptionKey } from "@/lib/settings-form-descriptions";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
+
+type SettingFieldKey = SettingDescriptionKey | SettingsFieldMetaKey;
 
 export function SettingsSection({
   id,
@@ -82,12 +90,14 @@ export function SettingsSubsection({
 export function FieldDescription({
   children,
   title,
+  id,
 }: {
-  children: string;
+  children: ReactNode;
   title?: string;
+  id?: string;
 }) {
   return (
-    <p className="text-xs leading-relaxed text-zinc-600" title={title}>
+    <p id={id} className="text-xs leading-relaxed text-zinc-600" title={title}>
       {children}
     </p>
   );
@@ -101,6 +111,8 @@ type SettingsFieldProps = {
   children: ReactNode;
   className?: string;
   fullWidth?: boolean;
+  /** Enables Learn more, example chips, and Strategy link when defined in settings-field-meta. */
+  fieldKey?: SettingFieldKey;
 };
 
 export function SettingsField({
@@ -111,7 +123,10 @@ export function SettingsField({
   children,
   className,
   fullWidth = false,
+  fieldKey,
 }: SettingsFieldProps) {
+  const describedBy = `${id}-desc`;
+
   return (
     <div
       className={cn(
@@ -126,19 +141,28 @@ export function SettingsField({
         </Label>
         <div className="w-full sm:max-w-[11rem] sm:shrink-0">{children}</div>
       </div>
-      <FieldDescription title={descriptionTitle ?? description}>
+      <FieldDescription id={describedBy} title={descriptionTitle ?? description}>
         {description}
       </FieldDescription>
+      {fieldKey ? (
+        <>
+          <SettingsFieldChipRow fieldKey={fieldKey as SettingsFieldMetaKey} />
+          <SettingsFieldHelp fieldKey={fieldKey} />
+        </>
+      ) : null}
     </div>
   );
 }
 
 export function SettingsCollapsible({
   summary,
+  detail,
   children,
   defaultOpen = false,
 }: {
   summary: string;
+  /** Shown after the title when collapsed (e.g. current on/off state). */
+  detail?: string;
   children: ReactNode;
   defaultOpen?: boolean;
 }) {
@@ -147,10 +171,15 @@ export function SettingsCollapsible({
       className="group rounded-lg border border-zinc-800/60 bg-zinc-950/30"
       open={defaultOpen}
     >
-      <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-medium text-zinc-300 marker:content-none [&::-webkit-details-marker]:hidden">
-        <span className="inline-flex items-center gap-2">
-          <span className="text-zinc-500 transition group-open:rotate-90">▸</span>
-          {summary}
+      <summary className="cursor-pointer list-none px-3 py-2.5 marker:content-none [&::-webkit-details-marker]:hidden">
+        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="inline-flex items-center gap-2 text-sm font-medium text-zinc-300">
+            <span className="text-zinc-500 transition group-open:rotate-90">▸</span>
+            {summary}
+          </span>
+          {detail ? (
+            <span className="text-xs font-normal text-zinc-500">{detail}</span>
+          ) : null}
         </span>
       </summary>
       <div className="border-t border-zinc-800/60 px-3 pb-3 pt-2">{children}</div>

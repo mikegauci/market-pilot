@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LiveStrategyGrid } from "@/components/live-strategy-grid";
 import { LatestPredictionsProvider } from "@/lib/latest-predictions-context";
 import { StrategyGuide } from "@/components/strategy-guide";
+import { StrategySkipGlossary } from "@/components/strategy-skip-glossary";
 import { TradeDecisionFlow } from "@/components/strategy-diagrams";
 import { getLatestPredictionsBySymbol, getSettings } from "@/lib/queries";
 import { formatPercent } from "@/lib/utils";
@@ -66,6 +67,8 @@ export default async function StrategyPage() {
           <LiveStrategyGrid predictions={latestPredictions} settings={settings} />
         </LatestPredictionsProvider>
       )}
+
+      <StrategySkipGlossary />
 
       <StrategyGuide settings={settings} benchmarkSymbol={settings?.benchmark_symbol ?? ""} />
     </div>

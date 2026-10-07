@@ -194,7 +194,7 @@ export function StrategyGuide({
           <StrategyThresholdCards settings={settings} />
         ) : null}
 
-        <div>
+        <div id="jev-signals" className="scroll-mt-6">
           <p className="text-xs font-medium uppercase tracking-wide text-emerald-500/80">
             Signals Jev reads
           </p>
@@ -203,7 +203,7 @@ export function StrategyGuide({
           </div>
         </div>
 
-        <div>
+        <div id="entry-filters" className="scroll-mt-6">
           <p className="text-xs font-medium uppercase tracking-wide text-amber-500/80">
             Entry filters (after Jev says BUY)
           </p>
@@ -212,7 +212,7 @@ export function StrategyGuide({
           </div>
         </div>
 
-        <div>
+        <div id="risk-caps" className="scroll-mt-6">
           <p className="text-xs font-medium uppercase tracking-wide text-orange-500/80">
             Risk caps
           </p>
@@ -226,7 +226,7 @@ export function StrategyGuide({
           </div>
         </div>
 
-        <div>
+        <div id="rotation" className="scroll-mt-6">
           <p className="text-xs font-medium uppercase tracking-wide text-sky-500/80">
             Watchlist rotation
           </p>
