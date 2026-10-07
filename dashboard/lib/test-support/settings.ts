@@ -34,6 +34,7 @@ export function settingsFixture(overrides: Partial<Settings> = {}): Settings {
     watchlist_rotation_interval_minutes: 15,
     watchlist_max_swaps_per_rotation: 2,
     watchlist_last_rotation_note: "",
+    watchlist_rotation_history: [],
     entry_blocked_symbols: [],
     entry_blocked_at: {},
     profit_take_enabled: false,

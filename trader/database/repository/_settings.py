@@ -40,7 +40,7 @@ class SupabaseSettingsMixin:
         "watchlist_pool, watchlist_active, watchlist_rotation_enabled, "
         "watchlist_active_size, watchlist_rotation_interval_minutes, "
         "watchlist_max_swaps_per_rotation, watchlist_last_rotation_note, "
-        "entry_blocked_symbols, entry_blocked_at"
+        "watchlist_rotation_history, entry_blocked_symbols, entry_blocked_at"
     )
 
     @staticmethod
@@ -77,6 +77,7 @@ class SupabaseSettingsMixin:
         data.setdefault("watchlist_rotation_interval_minutes", 15)
         data.setdefault("watchlist_max_swaps_per_rotation", 2)
         data.setdefault("watchlist_last_rotation_note", "")
+        data.setdefault("watchlist_rotation_history", [])
         data.setdefault("entry_blocked_symbols", [])
         data.setdefault("entry_blocked_at", {})
 
@@ -328,13 +329,37 @@ class SupabaseSettingsMixin:
         self.client.table("settings").update(payload).eq("id", 1).execute()
 
     @_db_synchronized
-    def save_watchlist_rotation(self, active: List[str], note: str) -> None:
+    def save_watchlist_rotation(
+        self,
+        active: List[str],
+        note: str,
+        *,
+        history_entry: Optional[dict] = None,
+    ) -> None:
         """Persist the bot-owned active list. Does not touch the manual watchlist or pool."""
-        self.client.table("settings").update(
-            {
-                "watchlist_active": [symbol.upper() for symbol in active],
-                "watchlist_last_rotation_note": note[:240],
-                "watchlist_last_rotation_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ).eq("id", 1).execute()
+        from watchlist.rotation_history import prepend_rotation_history
+
+        payload: dict = {
+            "watchlist_active": [symbol.upper() for symbol in active],
+            "watchlist_last_rotation_note": note[:240],
+            "watchlist_last_rotation_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if history_entry is not None:
+            existing: object = []
+            try:
+                row = (
+                    self.client.table("settings")
+                    .select("watchlist_rotation_history")
+                    .eq("id", 1)
+                    .single()
+                    .execute()
+                )
+                if row.data:
+                    existing = row.data.get("watchlist_rotation_history") or []
+            except Exception:
+                existing = []
+            payload["watchlist_rotation_history"] = prepend_rotation_history(
+                existing, history_entry
+            )
+        self.client.table("settings").update(payload).eq("id", 1).execute()

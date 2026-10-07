@@ -1,3 +1,7 @@
+import type { WatchlistRotationHistoryEntry } from "@/lib/watchlist-rotation-history";
+
+export type { WatchlistRotationHistoryEntry };
+
 export type BotStatus = {
   id: number;
   enabled: boolean;
@@ -60,6 +64,8 @@ export type Settings = {
   watchlist_max_swaps_per_rotation: number;
   watchlist_last_rotation_note: string;
   watchlist_last_rotation_at?: string | null;
+  /** Newest-first rotation / unblock events from the bot. */
+  watchlist_rotation_history: WatchlistRotationHistoryEntry[];
   /** Manual block: no new entries until unblocked or timed return to active. */
   entry_blocked_symbols: string[];
   /** UTC ISO timestamps keyed by symbol for timed unblock. */

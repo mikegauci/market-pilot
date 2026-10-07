@@ -1,4 +1,5 @@
 import type { Settings } from "@/lib/types/database";
+import { normalizeWatchlistRotationHistory } from "@/lib/watchlist-rotation-history";
 
 /** Row shape from Supabase before newer columns existed or were selected. */
 export type SettingsRow = Omit<
@@ -111,6 +112,9 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     watchlist_rotation_interval_minutes: raw.watchlist_rotation_interval_minutes ?? 15,
     watchlist_max_swaps_per_rotation: raw.watchlist_max_swaps_per_rotation ?? 2,
     watchlist_last_rotation_note: raw.watchlist_last_rotation_note ?? "",
+    watchlist_rotation_history: normalizeWatchlistRotationHistory(
+      raw.watchlist_rotation_history,
+    ),
     entry_blocked_symbols: (raw.entry_blocked_symbols ?? []).map((symbol) =>
       symbol.toUpperCase(),
     ),

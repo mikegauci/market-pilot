@@ -19,6 +19,10 @@ from watchlist.rotation import (
     rotate_active,
     score_candidate,
 )
+from watchlist.rotation_history import (
+    rotation_detail_history_entry,
+    rotation_swap_history_entry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +109,13 @@ def maybe_rotate_watchlist(
         note = "removed blocked symbols"
         if db is not None:
             try:
-                db.save_watchlist_rotation(current_active, note)
+                db.save_watchlist_rotation(
+                    current_active,
+                    note,
+                    history_entry=rotation_detail_history_entry(
+                        "Removed blocked symbols from the active list"
+                    ),
+                )
             except Exception as exc:
                 logger.warning("Could not persist trimmed active list: %s", exc)
         risk_settings = replace(
@@ -196,7 +206,13 @@ def maybe_rotate_watchlist(
         )
     if db is not None:
         try:
-            db.save_watchlist_rotation(result.active, result.note)
+            db.save_watchlist_rotation(
+                result.active,
+                result.note,
+                history_entry=rotation_swap_history_entry(
+                    result.swapped_in, result.swapped_out
+                ),
+            )
         except Exception as exc:
             logger.warning("Could not save watchlist rotation: %s", exc)
     return (

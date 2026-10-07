@@ -14,8 +14,10 @@ import { useLatestPredictions } from "@/lib/latest-predictions-context";
 import { watchlistMovesFromPredictions } from "@/lib/market-condition";
 import type { Settings } from "@/lib/types/database";
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
+import { WatchlistRotationHistoryPanel } from "@/components/watchlist-rotation-history-panel";
 import { formatCountdown } from "@/lib/entry-block-timing";
 import { useCountdownTo } from "@/lib/hooks/use-countdown-ms";
+import { normalizeWatchlistRotationHistory } from "@/lib/watchlist-rotation-history";
 
 type Props = {
   settings: Settings;
@@ -111,7 +113,10 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
     return new Map(moves.map((move) => [move.symbol.toUpperCase(), move.change5m]));
   }, [predictions, moveScope, benchmark]);
 
-  const hasMoveData = changeBySymbol.size > 0;
+  const rotationHistory = useMemo(
+    () => normalizeWatchlistRotationHistory(settings.watchlist_rotation_history),
+    [settings.watchlist_rotation_history],
+  );
 
   const nextRotationAtMs = useMemo(() => {
     const last = settings.watchlist_last_rotation_at;
@@ -158,21 +163,11 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
               ? `Jev checks these names. The bot swaps up to ${maxSwapsPerRotation} every ${rotationIntervalMin} minutes.`
               : "Symbols Jev monitors for entries. Add from the S&P 500 or any ticker."}
           </p>
-          {rotating && settings.watchlist_last_rotation_note ? (
-            <p className="text-xs text-zinc-400">
-              Last scan: {settings.watchlist_last_rotation_note}
-            </p>
-          ) : null}
           {rotating ? (
             <p className="text-xs text-zinc-400">
               {rotationCountdownMs != null
                 ? `Next list scan in ${formatCountdown(rotationCountdownMs)}`
                 : `List scan every ${rotationIntervalMin} minutes (first run pending)`}
-            </p>
-          ) : null}
-          {hasMoveData ? (
-            <p className="text-xs text-zinc-500">
-              Green / amber / red = 5m move from the last bot scan.
             </p>
           ) : null}
         </div>
@@ -183,6 +178,15 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
           Settings
         </Link>
       </div>
+      {rotating ? (
+        <div className="mt-2">
+          <WatchlistRotationHistoryPanel
+            history={rotationHistory}
+            lastNote={settings.watchlist_last_rotation_note}
+            lastAt={settings.watchlist_last_rotation_at}
+          />
+        </div>
+      ) : null}
       <div className="mt-3 flex flex-wrap gap-1.5">
         {symbols.length ? (
           symbols.map((symbol) => (

@@ -203,7 +203,10 @@ def rotate_active(
     if not swapped_in and not swapped_out:
         note = "no change"
     else:
-        incoming = ", ".join(swapped_in) if swapped_in else "-"
-        outgoing = ", ".join(swapped_out) if swapped_out else "-"
-        note = f"in {incoming} / out {outgoing}"
+        parts: list[str] = []
+        if swapped_in:
+            parts.append(f"added {', '.join(swapped_in)}")
+        if swapped_out:
+            parts.append(f"removed {', '.join(swapped_out)}")
+        note = " · ".join(parts)
     return RotationResult(base, note, swapped_in, swapped_out)

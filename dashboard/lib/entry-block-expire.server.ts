@@ -7,6 +7,10 @@ import {
   normalizeEntryBlockedAt,
 } from "@/lib/entry-block-timing";
 import { removeEntryBlockedSymbol } from "@/lib/entry-blocked-symbols";
+import {
+  normalizeWatchlistRotationHistory,
+  prependWatchlistRotationHistory,
+} from "@/lib/watchlist-rotation-history";
 import { normalizeSettings, type SettingsRow } from "@/lib/normalize-settings";
 
 type SettingsBlockRow = Pick<
@@ -18,6 +22,7 @@ type SettingsBlockRow = Pick<
   | "watchlist_active_size"
   | "watchlist_pool"
   | "watchlist_rotation_interval_minutes"
+  | "watchlist_rotation_history"
 >;
 
 /** Drop timed-out blocks and restore symbols to the active list (rotation mode). */
@@ -27,7 +32,7 @@ export async function expireEntryBlocksIfDue(
   const { data, error } = await supabase
     .from("settings")
     .select(
-      "entry_blocked_symbols, entry_blocked_at, watchlist_rotation_enabled, watchlist_active, watchlist_active_size, watchlist_pool, watchlist_rotation_interval_minutes",
+      "entry_blocked_symbols, entry_blocked_at, watchlist_rotation_enabled, watchlist_active, watchlist_active_size, watchlist_pool, watchlist_rotation_interval_minutes, watchlist_rotation_history",
     )
     .eq("id", 1)
     .single();
@@ -81,8 +86,14 @@ export async function expireEntryBlocksIfDue(
       );
     }
     payload.watchlist_active = active;
-    payload.watchlist_last_rotation_note = `unblocked ${expired.join(", ")} (timed)`;
+    const note = `Unblocked ${expired.join(", ")} (timed)`;
+    payload.watchlist_last_rotation_note = note;
     payload.watchlist_last_rotation_at = new Date().toISOString();
+    const history = normalizeWatchlistRotationHistory(row.watchlist_rotation_history);
+    payload.watchlist_rotation_history = prependWatchlistRotationHistory(history, {
+      at: payload.watchlist_last_rotation_at as string,
+      detail: note,
+    });
   }
 
   await supabase.from("settings").update(payload).eq("id", 1);
