@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { PREDICTION_FEED_COLUMNS } from "@/lib/prediction-columns";
-import { readPredictionFeed } from "@/lib/supabase/data-reads";
+import { readPredictionFeed, readPredictionFeedSymbols } from "@/lib/supabase/data-reads";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 describe("readPredictionFeed", () => {
@@ -101,5 +101,26 @@ describe("readPredictionFeed", () => {
     expect(error).toBeNull();
     expect(data).toHaveLength(1);
     expect(data[0]?.symbol).toBe("MSFT");
+  });
+});
+
+describe("readPredictionFeedSymbols", () => {
+  it("loads distinct symbols via RPC", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{ symbol: "AAPL" }, { symbol: "MSFT" }],
+      error: null,
+    });
+    const supabase = { rpc } as unknown as SupabaseClient;
+
+    const { data, error } = await readPredictionFeedSymbols(
+      supabase,
+      "2026-10-06T13:30:00.000Z",
+    );
+
+    expect(error).toBeNull();
+    expect(rpc).toHaveBeenCalledWith("list_prediction_feed_symbols", {
+      p_since: "2026-10-06T13:30:00.000Z",
+    });
+    expect(data).toEqual(["AAPL", "MSFT"]);
   });
 });

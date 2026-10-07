@@ -336,16 +336,13 @@ export async function readPredictionFeedSymbols(
   supabase: SupabaseClient,
   sinceIso: string,
 ): Promise<SupabaseRead<string[]>> {
-  const { data, error } = await supabase
-    .from("predictions")
-    .select("symbol")
-    .gte("timestamp", sinceIso)
-    .order("symbol", { ascending: true })
-    .limit(5000);
+  const { data, error } = await supabase.rpc("list_prediction_feed_symbols", {
+    p_since: sinceIso,
+  });
   if (error) {
     return { data: [], error };
   }
-  const symbols = [...new Set((data ?? []).map((row) => row.symbol as string))].sort();
+  const symbols = (data ?? []).map((row: { symbol: string }) => row.symbol).filter(Boolean);
   return { data: symbols, error: null };
 }
 
