@@ -49,7 +49,7 @@ export const SETTING_DESCRIPTIONS_FULL = {
   jev_sell_exit_threshold:
     "Only soft-exit on a Jev SELL when sell probability reaches this % (and sell is dominant). Higher values let bracket take-profit work more often.",
   reentry_cooldown_minutes:
-    "After exiting a symbol, block new entries in that symbol for this many minutes (0 = off). Reduces immediate re-chase after winners or stops.",
+    "After any exit in a symbol — stop, take profit, Jev SELL, time cap, or manual close — block new entries in that symbol for this many minutes (0 = off). Applies whether the trade was a win or a loss.",
   max_entries_per_symbol_per_day:
     "Cap how many new trades the bot may open in the same symbol per US trading day (0 = off). Helps after repeated stop-outs.",
   rotation_min_session_change_pct:
@@ -89,7 +89,8 @@ export const SETTING_DESCRIPTIONS = {
   max_hold_minutes: "Force-close after N minutes (0 = off).",
   min_hold_minutes: "No Jev SELL exit until N minutes (0 = off).",
   jev_sell_exit_threshold: "Min Jev SELL % required to soft-exit.",
-  reentry_cooldown_minutes: "No re-entry in same symbol for N minutes (0 = off).",
+  reentry_cooldown_minutes:
+    "After any exit, wait N minutes before a new entry in that symbol (0 = off).",
   max_entries_per_symbol_per_day: "Max new entries per symbol per day (0 = off).",
   rotation_min_session_change_pct:
     "Rotation only: min % since market open (blank = off, 0 = flat or up).",

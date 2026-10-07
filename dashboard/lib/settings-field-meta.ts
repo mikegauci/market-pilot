@@ -31,7 +31,8 @@ export const SETTING_FIELD_EXAMPLES: Partial<Record<SettingDescriptionKey, strin
   max_hold_minutes: "0 → no time cap; use stop, take profit, and Jev SELL.",
   min_hold_minutes: "15 → no Jev SELL exit for the first 15 minutes (stop still applies).",
   jev_sell_exit_threshold: "95 → soft-exit only on very strong Jev SELL.",
-  reentry_cooldown_minutes: "45 → no re-entry in the same symbol for 45 minutes after exit.",
+  reentry_cooldown_minutes:
+    "10 → after any exit (win or loss), wait 10 minutes before buying that symbol again.",
   max_entries_per_symbol_per_day: "3 → block a fourth new entry in that symbol today.",
   rotation_min_session_change_pct:
     "0 → rotation favors flat or green since open; blank → ignore day color.",
