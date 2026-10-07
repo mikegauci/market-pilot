@@ -161,7 +161,8 @@ export function computeLossCutPathStats(
   }
 
   const neverUnderwater = maxProgress == null;
-  const maxStopPathProgressPct = neverUnderwater ? null : round1(maxProgress * 100);
+  const maxStopPathProgressPct =
+    maxProgress == null ? null : round1(maxProgress * 100);
   const reachedMin = maxProgress != null && maxProgress >= minFraction;
 
   return {
@@ -232,9 +233,8 @@ export function computeProfitTakePathStats(
 
   const neverReachedProfit =
     maxProgress == null || maxProgress <= 0;
-  const maxPathProgressPct = neverReachedProfit
-    ? null
-    : round1(maxProgress * 100);
+  const maxPathProgressPct =
+    maxProgress != null && maxProgress > 0 ? round1(maxProgress * 100) : null;
   const reachedMin =
     maxProgress != null && maxProgress >= minFraction;
 
