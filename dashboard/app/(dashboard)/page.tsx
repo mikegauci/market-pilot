@@ -6,6 +6,7 @@ import { PositionsGrid } from "@/components/positions-grid";
 import { TradesTable } from "@/components/trades-table";
 import { tradingDayStartUtc } from "@/lib/market-hours";
 import {
+  getActiveEntryCommands,
   getActivePositionCommands,
   getActiveTradeCommands,
   getBotStatus,
@@ -26,6 +27,7 @@ export default async function OverviewPage() {
     positions,
     openTrades,
     tradeCommands,
+    entryCommands,
     positionCommands,
     trades,
     settings,
@@ -36,6 +38,7 @@ export default async function OverviewPage() {
     getPositions(),
     getOpenTrades(),
     getActiveTradeCommands(),
+    getActiveEntryCommands(),
     getActivePositionCommands(),
     getTradesForTradingDay(tradingDayStartIso),
     getSettings(),
@@ -59,6 +62,8 @@ export default async function OverviewPage() {
           {settings ? (
             <OverviewWatchlistCard
               settings={settings}
+              botStatus={botStatus}
+              entryCommands={entryCommands}
               openSymbols={openTrades.map((trade) => trade.symbol)}
             />
           ) : null}

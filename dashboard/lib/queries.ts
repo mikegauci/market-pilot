@@ -18,6 +18,7 @@ import {
 import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
 import { resolveTradeAccountScope, type TradeAccountScope } from "@/lib/trade-account-scope";
 import {
+  readActiveEntryCommands,
   readActivePositionCommands,
   readActiveTradeCommands,
   readAllTrades,
@@ -45,6 +46,7 @@ import type {
   IbkrAccountProfile,
   PortfolioSnapshot,
   Position,
+  EntryCommand,
   PositionCommand,
   Prediction,
   SessionBriefRow,
@@ -221,6 +223,12 @@ export async function getActiveTradeCommands(): Promise<TradeCommand[]> {
   const supabase = await createClient();
   const { data } = await readActiveTradeCommands(supabase);
   return data;
+}
+
+export async function getActiveEntryCommands(): Promise<EntryCommand[]> {
+  const supabase = await createClient();
+  const { data } = await readActiveEntryCommands(supabase);
+  return data ?? [];
 }
 
 export async function getActivePositionCommands(): Promise<PositionCommand[]> {

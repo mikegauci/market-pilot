@@ -406,6 +406,12 @@ def run() -> int:
                 "Reclaimed %s stale manual close command(s) on startup",
                 reclaimed,
             )
+        entry_reclaimed = db.reclaim_stale_entry_commands()
+        if entry_reclaimed:
+            logger.info(
+                "Reclaimed %s stale manual entry command(s) on startup",
+                entry_reclaimed,
+            )
 
         if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
             reconciled = reconcile_orphan_ibkr_positions(

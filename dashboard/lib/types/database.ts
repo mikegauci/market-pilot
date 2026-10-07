@@ -228,6 +228,18 @@ export type PositionCommand = {
   error: string | null;
 };
 
+export type EntryCommand = {
+  id: string;
+  symbol: string;
+  quantity: number | null;
+  command: "buy";
+  status: "pending" | "processing" | "completed" | "failed";
+  reason: string;
+  requested_at: string;
+  processed_at: string | null;
+  error: string | null;
+};
+
 export type Position = {
   id: string;
   symbol: string;

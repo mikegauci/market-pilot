@@ -109,6 +109,69 @@ class SupabaseCommandsMixin:
         ).eq("id", command_id).execute()
 
     @_db_synchronized
+    def reclaim_stale_entry_commands(self, stale_after_sec: float = 120.0) -> int:
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(seconds=stale_after_sec)
+        ).isoformat()
+        result = (
+            self.client.table("entry_commands")
+            .update({"status": "pending", "processed_at": None, "error": None})
+            .eq("status", "processing")
+            .lt("processed_at", cutoff)
+            .execute()
+        )
+        return len(result.data or [])
+
+    @_db_synchronized
+    def get_pending_entry_commands(self) -> List[dict]:
+        result = (
+            self.client.table("entry_commands")
+            .select("id, symbol, quantity, command, reason, requested_at")
+            .eq("status", "pending")
+            .order("requested_at")
+            .limit(10)
+            .execute()
+        )
+        return list(result.data or [])
+
+    @_db_synchronized
+    def claim_entry_command(self, command_id: str) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        result = (
+            self.client.table("entry_commands")
+            .update({"status": "processing", "processed_at": now})
+            .eq("id", command_id)
+            .eq("status", "pending")
+            .execute()
+        )
+        return bool(result.data)
+
+    @_db_synchronized
+    def complete_entry_command(self, command_id: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("entry_commands").update(
+            {"status": "completed", "processed_at": now, "error": None}
+        ).eq("id", command_id).execute()
+
+    @_db_synchronized
+    def fail_entry_command(self, command_id: str, error: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.client.table("entry_commands").update(
+            {"status": "failed", "processed_at": now, "error": error[:500]}
+        ).eq("id", command_id).execute()
+
+    @_db_synchronized
+    def defer_entry_command(self, command_id: str, reason: str) -> None:
+        """Return a claimed command to pending for transient conditions (retried next cycle)."""
+        self.client.table("entry_commands").update(
+            {
+                "status": "pending",
+                "processed_at": None,
+                "error": reason[:500],
+            }
+        ).eq("id", command_id).execute()
+
+    @_db_synchronized
     def record_error(
         self,
         message: str,

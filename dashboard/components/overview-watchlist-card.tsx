@@ -2,14 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { WatchlistPicker } from "@/components/watchlist-picker";
 import { WatchlistMoveChip } from "@/components/watchlist-move-chip";
 import { Card, CardTitle } from "@/components/ui/card";
 import { EntryBlockedSymbols } from "@/components/entry-blocked-symbols";
 import { useReadOnly } from "@/components/read-only-provider";
+import { ManualBuyButton } from "@/components/manual-buy-button";
 import { blockSymbolFromEntries, updateWatchlist } from "@/lib/actions";
+import { isTraderOnline } from "@/lib/trader-status";
+import type { BotStatus, EntryCommand } from "@/lib/types/database";
 import { mergeEntryBlockedSymbols } from "@/lib/entry-blocked-symbols";
+import { fetchActiveEntryCommands } from "@/lib/data-client";
+import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import { useLatestPredictions } from "@/lib/latest-predictions-context";
 import { watchlistMovesFromPredictions } from "@/lib/market-condition";
 import type { Settings } from "@/lib/types/database";
@@ -21,11 +26,18 @@ import { normalizeWatchlistRotationHistory } from "@/lib/watchlist-rotation-hist
 
 type Props = {
   settings: Settings;
+  botStatus: BotStatus | null;
+  entryCommands?: EntryCommand[];
   /** Symbols with an open long — block is disabled until the position closes. */
   openSymbols?: string[];
 };
 
-export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
+export function OverviewWatchlistCard({
+  settings,
+  botStatus,
+  entryCommands: initialEntryCommands = [],
+  openSymbols = [],
+}: Props) {
   const readOnly = useReadOnly();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -47,6 +59,23 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
     () => new Set(openSymbols.map((symbol) => symbol.toUpperCase())),
     [openSymbols],
   );
+  const traderOnline = isTraderOnline(botStatus?.last_heartbeat ?? null);
+  const fetchEntryCommands = useCallback(() => fetchActiveEntryCommands(), []);
+  const liveEntryCommands = useLiveQuery(
+    initialEntryCommands,
+    fetchEntryCommands,
+    ["entry_commands"],
+  );
+  const entryCommandBySymbol = useMemo(() => {
+    const map = new Map<string, EntryCommand>();
+    for (const command of liveEntryCommands) {
+      const key = command.symbol.toUpperCase();
+      if (!map.has(key)) {
+        map.set(key, command);
+      }
+    }
+    return map;
+  }, [liveEntryCommands]);
 
   function persistWatchlist(next: string[]) {
     setSaveError(null);
@@ -196,9 +225,45 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
               change5m={changeBySymbol.get(symbol.toUpperCase())}
               trailing={
                 rotating ? (
-                  blockButton(symbol)
+                  <span className="inline-flex items-center gap-0.5">
+                    <ManualBuyButton
+                      symbol={symbol}
+                      traderOnline={traderOnline}
+                      positionOpen={openSymbolSet.has(symbol.toUpperCase())}
+                      pending={
+                        entryCommandBySymbol.get(symbol.toUpperCase())?.status ===
+                          "pending" ||
+                        entryCommandBySymbol.get(symbol.toUpperCase())?.status ===
+                          "processing"
+                      }
+                      failed={
+                        entryCommandBySymbol.get(symbol.toUpperCase())?.status === "failed"
+                      }
+                      errorMessage={
+                        entryCommandBySymbol.get(symbol.toUpperCase())?.error ?? null
+                      }
+                    />
+                    {blockButton(symbol)}
+                  </span>
                 ) : readOnly ? null : (
-                  <span className="inline-flex items-center">
+                  <span className="inline-flex items-center gap-0.5">
+                    <ManualBuyButton
+                      symbol={symbol}
+                      traderOnline={traderOnline}
+                      positionOpen={openSymbolSet.has(symbol.toUpperCase())}
+                      pending={
+                        entryCommandBySymbol.get(symbol.toUpperCase())?.status ===
+                          "pending" ||
+                        entryCommandBySymbol.get(symbol.toUpperCase())?.status ===
+                          "processing"
+                      }
+                      failed={
+                        entryCommandBySymbol.get(symbol.toUpperCase())?.status === "failed"
+                      }
+                      errorMessage={
+                        entryCommandBySymbol.get(symbol.toUpperCase())?.error ?? null
+                      }
+                    />
                     {blockButton(symbol)}
                     <button
                       type="button"

@@ -34,6 +34,7 @@ import type {
   Settings,
   SymbolBar,
   Trade,
+  EntryCommand,
   PositionCommand,
   TradeCommand,
 } from "@/lib/types/database";
@@ -122,6 +123,17 @@ export async function fetchOpenTrades(): Promise<Trade[]> {
   if (error) {
     logFetchError("trades", error.message);
     throw new Error(error.message);
+  }
+  return data;
+}
+
+export async function fetchActiveEntryCommands(): Promise<EntryCommand[]> {
+  const supabase = createClient();
+  const { readActiveEntryCommands } = await import("@/lib/supabase/data-reads");
+  const { data, error } = await readActiveEntryCommands(supabase);
+  if (error) {
+    logFetchError("entry_commands", error.message);
+    return [];
   }
   return data;
 }

@@ -233,8 +233,10 @@ class RiskManager:
         *,
         strategy_config: Optional[StrategyConfig] = None,
         atr_pct: Optional[float] = None,
+        manual: bool = False,
+        quantity_override: Optional[float] = None,
     ) -> TradeDecision:
-        if not bot_enabled:
+        if not bot_enabled and not manual:
             return TradeDecision(False, "bot_disabled")
 
         if state.price <= 0:
@@ -271,11 +273,22 @@ class RiskManager:
         strat = strategy_config or StrategyConfig()
         stop_pct, take_pct = self.resolve_stop_take_pct(strat, self.settings, atr_pct)
 
-        sizing = self.compute_position_size(state.price, stop_pct=stop_pct)
-        if sizing is None:
-            return TradeDecision(False, "position_too_small")
-
-        quantity, position_value = sizing
+        if quantity_override is not None:
+            quantity = math.floor(float(quantity_override))
+            if quantity < 1:
+                return TradeDecision(False, "position_too_small")
+            entry_for_size = state.price
+            quote = quotes_by_symbol.get(state.symbol)
+            if quote is not None and quote.ask is not None and quote.ask > 0:
+                entry_for_size = quote.ask
+            position_value = quantity * entry_for_size
+            if position_value > self.settings.max_position_size:
+                return TradeDecision(False, "max_position_size")
+        else:
+            sizing = self.compute_position_size(state.price, stop_pct=stop_pct)
+            if sizing is None:
+                return TradeDecision(False, "position_too_small")
+            quantity, position_value = sizing
 
         if position_value > self._available_cash():
             return TradeDecision(False, "insufficient_capital")

@@ -108,6 +108,7 @@ def run_eval_cycle(
             ibkr=ctx.ibkr,
             mock=ctx.mock,
             minute_bars=ctx.minute_bars,
+            bar_store=ctx.bar_store,
             risk_manager=ctx.risk_manager,
             scratch=scratch,
             runtime=runtime,

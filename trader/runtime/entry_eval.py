@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass, field, replace
 from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
-from broker.ibkr import (
-    IBKRClient,
-    is_kid_document_rejection,
-    is_permanent_ibkr_eligibility_rejection,
-)
+from broker.entry_open import open_approved_trade
+from broker.ibkr import IBKRClient, is_kid_document_rejection
 from config import Settings
 from database.prediction_payload import build_prediction_payload
 from database.supabase import SupabaseRepository
@@ -191,144 +187,57 @@ def process_ready_states(
                 )
                 if decision.approved and decision.trade:
                     trade = decision.trade
-                    if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():
-                        try:
-                            ibkr_skip_reason: Optional[str] = None
-                            now_mono = time.monotonic()
-                            if trade.symbol.upper() in runtime.ibkr_entry_blocked:
-                                ibkr_skip_reason = (
-                                    "ibkr_ineligible "
-                                    "(no trading permission / KID)"
-                                )
-                            else:
-                                cooldown_until = runtime.ibkr_entry_cooldown_until.get(
-                                    trade.symbol, 0.0
-                                )
-                                if now_mono < cooldown_until:
-                                    remaining = cooldown_until - now_mono
-                                    ibkr_skip_reason = (
-                                        f"ibkr_cooldown ({remaining:.0f}s left)"
-                                    )
-                                elif ibkr.has_pending_entry_order(trade.symbol):
-                                    ibkr_skip_reason = "ibkr_pending_entry_order"
-                                else:
-                                    try:
-                                        account = ibkr.get_account_summary()
-                                        if trade.position_value > account.buying_power:
-                                            ibkr_skip_reason = (
-                                                "ibkr_insufficient_buying_power "
-                                                f"(need ${trade.position_value:.0f}, "
-                                                f"have ${account.buying_power:.0f})"
-                                            )
-                                    except Exception as exc:
-                                        logger.warning(
-                                            "Could not verify IBKR buying power "
-                                            "for %s: %s",
-                                            trade.symbol,
-                                            exc,
-                                        )
-
-                            if ibkr_skip_reason:
-                                trade_skip_reason = ibkr_skip_reason
-                                logger.info(
-                                    "Skipping %s IBKR entry — %s",
-                                    trade.symbol,
-                                    ibkr_skip_reason,
-                                )
-                            else:
-                                bracket = ibkr.place_bracket_buy(
-                                    trade.symbol,
-                                    trade.quantity,
-                                    trade.stop_loss,
-                                    trade.take_profit,
-                                    fill_timeout_sec=settings.ibkr_fill_timeout_sec,
-                                )
-                                trade.execution_mode = "ibkr"
-                                trade.entry_price = bracket.fill_price
-                                trade.quantity = bracket.filled_quantity
-                                trade.position_value = (
-                                    bracket.fill_price * bracket.filled_quantity
-                                )
-                                trade.ibkr_parent_order_id = bracket.parent_order_id
-                                trade.ibkr_sl_order_id = bracket.sl_order_id
-                                trade.ibkr_tp_order_id = bracket.tp_order_id
-                                trade.entry_commission = bracket.entry_commission
-                                trade.ibkr_account_id = active_ibkr_account_id
-                                db.insert_trade(trade)
-                                risk_manager.register_open_trade(trade)
-                                confirmation_tracker.reset(trade.symbol)
-                                trade_created = True
-                                result.portfolio_dirty = True
-                                logger.info(
-                                    "IBKR BUY %s x %.0f @ $%.2f "
-                                    "(SL $%.2f / TP $%.2f)",
-                                    trade.symbol,
-                                    trade.quantity,
-                                    trade.entry_price,
-                                    trade.stop_loss,
-                                    trade.take_profit,
-                                )
-                        except Exception as exc:
-                            if is_permanent_ibkr_eligibility_rejection(exc):
-                                blocked = trade.symbol.upper()
-                                runtime.ibkr_entry_blocked.add(blocked)
-                                trade_skip_reason = (
-                                    "ibkr_ineligible "
-                                    f"(no trading permission / KID: {exc})"
-                                )
+                    open_result = None
+                    try:
+                        open_result = open_approved_trade(
+                            trade,
+                            execution_mode=execution_mode,
+                            ibkr=ibkr,
+                            db=db,
+                            risk_manager=risk_manager,
+                            settings=settings,
+                            runtime=runtime,
+                            quotes_by_symbol=quotes_by_symbol,
+                            active_ibkr_account_id=active_ibkr_account_id,
+                            fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+                            on_opened=lambda opened: confirmation_tracker.reset(
+                                opened.symbol
+                            ),
+                        )
+                    except Exception as exc:
+                        trade_skip_reason = str(exc)
+                        logger.error("Entry failed for %s: %s", symbol, exc)
+                    if open_result is not None:
+                        if open_result.opened:
+                            trade_created = True
+                            result.portfolio_dirty = True
+                        elif open_result.skip_reason:
+                            trade_skip_reason = open_result.skip_reason
+                            if open_result.skip_reason.startswith("ibkr_order_failed"):
                                 logger.error(
-                                    "IBKR eligibility block for %s — "
-                                    "skipping further entries this session: %s",
-                                    blocked,
-                                    exc,
+                                    "IBKR order failed for %s: %s",
+                                    symbol,
+                                    open_result.skip_reason,
                                 )
-                            else:
-                                trade_skip_reason = f"ibkr_order_failed ({exc})"
-                                runtime.ibkr_entry_cooldown_until[symbol] = (
-                                    time.monotonic()
-                                    + settings.ibkr_entry_cooldown_sec
-                                )
-                                logger.error(
-                                    "IBKR order failed for %s: %s", symbol, exc
-                                )
-                                if "PendingSubmit" in str(exc) or "whyHeld" in str(
-                                    exc
+                                if "PendingSubmit" in open_result.skip_reason or "whyHeld" in (
+                                    open_result.skip_reason
                                 ):
                                     logger.error(
                                         "Hint: if orders stay PendingSubmit, disable "
                                         "order confirmations in TWS/Gateway "
                                         "(Global Config → Presets → Confirmations)."
                                     )
-                    elif execution_mode == ExecutionMode.IBKR:
-                        trade_skip_reason = "ibkr_not_connected"
-                        logger.warning(
-                            "Execution mode ibkr but IBKR not connected — skipping %s",
-                            symbol,
-                        )
-                    else:
-                        trade.execution_mode = "simulated"
-                        trade.ibkr_account_id = active_ibkr_account_id
-                        snap = risk_manager.get_portfolio_snapshot(quotes_by_symbol)
-                        try:
-                            db.insert_trade(
-                                trade,
-                                alert_daily_pnl=snap.daily_pnl,
-                                alert_equity=snap.equity,
-                            )
-                            risk_manager.register_open_trade(trade)
-                        except Exception:
-                            raise
-                        confirmation_tracker.reset(trade.symbol)
-                        trade_created = True
-                        result.portfolio_dirty = True
-                        logger.info(
-                            "Simulated BUY %s x %.0f @ $%.2f (SL $%.2f / TP $%.2f)",
-                            trade.symbol,
-                            trade.quantity,
-                            trade.entry_price,
-                            trade.stop_loss,
-                            trade.take_profit,
-                        )
+                            elif open_result.skip_reason == "ibkr_not_connected":
+                                logger.warning(
+                                    "Execution mode ibkr but IBKR not connected — skipping %s",
+                                    symbol,
+                                )
+                            else:
+                                logger.info(
+                                    "Skipping %s entry — %s",
+                                    symbol,
+                                    open_result.skip_reason,
+                                )
                 elif not decision.approved:
                     trade_skip_reason = decision.reason
                     logger.info("Risk: rejected %s — %s", symbol, decision.reason)

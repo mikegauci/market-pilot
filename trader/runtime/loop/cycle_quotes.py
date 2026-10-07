@@ -5,11 +5,13 @@ import time
 from typing import TYPE_CHECKING
 
 from broker.manual_close import process_manual_close_commands
+from broker.manual_entry import process_manual_entry_commands
 from broker.position_cover import process_position_cover_commands
 from broker.ibkr import MARKET_DATA_COMPETING_SESSION_MSG
 from config import Settings
 from database.supabase import SupabaseRepository
 from market.bar_aggregator import MinuteBarStore
+from market.bars import BarStore
 from models.types import DataSource, ExecutionMode
 from risk.manager import RiskManager
 from runtime.loop.eval_cycle_state import EvalCycleScratch
@@ -32,6 +34,7 @@ def run_cycle_quotes_and_commands(
     ibkr: "IBKRClient",
     mock: "MockMarketProvider",
     minute_bars: MinuteBarStore,
+    bar_store: BarStore,
     risk_manager: RiskManager | None,
     scratch: EvalCycleScratch,
     runtime: TraderRuntimeState,
@@ -82,6 +85,25 @@ def run_cycle_quotes_and_commands(
             scratch.portfolio_dirty = True
 
     if risk_manager and db:
+        if process_manual_entry_commands(
+            db,
+            risk_manager,
+            ibkr,
+            scratch.execution_mode,
+            scratch.quotes_by_symbol,
+            minute_bars,
+            bar_store,
+            scratch.strategy_config,
+            settings,
+            runtime,
+            bot_enabled=scratch.bot_enabled,
+            active_ibkr_account_id=scratch.active_ibkr_account_id,
+            benchmark_minute_bars=scratch.benchmark_minute_bars,
+            benchmark_intraday_bars=scratch.benchmark_intraday_bars,
+            fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+        ):
+            scratch.portfolio_dirty = True
+
         if process_manual_close_commands(
             db,
             risk_manager,

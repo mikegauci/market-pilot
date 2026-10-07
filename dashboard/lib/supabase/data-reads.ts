@@ -19,6 +19,7 @@ import type {
   MarketNewsRow,
   PortfolioSnapshot,
   Position,
+  EntryCommand,
   PositionCommand,
   Prediction,
   Settings,
@@ -157,6 +158,17 @@ export async function readActivePositionCommands(
     .in("status", ["pending", "processing", "failed"])
     .order("requested_at", { ascending: false });
   return { data: (data ?? []) as PositionCommand[], error };
+}
+
+export async function readActiveEntryCommands(
+  supabase: SupabaseClient,
+): Promise<SupabaseRead<EntryCommand[]>> {
+  const { data, error } = await supabase
+    .from("entry_commands")
+    .select("*")
+    .in("status", ["pending", "processing", "failed"])
+    .order("requested_at", { ascending: false });
+  return { data: (data ?? []) as EntryCommand[], error };
 }
 
 export async function readLatestPortfolio(

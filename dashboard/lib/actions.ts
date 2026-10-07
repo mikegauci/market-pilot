@@ -12,6 +12,8 @@ import {
 } from "@/lib/entry-blocked-symbols";
 import { seedActiveWatchlistFromPool } from "@/lib/seed-active-watchlist";
 import { assertDashboardWriteFromSession } from "@/lib/require-dashboard-write.server";
+import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
+import { normalizeSettings } from "@/lib/normalize-settings";
 import { parseSettingsForm, parseWatchlistSymbols } from "@/lib/validate-settings";
 
 function revalidateEntryBlockPaths() {
@@ -221,6 +223,54 @@ export async function cancelTraderShutdown() {
     .eq("id", 1);
   if (error) throw new Error(error.message);
   revalidatePath("/");
+}
+
+export async function requestManualBuy(symbol: string) {
+  const supabase = await createClient();
+  await assertDashboardWriteFromSession(supabase);
+  const normalized = symbol.trim().toUpperCase();
+  if (!normalized) {
+    throw new Error("Symbol is required");
+  }
+
+  const { data: settingsRow, error: settingsError } = await supabase
+    .from("settings")
+    .select("*")
+    .eq("id", 1)
+    .single();
+  if (settingsError || !settingsRow) {
+    throw new Error(settingsError?.message ?? "Could not read settings");
+  }
+  const settings = normalizeSettings(settingsRow);
+  if (!settings) {
+    throw new Error("Could not read settings");
+  }
+  const allowed = new Set(resolveEffectiveWatchlist(settings));
+  if (!allowed.has(normalized)) {
+    throw new Error(`${normalized} is not on your active watchlist`);
+  }
+
+  const { data: existing } = await supabase
+    .from("entry_commands")
+    .select("id")
+    .eq("symbol", normalized)
+    .in("status", ["pending", "processing"])
+    .maybeSingle();
+
+  if (existing) {
+    throw new Error("Buy already requested for this symbol");
+  }
+
+  const { error } = await supabase.from("entry_commands").insert({
+    symbol: normalized,
+    command: "buy",
+    reason: "manual_dashboard",
+  });
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/");
+  revalidatePath("/trades");
 }
 
 export async function requestClosePosition(tradeId: string) {
