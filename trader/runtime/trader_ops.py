@@ -208,4 +208,7 @@ def init_risk_manager(
     manager.hydrate_reentry_cooldowns(
         db.get_recent_symbol_exit_times(risk_settings.reentry_cooldown_minutes)
     )
+    manager.hydrate_symbol_entry_counts(
+        db.get_symbol_entry_counts_for_trading_day(ibkr_account_id)
+    )
     return manager

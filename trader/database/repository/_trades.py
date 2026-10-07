@@ -53,6 +53,33 @@ class SupabaseTradesMixin:
         return latest
 
     @_db_synchronized
+    def get_symbol_entry_counts_for_trading_day(
+        self,
+        ibkr_account_id: Optional[str] = None,
+    ) -> Dict[str, int]:
+        """Count trades opened today (US Eastern) per symbol."""
+        day_start = trading_day_start_utc()
+        query = (
+            self.client.table("trades")
+            .select("symbol")
+            .gte("entry_time", day_start.isoformat())
+        )
+        if ibkr_account_id:
+            query = apply_trade_account_filter(
+                query,
+                ibkr_account_id,
+                include_legacy=self._include_legacy_untagged(ibkr_account_id),
+            )
+        result = query.execute()
+        counts: Dict[str, int] = {}
+        for row in result.data or []:
+            symbol = str(row.get("symbol") or "").upper()
+            if not symbol:
+                continue
+            counts[symbol] = counts.get(symbol, 0) + 1
+        return counts
+
+    @_db_synchronized
     def get_daily_realized_pnl(self, ibkr_account_id: Optional[str] = None) -> float:
         day_start = trading_day_start_utc()
         query = (

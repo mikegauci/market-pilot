@@ -14,6 +14,8 @@ const SKIP_REASON_LABELS: Record<string, string> = {
   ibkr_not_connected: "Broker not connected",
   ibkr_pending_entry_order: "Pending BUY order open",
   price_below_ema20: "Price below EMA-20",
+  ema_warming_up: "EMA warming up",
+  max_entries_per_symbol: "Max entries per symbol (day)",
 };
 
 export function formatSkipReason(reason: string | null | undefined): string | null {

@@ -308,7 +308,6 @@ def process_ready_states(
                     else:
                         trade.execution_mode = "simulated"
                         trade.ibkr_account_id = active_ibkr_account_id
-                        risk_manager.register_open_trade(trade)
                         snap = risk_manager.get_portfolio_snapshot(quotes_by_symbol)
                         try:
                             db.insert_trade(
@@ -316,8 +315,8 @@ def process_ready_states(
                                 alert_daily_pnl=snap.daily_pnl,
                                 alert_equity=snap.equity,
                             )
+                            risk_manager.register_open_trade(trade)
                         except Exception:
-                            risk_manager.remove_open_trade(trade.id)
                             raise
                         confirmation_tracker.reset(trade.symbol)
                         trade_created = True

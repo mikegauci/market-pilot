@@ -78,11 +78,11 @@ export function evaluateEntryFilters(
     {
       name: "EMA-20",
       pass:
-        !thresholds.requirePriceAboveEma20 || snapshot?.ema_20 == null || price == null
-          ? thresholds.requirePriceAboveEma20 && snapshot?.ema_20 == null
-            ? null
-            : true
-          : price > snapshot.ema_20,
+        !thresholds.requirePriceAboveEma20 || price == null
+          ? true
+          : snapshot?.ema_20 == null
+            ? false
+            : price > snapshot.ema_20,
       detail:
         price != null && snapshot?.ema_20 != null
           ? `${formatPrice(price)} vs ${formatPrice(snapshot.ema_20)}`

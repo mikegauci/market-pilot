@@ -43,6 +43,8 @@ class StrategyConfig:
         "layoffs",
     )
     block_on_earnings: bool = False
+    # None = off. When set (e.g. 0.0), rotation excludes names below this session % vs RTH open.
+    rotation_min_session_change_pct: Optional[float] = 0.0
 
 
 def strategy_config_with_risk_overrides(

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Optional, Sequence
 
+from market.session import SESSION_DISQUALIFIED_SCORE
+
 
 @dataclass(frozen=True)
 class RotationCandidate:
@@ -15,6 +17,7 @@ class RotationCandidate:
     rsi: Optional[float] = None
     price: Optional[float] = None
     ema_20: Optional[float] = None
+    session_change_pct: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -41,8 +44,14 @@ def score_candidate(
     benchmark_change_15m: Optional[float],
     min_volume_ratio: float,
     max_rsi: float,
+    min_session_change_pct: Optional[float] = None,
 ) -> float:
     """Higher is better. Overbought names rank last, matching Jev's buy rules."""
+    if min_session_change_pct is not None:
+        if candidate.session_change_pct is None:
+            return SESSION_DISQUALIFIED_SCORE
+        if candidate.session_change_pct < min_session_change_pct:
+            return SESSION_DISQUALIFIED_SCORE
     score = 0.0
     rs5 = relative_strength(candidate.change_5m, benchmark_change_5m)
     rs15 = relative_strength(candidate.change_15m, benchmark_change_15m)
@@ -131,6 +140,12 @@ def rotate_active(
     protected_list = _unique(protected)
     protected_set = set(protected_list)
     current_list = _unique(current)
+    current_list = [
+        symbol
+        for symbol in current_list
+        if symbol.upper() in protected_set
+        or scores.get(symbol.upper(), 0.0) > SESSION_DISQUALIFIED_SCORE / 2
+    ]
     size = max(1, int(active_size), len(protected_list))
 
     ranked = sorted(pool_list, key=lambda symbol: scores.get(symbol, -1e9), reverse=True)

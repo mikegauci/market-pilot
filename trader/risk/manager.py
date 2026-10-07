@@ -54,6 +54,7 @@ class RiskManager:
         self.total_realized_pnl = total_realized_pnl
         self._daily_pnl_trading_date = trading_calendar_date()
         self._last_exit_at: Dict[str, datetime] = {}
+        self._entries_today: Dict[str, int] = {}
         self._ibkr_buying_power: Optional[float] = None
 
     def update_capital(self, effective_capital: float, currency: str = "USD") -> None:
@@ -79,6 +80,7 @@ class RiskManager:
         if today != self._daily_pnl_trading_date:
             self._daily_pnl_trading_date = today
             self.daily_realized_pnl = 0.0
+            self._entries_today = {}
 
     def sync_daily_realized_for_trading_day(self, realized_pnl: float) -> None:
         """On a new trading day, reload realized P&L from persisted trades."""
@@ -86,6 +88,14 @@ class RiskManager:
         if today != self._daily_pnl_trading_date:
             self._daily_pnl_trading_date = today
             self.daily_realized_pnl = realized_pnl
+
+    def hydrate_symbol_entry_counts(self, counts_by_symbol: Dict[str, int]) -> None:
+        """Seed per-symbol entry counts for the current US trading day."""
+        self._entries_today = {
+            str(symbol).upper(): max(0, int(count))
+            for symbol, count in counts_by_symbol.items()
+            if str(symbol).strip()
+        }
 
     def hydrate_reentry_cooldowns(self, exits_by_symbol: Dict[str, datetime]) -> None:
         """Seed per-symbol exit timestamps (e.g. from DB on startup)."""
@@ -245,6 +255,16 @@ class RiskManager:
                 f"reentry_cooldown ({reentry_remaining:.0f}m left)",
             )
 
+        max_entries = int(getattr(self.settings, "max_entries_per_symbol_per_day", 0) or 0)
+        if max_entries > 0:
+            self._ensure_current_trading_day()
+            key = state.symbol.upper()
+            if self._entries_today.get(key, 0) >= max_entries:
+                return TradeDecision(
+                    False,
+                    f"max_entries_per_symbol ({self._entries_today.get(key, 0)}/{max_entries})",
+                )
+
         if len(self.open_trades) >= self.settings.max_open_positions:
             return TradeDecision(False, "max_open_positions")
 
@@ -291,8 +311,16 @@ class RiskManager:
 
     def register_open_trade(self, trade: TradeRecord) -> None:
         self.open_trades.append(trade)
+        self._ensure_current_trading_day()
+        key = trade.symbol.upper()
+        self._entries_today[key] = self._entries_today.get(key, 0) + 1
 
     def remove_open_trade(self, trade_id: str) -> None:
+        removed = [t for t in self.open_trades if t.id == trade_id]
+        if removed:
+            key = removed[0].symbol.upper()
+            if self._entries_today.get(key, 0) > 0:
+                self._entries_today[key] -= 1
         self.open_trades = [t for t in self.open_trades if t.id != trade_id]
 
     def record_closed_pnl(self, net_pnl: float) -> None:

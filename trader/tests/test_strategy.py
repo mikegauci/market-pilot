@@ -79,6 +79,16 @@ class TestFilters(unittest.TestCase):
         result = check_entry_filters(_state(price=97.0, ema_20=98.0), StrategyConfig())
         self.assertFalse(result.passed)
 
+    def test_rejects_ema_warming_up(self) -> None:
+        result = check_entry_filters(_state(ema_20=None), StrategyConfig())
+        self.assertFalse(result.passed)
+        self.assertEqual(result.reason, "ema_warming_up")
+
+    def test_allows_missing_ema_when_requirement_off(self) -> None:
+        config = StrategyConfig(require_price_above_ema20=False, min_volume_ratio=0.0)
+        result = check_entry_filters(_state(ema_20=None), config)
+        self.assertTrue(result.passed)
+
     def test_rejects_low_volume_when_enabled(self) -> None:
         config = StrategyConfig(min_volume_ratio=0.5)
         result = check_entry_filters(_state(volume_ratio=0.3), config)
@@ -192,6 +202,78 @@ class TestConfirmation(unittest.TestCase):
         self.assertFalse(tracker.record("NVDA", True))
         tracker.reconfigure(1, 0)
         self.assertTrue(tracker.record("NVDA", True))
+
+
+class TestMaxEntriesPerSymbol(unittest.TestCase):
+    def test_blocks_after_daily_cap(self) -> None:
+        settings = RiskSettings(
+            minimum_jev_confidence=0.85,
+            signal_record_threshold=0.75,
+            risk_per_trade=100.0,
+            max_position_size=10_000.0,
+            max_daily_loss=500.0,
+            max_open_positions=5,
+            stop_loss_percentage=0.01,
+            take_profit_percentage=0.015,
+            max_hold_minutes=0.0,
+            account_capital=10_000.0,
+            risk_sync_equity=None,
+            watchlist=["NVDA"],
+            max_entries_per_symbol_per_day=2,
+        )
+        manager = RiskManager(
+            settings=settings,
+            trading_mode=TradingMode.PAPER,
+            effective_capital=10_000.0,
+        )
+        manager.hydrate_symbol_entry_counts({"NVDA": 2})
+        decision = manager.evaluate_entry(
+            _state(),
+            _prediction(),
+            True,
+            {},
+        )
+        self.assertFalse(decision.approved)
+        self.assertIn("max_entries_per_symbol", decision.reason or "")
+
+    def test_register_and_remove_trade_adjusts_daily_entry_count(self) -> None:
+        settings = RiskSettings(
+            minimum_jev_confidence=0.85,
+            signal_record_threshold=0.75,
+            risk_per_trade=100.0,
+            max_position_size=10_000.0,
+            max_daily_loss=500.0,
+            max_open_positions=5,
+            stop_loss_percentage=0.01,
+            take_profit_percentage=0.015,
+            max_hold_minutes=0.0,
+            account_capital=10_000.0,
+            risk_sync_equity=None,
+            watchlist=["NVDA"],
+            max_entries_per_symbol_per_day=3,
+        )
+        manager = RiskManager(
+            settings=settings,
+            trading_mode=TradingMode.PAPER,
+            effective_capital=10_000.0,
+        )
+        trade = TradeRecord(
+            id="t1",
+            symbol="NVDA",
+            side="buy",
+            entry_time=datetime.now(timezone.utc),
+            entry_price=100.0,
+            quantity=1.0,
+            position_value=100.0,
+            stop_loss=99.0,
+            take_profit=101.0,
+            status="open",
+            paper_or_live="paper",
+        )
+        manager.register_open_trade(trade)
+        self.assertEqual(manager._entries_today["NVDA"], 1)
+        manager.remove_open_trade("t1")
+        self.assertEqual(manager._entries_today["NVDA"], 0)
 
 
 class TestStrategyConfigOverrides(unittest.TestCase):

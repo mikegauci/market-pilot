@@ -50,7 +50,9 @@ def check_entry_filters(state: MarketState, config: StrategyConfig) -> FilterRes
                 f"volume_too_low ({state.volume_ratio:.2f} < {config.min_volume_ratio:.2f})",
             )
 
-    if config.require_price_above_ema20 and state.ema_20 is not None:
+    if config.require_price_above_ema20:
+        if state.ema_20 is None:
+            return FilterResult(False, "ema_warming_up")
         if state.price <= state.ema_20:
             return FilterResult(False, "price_below_ema20")
 

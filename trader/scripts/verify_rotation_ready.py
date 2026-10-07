@@ -112,6 +112,7 @@ def simulate_scores(
             benchmark_change_15m=bench_15m,
             min_volume_ratio=strategy.min_volume_ratio,
             max_rsi=strategy.max_rsi,
+            min_session_change_pct=strategy.rotation_min_session_change_pct,
         )
 
     ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)

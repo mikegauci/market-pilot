@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     strategy_max_china_factor_positions: int = 3
     strategy_news_block_tags: str = "downgrade,lawsuit,sec_investigation,guidance_cut,layoffs"
     strategy_block_on_earnings: bool = False
+    strategy_rotation_min_session_change_pct: Optional[float] = 0.0
 
     news_enabled: bool = False
     finnhub_api_key: str = ""
@@ -194,6 +195,18 @@ class Settings(BaseSettings):
             return value
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
+    @field_validator("strategy_rotation_min_session_change_pct", mode="before")
+    @classmethod
+    def parse_rotation_session_pct(cls, value: object) -> Optional[float]:
+        if value is None or value == "":
+            return None
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"off", "none", "disable", "disabled"}:
+                return None
+            return float(value)
+        return float(value)
+
     @model_validator(mode="after")
     def validate_execution_mode(self) -> Settings:
         if self.execution_mode == ExecutionMode.IBKR and self.data_source != DataSource.IBKR:
@@ -290,6 +303,7 @@ class Settings(BaseSettings):
                 if tag.strip()
             ),
             block_on_earnings=self.strategy_block_on_earnings,
+            rotation_min_session_change_pct=self.strategy_rotation_min_session_change_pct,
         )
 
     @property

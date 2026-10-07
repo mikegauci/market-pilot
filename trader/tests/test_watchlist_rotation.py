@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from market.session import SESSION_DISQUALIFIED_SCORE
 from watchlist.rotation import (
     RotationCandidate,
     backfill_order,
@@ -46,6 +47,37 @@ class RotationScoreTests(unittest.TestCase):
         )
         self.assertGreater(leading, lagging)
 
+    def test_red_session_excluded_from_rotation_scoring(self) -> None:
+        weak = score_candidate(
+            RotationCandidate("HON", change_5m=0.5, session_change_pct=-0.4),
+            benchmark_change_5m=0.0,
+            benchmark_change_15m=None,
+            min_volume_ratio=0,
+            max_rsi=70,
+            min_session_change_pct=0.0,
+        )
+        strong = score_candidate(
+            RotationCandidate("NVDA", change_5m=0.5, session_change_pct=0.2),
+            benchmark_change_5m=0.0,
+            benchmark_change_15m=None,
+            min_volume_ratio=0,
+            max_rsi=70,
+            min_session_change_pct=0.0,
+        )
+        self.assertEqual(weak, SESSION_DISQUALIFIED_SCORE)
+        self.assertGreater(strong, 0)
+
+    def test_unknown_session_fails_when_threshold_enabled(self) -> None:
+        unknown = score_candidate(
+            RotationCandidate("AAA", change_5m=1.0, session_change_pct=None),
+            benchmark_change_5m=0.0,
+            benchmark_change_15m=None,
+            min_volume_ratio=0,
+            max_rsi=70,
+            min_session_change_pct=0.0,
+        )
+        self.assertEqual(unknown, SESSION_DISQUALIFIED_SCORE)
+
 
 class RotateActiveTests(unittest.TestCase):
     def test_seed_takes_the_top_names(self) -> None:
@@ -71,6 +103,22 @@ class RotateActiveTests(unittest.TestCase):
         self.assertEqual(len(result.swapped_out), 1)
         self.assertEqual(len(result.active), 2)
         self.assertIn("DDD", result.active)
+
+    def test_red_session_incumbent_is_dropped_when_not_protected(self) -> None:
+        scores = {
+            "AAA": SESSION_DISQUALIFIED_SCORE,
+            "BBB": 2.0,
+            "CCC": 1.5,
+        }
+        result = rotate_active(
+            ["AAA", "BBB", "CCC"],
+            ["AAA", "BBB"],
+            scores,
+            active_size=2,
+            max_swaps=2,
+        )
+        self.assertNotIn("AAA", result.active)
+        self.assertIn("BBB", result.active)
 
     def test_open_position_is_never_dropped(self) -> None:
         result = rotate_active(

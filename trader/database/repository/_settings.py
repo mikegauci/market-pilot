@@ -97,6 +97,15 @@ class SupabaseSettingsMixin:
         except Exception:
             return None
 
+    def _merge_optional_settings_columns(self, data: dict) -> None:
+        row = self._select_settings_row("max_entries_per_symbol_per_day")
+        if row is not None and row.get("max_entries_per_symbol_per_day") is not None:
+            data["max_entries_per_symbol_per_day"] = row[
+                "max_entries_per_symbol_per_day"
+            ]
+        else:
+            data.setdefault("max_entries_per_symbol_per_day", 3)
+
     def _load_settings_row(self) -> dict:
         data = self._select_settings_row(
             f"{self._SETTINGS_SELECT_BASE}, min_dollar_volume, {self._SETTINGS_SELECT_ROTATION}"
@@ -179,6 +188,7 @@ class SupabaseSettingsMixin:
     def get_risk_settings(self) -> RiskSettings:
         data = self._load_settings_row()
         self._apply_rotation_defaults(data)
+        self._merge_optional_settings_columns(data)
         watchlist = data.get("watchlist") or []
         risk_sync_equity = (
             float(data["risk_sync_equity"])
@@ -209,6 +219,9 @@ class SupabaseSettingsMixin:
             min_hold_minutes=float(data.get("min_hold_minutes", 15)),
             jev_sell_exit_threshold=float(data.get("jev_sell_exit_threshold", 0.95)),
             reentry_cooldown_minutes=float(data.get("reentry_cooldown_minutes", 45)),
+            max_entries_per_symbol_per_day=int(
+                data.get("max_entries_per_symbol_per_day", 3)
+            ),
             confirmation_cycles=int(data.get("confirmation_cycles", 2)),
             confirmation_seconds=float(int(data.get("confirmation_seconds", 30))),
             min_volume_ratio=float(data.get("min_volume_ratio", 0.5)),

@@ -172,6 +172,8 @@ class RiskSettings:
     loss_cut_jev_sell_threshold: float = 0.0
     # Block new entries in a symbol for this many minutes after an exit. 0 = off.
     reentry_cooldown_minutes: float = 45.0
+    # Max new entries per symbol per US trading day. 0 = off.
+    max_entries_per_symbol_per_day: int = 3
     confirmation_cycles: int = 2
     confirmation_seconds: float = 30.0
     watchlist_pool: List[str] = field(default_factory=list)

@@ -6,6 +6,7 @@ from typing import Dict, Optional, Sequence
 from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
 from market.indicators import compute_intraday_from_five_min_bars
+from market.session import session_change_pct_for_rotation
 from models.types import Quote, RiskSettings
 from runtime.state import TraderRuntimeState
 from strategy.config import StrategyConfig
@@ -30,8 +31,16 @@ def build_rotation_candidate(
 ) -> RotationCandidate:
     aggregator = minute_bars.get(symbol)
     price = quote.price if quote is not None else None
-    change_5m = aggregator.change_pct(5, price) if aggregator.bar_count() else None
-    change_15m = aggregator.change_pct(15, price) if aggregator.bar_count() else None
+    change_5m = (
+        aggregator.change_pct(5, price)
+        if aggregator is not None and aggregator.bar_count()
+        else None
+    )
+    change_15m = (
+        aggregator.change_pct(15, price)
+        if aggregator is not None and aggregator.bar_count()
+        else None
+    )
     rsi = None
     ema_20 = None
     volume_ratio = None
@@ -45,6 +54,12 @@ def build_rotation_candidate(
         rsi = intraday.rsi
         ema_20 = intraday.ema_20
         volume_ratio = intraday.volume_ratio
+    session_change_pct = session_change_pct_for_rotation(
+        price,
+        intraday_five_min_bars=cached or None,
+        minute_aggregator=aggregator,
+    )
+
     return RotationCandidate(
         symbol=symbol,
         change_5m=change_5m,
@@ -53,6 +68,7 @@ def build_rotation_candidate(
         rsi=rsi,
         price=price,
         ema_20=ema_20,
+        session_change_pct=session_change_pct,
     )
 
 
@@ -131,6 +147,7 @@ def maybe_rotate_watchlist(
             benchmark_change_15m=benchmark_change_15m,
             min_volume_ratio=strategy_config.min_volume_ratio,
             max_rsi=strategy_config.max_rsi,
+            min_session_change_pct=strategy_config.rotation_min_session_change_pct,
         )
 
     requested = capped_active_size(
