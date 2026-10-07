@@ -32,6 +32,7 @@ export type SettingsRow = Omit<
   | "watchlist_rotation_interval_minutes"
   | "watchlist_max_swaps_per_rotation"
   | "watchlist_last_rotation_note"
+  | "watchlist_rotation_history"
   | "entry_blocked_symbols"
   | "entry_blocked_at"
 > &
@@ -66,6 +67,7 @@ export type SettingsRow = Omit<
       | "watchlist_rotation_interval_minutes"
       | "watchlist_max_swaps_per_rotation"
       | "watchlist_last_rotation_note"
+      | "watchlist_rotation_history"
       | "entry_blocked_symbols"
       | "entry_blocked_at"
     >
