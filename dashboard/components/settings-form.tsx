@@ -19,6 +19,7 @@ import {
   SettingsSection,
   SettingsSubsection,
 } from "@/components/settings-section";
+import { useReadOnly } from "@/components/read-only-provider";
 import { updateSettings } from "@/lib/actions";
 import {
   buildMainSettingsFormDraft,
@@ -68,6 +69,7 @@ export function SettingsForm({
   briefSessionDate?: string | null;
   briefSuggestions?: SessionBriefSuggestion[];
 }) {
+  const readOnly = useReadOnly();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -320,7 +322,7 @@ export function SettingsForm({
     <form
       className={hasPendingChanges ? "space-y-6 pb-24" : "space-y-6 pb-8"}
       action={(formData) => {
-        if (!hasPendingChanges) return;
+        if (readOnly || !hasPendingChanges) return;
         setSaveError(null);
         setSaveSuccess(false);
         const selectionError = validateProfileSelection(
@@ -344,16 +346,18 @@ export function SettingsForm({
         });
       }}
     >
-      <input type="hidden" name="risk_profile" value={selectedProfile} />
-
       {showBriefDiffs ? (
         <BriefSettingDiff
-          sessionDate={briefSessionDate}
+          sessionDate={briefSessionDate!}
           diffs={briefDiffs}
           onApply={applyBriefDiffs}
           onHide={dismissBriefBanner}
+          readOnly={readOnly}
         />
       ) : null}
+
+      <fieldset disabled={readOnly} className="min-w-0 space-y-6 border-0 p-0">
+      <input type="hidden" name="risk_profile" value={selectedProfile} />
 
       <SettingsSection
         id="jev-signals"
@@ -1005,7 +1009,7 @@ export function SettingsForm({
         />
       </SettingsSection>
 
-      {hasPendingChanges || saveError || (saveSuccess && !hasPendingChanges) ? (
+      {!readOnly && (hasPendingChanges || saveError || (saveSuccess && !hasPendingChanges)) ? (
         <div className="sticky bottom-0 z-10 border-t border-zinc-800 bg-zinc-950/95 py-3 backdrop-blur">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0 flex-1 space-y-2">
@@ -1045,7 +1049,7 @@ export function SettingsForm({
               ) : null}
               {saveError ? <p className="text-sm text-red-400">{saveError}</p> : null}
             </div>
-            {hasPendingChanges ? (
+            {!readOnly && hasPendingChanges ? (
               <Button type="submit" disabled={pending} className="sm:shrink-0">
                 {pending ? "Saving…" : "Save settings"}
               </Button>
@@ -1053,6 +1057,7 @@ export function SettingsForm({
           </div>
         </div>
       ) : null}
+      </fieldset>
     </form>
   );
 }

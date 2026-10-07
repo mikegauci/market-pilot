@@ -9,6 +9,8 @@ import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
 import { buildSkipExplainPacket } from "@/lib/skip-explainer/packet";
 import { generateSkipExplanation } from "@/lib/skip-explainer/openai.server";
 import type { SkipExplanation } from "@/lib/skip-explainer/schema";
+import { canDashboardWrite } from "@/lib/dashboard-role";
+import { readOnlyActionError } from "@/lib/require-dashboard-write.server";
 import { createClient } from "@/lib/supabase/server";
 import type { Prediction } from "@/lib/types/database";
 
@@ -39,6 +41,9 @@ export async function explainSkippedPrediction(
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, error: "Sign in to explain a skipped prediction." };
+  }
+  if (!canDashboardWrite(user)) {
+    return readOnlyActionError();
   }
 
   const cooldownError = checkOpenAiActionCooldown(

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { TradeRecapRichText } from "@/components/trade-recap-rich-text";
+import { useReadOnly } from "@/components/read-only-provider";
 import { explainTradeRecap } from "@/lib/trade-recap/actions";
 import { recapHeadlineClass } from "@/lib/trade-recap/rich-text";
 import type { TradeRecap } from "@/lib/trade-recap/schema";
@@ -20,6 +21,7 @@ export function TradeRecapButton({
   entryPrice = 0,
   exitPrice = null,
 }: TradeRecapButtonProps) {
+  const readOnly = useReadOnly();
   const tone =
     entryPrice > 0
       ? { netPnl, entryPrice, exitPrice }
@@ -44,6 +46,10 @@ export function TradeRecapButton({
       }
       setRecap(result.recap);
     });
+  }
+
+  if (readOnly) {
+    return null;
   }
 
   return (

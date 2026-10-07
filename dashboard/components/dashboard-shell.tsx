@@ -18,9 +18,10 @@ import { cn } from "@/lib/utils";
 type DashboardShellProps = {
   children: ReactNode;
   botStatus: BotStatus;
+  readOnly?: boolean;
 };
 
-export function DashboardShell({ children, botStatus }: DashboardShellProps) {
+export function DashboardShell({ children, botStatus, readOnly = false }: DashboardShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [navPath, setNavPath] = useState(pathname);
@@ -98,7 +99,15 @@ export function DashboardShell({ children, botStatus }: DashboardShellProps) {
               <Logo size="sm" />
             </header>
 
-            <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-8">{children}</main>
+            <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+              {readOnly ? (
+                <p className="mb-4 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-400">
+                  Read-only view — browse live data only. Sign in with your owner account to change
+                  settings or control the engine.
+                </p>
+              ) : null}
+              {children}
+            </main>
           </div>
 
           <DashboardRightSidebar />

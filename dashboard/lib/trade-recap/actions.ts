@@ -16,6 +16,8 @@ import {
 import { buildTradeRecapPacket } from "@/lib/trade-recap/packet";
 import { generateTradeRecap } from "@/lib/trade-recap/openai.server";
 import type { TradeRecap } from "@/lib/trade-recap/schema";
+import { canDashboardWrite } from "@/lib/dashboard-role";
+import { readOnlyActionError } from "@/lib/require-dashboard-write.server";
 import { createClient } from "@/lib/supabase/server";
 import type { Trade } from "@/lib/types/database";
 
@@ -44,6 +46,9 @@ export async function explainTradeRecap(tradeId: string): Promise<TradeRecapResu
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, error: "Sign in to recap a trade." };
+  }
+  if (!canDashboardWrite(user)) {
+    return readOnlyActionError();
   }
 
   const cooldownError = checkOpenAiActionCooldown(

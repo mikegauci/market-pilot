@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
+import { useReadOnly } from "@/components/read-only-provider";
 import { generateSettingsAiSummary } from "@/lib/settings-summary/actions";
 import type { SettingsAiSummary } from "@/lib/settings-summary/schema";
 import { formatDateTime } from "@/lib/utils";
@@ -54,6 +55,7 @@ function SummarySection({
 }
 
 export function SettingsAiSummaryCard() {
+  const readOnly = useReadOnly();
   const [pending, startTransition] = useTransition();
   const [summary, setSummary] = useState<SettingsAiSummary | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -82,14 +84,16 @@ export function SettingsAiSummaryCard() {
             anything on this page.
           </p>
         </div>
-        <Button
-          type="button"
-          disabled={pending}
-          className="border border-zinc-600 bg-transparent px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
-          onClick={onGenerate}
-        >
-          {pending ? "Summarizing…" : summary ? "Refresh summary" : "Summarize settings"}
-        </Button>
+        {!readOnly ? (
+          <Button
+            type="button"
+            disabled={pending}
+            className="border border-zinc-600 bg-transparent px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
+            onClick={onGenerate}
+          >
+            {pending ? "Summarizing…" : summary ? "Refresh summary" : "Summarize settings"}
+          </Button>
+        ) : null}
       </div>
 
       {error ? <p className="mt-4 text-sm text-red-400">{error}</p> : null}

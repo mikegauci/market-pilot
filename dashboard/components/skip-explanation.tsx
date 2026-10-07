@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useReadOnly } from "@/components/read-only-provider";
 import { explainSkippedPrediction } from "@/lib/skip-explainer/actions";
 import type { SkipCloseness, SkipExplanation } from "@/lib/skip-explainer/schema";
 
@@ -11,6 +12,7 @@ const CLOSENESS_LABEL: Record<SkipCloseness, string> = {
 };
 
 export function SkipExplanation({ predictionId }: { predictionId: string }) {
+  const readOnly = useReadOnly();
   const [pending, startTransition] = useTransition();
   const [explanation, setExplanation] = useState<SkipExplanation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +33,10 @@ export function SkipExplanation({ predictionId }: { predictionId: string }) {
       }
       setExplanation(result.explanation);
     });
+  }
+
+  if (readOnly) {
+    return null;
   }
 
   return (

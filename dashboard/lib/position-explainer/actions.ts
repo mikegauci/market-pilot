@@ -9,6 +9,8 @@ import { buildPositionExplainPacket } from "@/lib/position-explainer/packet";
 import { generatePositionExplanation } from "@/lib/position-explainer/openai.server";
 import type { PositionExplanation } from "@/lib/position-explainer/schema";
 import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
+import { canDashboardWrite } from "@/lib/dashboard-role";
+import { readOnlyActionError } from "@/lib/require-dashboard-write.server";
 import { createClient } from "@/lib/supabase/server";
 import type { Prediction, Trade } from "@/lib/types/database";
 
@@ -44,6 +46,9 @@ export async function explainOpenPosition(input: {
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, error: "Sign in to explain a position." };
+  }
+  if (!canDashboardWrite(user)) {
+    return readOnlyActionError();
   }
 
   const cooldownError = checkOpenAiActionCooldown(

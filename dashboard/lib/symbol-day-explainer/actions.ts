@@ -9,6 +9,8 @@ import { generateSymbolDayExplanation } from "@/lib/symbol-day-explainer/openai.
 import type { SymbolDayExplanation } from "@/lib/symbol-day-explainer/schema";
 import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
 import { ANALYTICS_SKIP_PREDICTION_COLUMNS } from "@/lib/analytics-data";
+import { canDashboardWrite } from "@/lib/dashboard-role";
+import { readOnlyActionError } from "@/lib/require-dashboard-write.server";
 import { createClient } from "@/lib/supabase/server";
 import type { Prediction } from "@/lib/types/database";
 
@@ -42,6 +44,9 @@ export async function explainSymbolTradingDay(input: {
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, error: "Sign in to explain symbol activity." };
+  }
+  if (!canDashboardWrite(user)) {
+    return readOnlyActionError();
   }
 
   const cooldownError = checkOpenAiActionCooldown(

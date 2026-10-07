@@ -35,6 +35,7 @@ import {
   readTradedPredictions,
   readTradesForTradingDay,
 } from "@/lib/supabase/data-reads";
+import { canDashboardWrite } from "@/lib/dashboard-role";
 import { createClient } from "@/lib/supabase/server";
 import type {
   BotStatus,
@@ -59,8 +60,13 @@ export async function getBotStatus(): Promise<BotStatus | null> {
 
 export async function getSettings(): Promise<Settings | null> {
   const supabase = await createClient();
-  const { expireEntryBlocksIfDue } = await import("@/lib/entry-block-expire.server");
-  await expireEntryBlocksIfDue(supabase);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (canDashboardWrite(user)) {
+    const { expireEntryBlocksIfDue } = await import("@/lib/entry-block-expire.server");
+    await expireEntryBlocksIfDue(supabase);
+  }
   const { data } = await readSettings(supabase);
   return data;
 }
@@ -145,14 +151,18 @@ export type SessionConditionMixLoad = {
 
 export async function getSessionMarketConditionMix(): Promise<SessionConditionMixLoad> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const mixParams = {
     p_since: SESSION_BRIEF_FIRST_DATE,
     p_headwind_floor: STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct,
   };
-  const { error: refreshError } = await supabase.rpc(
-    "refresh_session_market_condition_mix",
-    mixParams,
-  );
+  let refreshError: { message: string } | null = null;
+  if (canDashboardWrite(user)) {
+    const { error } = await supabase.rpc("refresh_session_market_condition_mix", mixParams);
+    refreshError = error;
+  }
   const { data, error } = await supabase.rpc("list_session_market_condition_mix", mixParams);
   if (error) {
     return { rows: [], loadError: error.message };

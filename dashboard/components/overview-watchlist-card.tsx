@@ -7,6 +7,7 @@ import { WatchlistPicker } from "@/components/watchlist-picker";
 import { WatchlistMoveChip } from "@/components/watchlist-move-chip";
 import { Card, CardTitle } from "@/components/ui/card";
 import { EntryBlockedSymbols } from "@/components/entry-blocked-symbols";
+import { useReadOnly } from "@/components/read-only-provider";
 import { blockSymbolFromEntries, updateWatchlist } from "@/lib/actions";
 import { mergeEntryBlockedSymbols } from "@/lib/entry-blocked-symbols";
 import { useLatestPredictions } from "@/lib/latest-predictions-context";
@@ -23,6 +24,7 @@ type Props = {
 };
 
 export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
+  const readOnly = useReadOnly();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const serverSymbols = useMemo(
@@ -121,6 +123,7 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
   const rotationCountdownMs = useCountdownTo(rotating ? nextRotationAtMs : null);
 
   function blockButton(symbol: string) {
+    if (readOnly) return null;
     const key = symbol.toUpperCase();
     const positionOpen = openSymbolSet.has(key);
     return (
@@ -188,7 +191,7 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
               trailing={
                 rotating ? (
                   blockButton(symbol)
-                ) : (
+                ) : readOnly ? null : (
                   <span className="inline-flex items-center">
                     {blockButton(symbol)}
                     <button
@@ -219,7 +222,7 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
         changeBySymbol={changeBySymbol}
       />
 
-      {rotating ? null : (
+      {!readOnly && !rotating ? (
       <div
         className={`mt-4 border-t border-zinc-800/70 pt-4 ${pending ? "pointer-events-none opacity-60" : ""}`}
       >

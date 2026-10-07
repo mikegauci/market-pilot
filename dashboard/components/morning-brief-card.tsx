@@ -3,11 +3,13 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
+import { useReadOnly } from "@/components/read-only-provider";
 import { generateMorningBrief } from "@/lib/morning-brief/actions";
 import type { MorningBrief } from "@/lib/morning-brief/schema";
 import { formatDateTime } from "@/lib/utils";
 
 export function MorningBriefCard() {
+  const readOnly = useReadOnly();
   const [pending, startTransition] = useTransition();
   const [brief, setBrief] = useState<MorningBrief | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -36,14 +38,16 @@ export function MorningBriefCard() {
             saved, and it never changes settings or trades.
           </p>
         </div>
-        <Button
-          type="button"
-          disabled={pending}
-          className="border border-zinc-600 bg-transparent px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
-          onClick={onGenerate}
-        >
-          {pending ? "Generating…" : brief ? "Regenerate" : "Generate"}
-        </Button>
+        {!readOnly ? (
+          <Button
+            type="button"
+            disabled={pending}
+            className="border border-zinc-600 bg-transparent px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
+            onClick={onGenerate}
+          >
+            {pending ? "Generating…" : brief ? "Regenerate" : "Generate"}
+          </Button>
+        ) : null}
       </div>
 
       {error ? <p className="mt-4 text-sm text-red-400">{error}</p> : null}

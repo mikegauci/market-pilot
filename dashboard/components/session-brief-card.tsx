@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { marketConditionToneClass } from "@/lib/market-condition";
+import { useReadOnly } from "@/components/read-only-provider";
 import { generateSessionBrief } from "@/lib/session-brief/actions";
 import { defaultSelectedSessionDate, type SessionBriefHistoryEntry } from "@/lib/session-brief/history";
 import {
@@ -164,6 +165,7 @@ export function SessionBriefCard({
   initialLoadError = null,
   initialMixError = null,
 }: Props) {
+  const readOnly = useReadOnly();
   const [briefOpen, setBriefOpen] = useState(true);
   const [history, setHistory] = useState(initialHistory);
   const [loadError] = useState(initialLoadError);
@@ -219,20 +221,22 @@ export function SessionBriefCard({
             never changes settings or trades.
           </p>
         </div>
-        <Button
-          type="button"
-          disabled={pending || !selectedDate}
-          className="border border-zinc-600 bg-transparent px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
-          onClick={handleGenerate}
-        >
-          {pending
-            ? "Generating…"
-            : selectedBrief
-              ? `Regenerate ${formatSessionDayLabel(selectedDate!)}`
-              : selectedDate
-                ? `Generate ${formatSessionDayLabel(selectedDate)}`
-                : "Generate"}
-        </Button>
+        {!readOnly ? (
+          <Button
+            type="button"
+            disabled={pending || !selectedDate}
+            className="border border-zinc-600 bg-transparent px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800 disabled:opacity-60"
+            onClick={handleGenerate}
+          >
+            {pending
+              ? "Generating…"
+              : selectedBrief
+                ? `Regenerate ${formatSessionDayLabel(selectedDate!)}`
+                : selectedDate
+                  ? `Generate ${formatSessionDayLabel(selectedDate)}`
+                  : "Generate"}
+          </Button>
+        ) : null}
       </div>
 
       {loadError ? (

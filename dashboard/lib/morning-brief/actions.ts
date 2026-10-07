@@ -9,6 +9,8 @@ import { generateMorningBriefFromPacket } from "@/lib/morning-brief/openai.serve
 import { constrainMorningBrief, type MorningBrief } from "@/lib/morning-brief/schema";
 import { normalizeSettings, type SettingsRow } from "@/lib/normalize-settings";
 import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
+import { canDashboardWrite } from "@/lib/dashboard-role";
+import { readOnlyActionError } from "@/lib/require-dashboard-write.server";
 import { createClient } from "@/lib/supabase/server";
 import type { MarketNewsRow } from "@/lib/types/database";
 
@@ -32,6 +34,9 @@ export async function generateMorningBrief(): Promise<GenerateMorningBriefResult
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, error: "Sign in to generate a morning brief." };
+  }
+  if (!canDashboardWrite(user)) {
+    return readOnlyActionError();
   }
 
   const cooldownError = checkOpenAiActionCooldown(

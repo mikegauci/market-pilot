@@ -8,11 +8,13 @@ export function BriefSettingDiff({
   diffs,
   onApply,
   onHide,
+  readOnly = false,
 }: {
   sessionDate: string;
   diffs: SettingDiff[];
   onApply: () => void;
   onHide: () => void;
+  readOnly?: boolean;
 }) {
   if (diffs.length === 0) return null;
 
@@ -37,13 +39,15 @@ export function BriefSettingDiff({
         ))}
       </ul>
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          className="border border-zinc-600 bg-transparent px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800"
-          onClick={onApply}
-        >
-          Apply to form
-        </Button>
+        {!readOnly ? (
+          <Button
+            type="button"
+            className="border border-zinc-600 bg-transparent px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800"
+            onClick={onApply}
+          >
+            Apply to form
+          </Button>
+        ) : null}
         <Button
           type="button"
           className="border border-zinc-700 bg-transparent px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"

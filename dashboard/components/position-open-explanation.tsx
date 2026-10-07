@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useReadOnly } from "@/components/read-only-provider";
 import { explainOpenPosition } from "@/lib/position-explainer/actions";
 import type { PositionExplanation } from "@/lib/position-explainer/schema";
 import type { Trade } from "@/lib/types/database";
@@ -22,6 +23,7 @@ export function PositionOpenExplanation({
   unrealizedPnl,
   trade,
 }: Props) {
+  const readOnly = useReadOnly();
   const [pending, startTransition] = useTransition();
   const [explanation, setExplanation] = useState<PositionExplanation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export function PositionOpenExplanation({
     });
   }
 
-  if (!trade) {
+  if (!trade || readOnly) {
     return null;
   }
 

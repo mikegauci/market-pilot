@@ -10,6 +10,8 @@ import {
 } from "@/lib/session-brief/openai.server";
 import { assertSessionDateAllowed } from "@/lib/session-brief/session-date";
 import { parseSessionBriefStats } from "@/lib/session-brief/stats";
+import { canDashboardWrite } from "@/lib/dashboard-role";
+import { readOnlyActionError } from "@/lib/require-dashboard-write.server";
 import { createClient } from "@/lib/supabase/server";
 import type { SessionBriefRow, Settings, Trade } from "@/lib/types/database";
 
@@ -88,6 +90,9 @@ export async function generateSessionBrief(
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, error: "Sign in to generate a session brief." };
+  }
+  if (!canDashboardWrite(user)) {
+    return readOnlyActionError();
   }
 
   let latestDay: string | null;

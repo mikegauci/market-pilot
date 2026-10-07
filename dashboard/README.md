@@ -84,3 +84,21 @@ Production: [market-pilot-dashboard on Vercel](https://vercel.com/mikegaucis-pro
 - Dashboard may update `bot_status` and `settings` only (paper mode enforced — cannot set live trading from UI)
 - Dashboard may insert into `session_briefs` (AI session summaries; advisory only)
 - Never put `SUPABASE_SERVICE_ROLE_KEY` in dashboard env vars
+
+### Read-only viewer access
+
+Friends can use **View read-only** on `/login` when `DASHBOARD_VIEWER_EMAIL` and `DASHBOARD_VIEWER_PASSWORD` are set (server env). That signs in a shared Supabase user whose JWT has `app_metadata.dashboard_role = "viewer"`.
+
+Your owner account must have `app_metadata.dashboard_role = "owner"` (Supabase Auth → user → raw app metadata). Postgres function `dashboard_can_write()` allows **only** owners to INSERT/UPDATE dashboard tables; viewers get SELECT only. Engine controls, settings save, close/cover, and OpenAI actions are hidden or blocked in the app as well.
+
+Set `DASHBOARD_VIEWER_LOGIN_ENABLED=false` to hide the login button without removing credentials.
+
+**Runbook (production project `gbprapqifrvhylfazjvs`):**
+
+1. Confirm migration `dashboard_viewer_readonly_rls` is applied (`dashboard_can_write()` exists; write RLS policies reference it).
+2. Set **owner** raw app metadata: `{ "dashboard_role": "owner" }` on your login user; create **viewer** user with `{ "dashboard_role": "viewer" }`.
+3. Match viewer email/password in Vercel env (`DASHBOARD_VIEWER_*`). Redeploy the dashboard after env changes.
+4. **Sign out and sign back in** as owner after metadata changes so the JWT includes `dashboard_role` (otherwise the UI stays read-only and writes fail at the database).
+5. Smoke test: owner can save settings / pause engine; viewer sees no engine controls and cannot mutate data.
+
+**Security note:** The read-only button is a public one-click sign-in to the shared viewer account (password stays on the server). Anyone who can open `/login` can browse as viewer. Disable the button on public deployments if that is too open; rate limiting is best-effort per IP on the server action.

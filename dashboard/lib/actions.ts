@@ -11,6 +11,7 @@ import {
   stampEntryBlockedAt,
 } from "@/lib/entry-blocked-symbols";
 import { seedActiveWatchlistFromPool } from "@/lib/seed-active-watchlist";
+import { assertDashboardWriteFromSession } from "@/lib/require-dashboard-write.server";
 import { parseSettingsForm, parseWatchlistSymbols } from "@/lib/validate-settings";
 
 function revalidateEntryBlockPaths() {
@@ -21,6 +22,7 @@ function revalidateEntryBlockPaths() {
 
 export async function updateSettings(formData: FormData) {
   const supabase = await createClient();
+  await assertDashboardWriteFromSession(supabase);
   const parsed = parseSettingsForm(formData);
   const equityForBaseline = await resolveCurrentEquity();
 
@@ -43,6 +45,7 @@ export async function updateSettings(formData: FormData) {
 export async function blockSymbolFromEntries(symbol: string) {
   const [normalized] = parseWatchlistSymbols([symbol]);
   const supabase = await createClient();
+  await assertDashboardWriteFromSession(supabase);
 
   const { data: settings, error: readError } = await supabase
     .from("settings")
@@ -102,6 +105,7 @@ export async function blockSymbolFromEntries(symbol: string) {
 export async function unblockSymbolFromEntries(symbol: string) {
   const [normalized] = parseWatchlistSymbols([symbol]);
   const supabase = await createClient();
+  await assertDashboardWriteFromSession(supabase);
 
   const { data: settings, error: readError } = await supabase
     .from("settings")
@@ -137,6 +141,7 @@ export async function unblockSymbolFromEntries(symbol: string) {
 export async function updateWatchlist(symbols: string[]) {
   const watchlist = parseWatchlistSymbols(symbols);
   const supabase = await createClient();
+  await assertDashboardWriteFromSession(supabase);
 
   const { error } = await supabase
     .from("settings")
@@ -150,6 +155,7 @@ export async function updateWatchlist(symbols: string[]) {
 
 export async function setAutoTradingEnabled(enabled: boolean) {
   const supabase = await createClient();
+  await assertDashboardWriteFromSession(supabase);
   const { error } = await supabase
     .from("bot_status")
     .update({ enabled, updated_at: new Date().toISOString() })
@@ -161,6 +167,7 @@ export async function setAutoTradingEnabled(enabled: boolean) {
 
 export async function requestTraderShutdown() {
   const supabase = await createClient();
+  await assertDashboardWriteFromSession(supabase);
   const { data: status, error: readError } = await supabase
     .from("bot_status")
     .select("last_heartbeat, shutdown_requested")
@@ -190,6 +197,7 @@ export async function requestTraderShutdown() {
 
 export async function cancelTraderShutdown() {
   const supabase = await createClient();
+  await assertDashboardWriteFromSession(supabase);
   const { data: status, error: readError } = await supabase
     .from("bot_status")
     .select("last_heartbeat, shutdown_requested")
@@ -217,6 +225,7 @@ export async function cancelTraderShutdown() {
 
 export async function requestClosePosition(tradeId: string) {
   const supabase = await createClient();
+  await assertDashboardWriteFromSession(supabase);
 
   const { data: trade, error: tradeError } = await supabase
     .from("trades")
@@ -256,6 +265,7 @@ export async function requestClosePosition(tradeId: string) {
 
 export async function requestCoverShort(symbol: string, quantity: number) {
   const supabase = await createClient();
+  await assertDashboardWriteFromSession(supabase);
   const normalized = symbol.trim().toUpperCase();
   const qty = Math.trunc(quantity);
 

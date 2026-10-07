@@ -1,5 +1,8 @@
 import { DashboardShell } from "@/components/dashboard-shell";
+import { ReadOnlyProvider } from "@/components/read-only-provider";
+import { isDashboardReadOnly } from "@/lib/dashboard-role";
 import { getBotStatus } from "@/lib/queries";
+import { createClient } from "@/lib/supabase/server";
 
 const defaultBotStatus = {
   id: 1,
@@ -16,6 +19,17 @@ const defaultBotStatus = {
 };
 
 export default async function DashboardLayout({ children }: LayoutProps<"/">) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const readOnly = isDashboardReadOnly(user);
   const botStatus = (await getBotStatus()) ?? defaultBotStatus;
-  return <DashboardShell botStatus={botStatus}>{children}</DashboardShell>;
+  return (
+    <ReadOnlyProvider readOnly={readOnly}>
+      <DashboardShell botStatus={botStatus} readOnly={readOnly}>
+        {children}
+      </DashboardShell>
+    </ReadOnlyProvider>
+  );
 }

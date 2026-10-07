@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useReadOnly } from "@/components/read-only-provider";
 import { explainSymbolTradingDay } from "@/lib/symbol-day-explainer/actions";
 import type { SymbolDayExplanation } from "@/lib/symbol-day-explainer/schema";
 import type { Prediction } from "@/lib/types/database";
@@ -18,6 +19,7 @@ export function SymbolDayExplanation({
   recordThreshold,
   minConfidence,
 }: Props) {
+  const readOnly = useReadOnly();
   const symbols = useMemo(() => {
     const set = new Set<string>();
     const startMs = new Date(sessionStartIso).getTime();
@@ -53,7 +55,7 @@ export function SymbolDayExplanation({
     });
   }
 
-  if (symbols.length === 0) {
+  if (symbols.length === 0 || readOnly) {
     return null;
   }
 

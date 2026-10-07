@@ -11,6 +11,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useLiveBotStatus } from "@/components/bot-status-provider";
+import { useReadOnly } from "@/components/read-only-provider";
 import {
   cancelTraderShutdown,
   requestTraderShutdown,
@@ -21,11 +22,16 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export function TraderControlButtons({ className }: { className?: string }) {
+  const readOnly = useReadOnly();
   const status = useLiveBotStatus();
   const display = getDisplayStatus(status);
   const [isPending, startTransition] = useTransition();
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  if (readOnly) {
+    return null;
+  }
 
   const traderOnline = display.traderOnline;
   const stopRequested = Boolean(status.shutdown_requested);

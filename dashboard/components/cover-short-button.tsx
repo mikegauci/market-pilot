@@ -10,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useReadOnly } from "@/components/read-only-provider";
 import { requestCoverShort } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 
@@ -30,9 +31,14 @@ export function CoverShortButton({
   failed = false,
   errorMessage,
 }: Props) {
+  const readOnly = useReadOnly();
   const [isPending, startTransition] = useTransition();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  if (readOnly) {
+    return null;
+  }
 
   const coverQty = Math.abs(Math.trunc(quantity));
   const disabled = !traderOnline || pending || isPending || coverQty < 1;

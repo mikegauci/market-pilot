@@ -9,6 +9,8 @@ import { buildSettingsAiSummaryPacket } from "@/lib/settings-summary/packet";
 import { generateSettingsAiSummaryFromPacket } from "@/lib/settings-summary/openai.server";
 import type { SettingsAiSummary } from "@/lib/settings-summary/schema";
 import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
+import { canDashboardWrite } from "@/lib/dashboard-role";
+import { readOnlyActionError } from "@/lib/require-dashboard-write.server";
 import { createClient } from "@/lib/supabase/server";
 import type { BotStatus } from "@/lib/types/database";
 
@@ -32,6 +34,9 @@ export async function generateSettingsAiSummary(): Promise<GenerateSettingsAiSum
   } = await supabase.auth.getUser();
   if (!user) {
     return { ok: false, error: "Sign in to generate a settings summary." };
+  }
+  if (!canDashboardWrite(user)) {
+    return readOnlyActionError();
   }
 
   const cooldownError = checkOpenAiActionCooldown(

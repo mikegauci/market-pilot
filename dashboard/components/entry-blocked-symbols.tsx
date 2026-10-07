@@ -6,6 +6,7 @@ import { WatchlistMoveChip } from "@/components/watchlist-move-chip";
 import { unblockSymbolFromEntries } from "@/lib/actions";
 import { blockExpiryMinutes, formatCountdown } from "@/lib/entry-block-timing";
 import { useCountdownTo } from "@/lib/hooks/use-countdown-ms";
+import { useReadOnly } from "@/components/read-only-provider";
 import type { Settings } from "@/lib/types/database";
 
 type Props = {
@@ -21,6 +22,7 @@ function BlockedSymbolRow({
   expiryMin,
   pending,
   onUnblock,
+  showUnblock,
 }: {
   symbol: string;
   change5m: number | undefined;
@@ -28,6 +30,7 @@ function BlockedSymbolRow({
   expiryMin: number;
   pending: boolean;
   onUnblock: (symbol: string) => void;
+  showUnblock: boolean;
 }) {
   const expiresAtMs = useMemo(() => {
     if (!blockedAtIso) return null;
@@ -41,14 +44,16 @@ function BlockedSymbolRow({
     <li className="flex flex-col gap-0.5">
       <span className="inline-flex items-center gap-1">
         <WatchlistMoveChip symbol={symbol} change5m={change5m} />
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => onUnblock(symbol)}
-          className="rounded px-1 text-[10px] uppercase tracking-wide text-emerald-400 hover:bg-zinc-800 disabled:opacity-40"
-        >
-          Unblock
-        </button>
+        {showUnblock ? (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onUnblock(symbol)}
+            className="rounded px-1 text-[10px] uppercase tracking-wide text-emerald-400 hover:bg-zinc-800 disabled:opacity-40"
+          >
+            Unblock
+          </button>
+        ) : null}
       </span>
       {countdownMs != null ? (
         <span className="pl-0.5 text-[10px] text-zinc-500">
@@ -60,6 +65,7 @@ function BlockedSymbolRow({
 }
 
 export function EntryBlockedSymbols({ settings, symbols, changeBySymbol }: Props) {
+  const readOnly = useReadOnly();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +107,7 @@ export function EntryBlockedSymbols({ settings, symbols, changeBySymbol }: Props
               expiryMin={expiryMin}
               pending={pending}
               onUnblock={handleUnblock}
+              showUnblock={!readOnly}
             />
           );
         })}
