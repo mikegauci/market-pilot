@@ -34,6 +34,7 @@ from runtime.loop.eval_cycle import EvalCycleContext, run_eval_cycle
 from runtime.periodic import periodic_callback
 from runtime.shutdown_control import (
     StartupShutdownAction,
+    resolve_startup_entry_enabled,
     resolve_startup_shutdown_action,
 )
 from runtime.startup import connect_ibkr_with_retries, run_ibkr_startup_backfill
@@ -257,6 +258,14 @@ def run() -> int:
             "then start the trader again"
         )
         return 1
+    entry_enabled, resumed_offline_pause = resolve_startup_entry_enabled(
+        bot_control.enabled
+    )
+    if resumed_offline_pause:
+        logger.info(
+            "Resuming new trades on startup (dashboard had new entries paused while offline)"
+        )
+    bot_control.enabled = entry_enabled
     trading_mode = bot_control.trading_mode
     configured_execution_mode = bot_control.execution_mode
     pulse_bot_status(

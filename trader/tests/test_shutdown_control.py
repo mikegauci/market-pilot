@@ -7,6 +7,7 @@ from runtime.shutdown_control import (
     HEARTBEAT_STALE_SEC,
     StartupShutdownAction,
     is_heartbeat_fresh,
+    resolve_startup_entry_enabled,
     resolve_startup_shutdown_action,
 )
 
@@ -38,6 +39,16 @@ class ShutdownControlTests(unittest.TestCase):
         self.assertTrue(is_heartbeat_fresh(hb, now=self.now))
         stale = (self.now - timedelta(seconds=HEARTBEAT_STALE_SEC + 1)).isoformat()
         self.assertFalse(is_heartbeat_fresh(stale, now=self.now))
+
+    def test_startup_entry_enabled_when_already_on(self) -> None:
+        enabled, resumed = resolve_startup_entry_enabled(True)
+        self.assertTrue(enabled)
+        self.assertFalse(resumed)
+
+    def test_startup_entry_enabled_resumes_offline_pause(self) -> None:
+        enabled, resumed = resolve_startup_entry_enabled(False)
+        self.assertTrue(enabled)
+        self.assertTrue(resumed)
 
 
 if __name__ == "__main__":

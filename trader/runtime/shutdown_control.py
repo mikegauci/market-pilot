@@ -58,3 +58,14 @@ def resolve_startup_shutdown_action(
     if is_heartbeat_fresh(last_heartbeat, now=now):
         return StartupShutdownAction.EXIT_PENDING_STOP
     return StartupShutdownAction.BLOCK_UNTIL_CANCEL
+
+
+def resolve_startup_entry_enabled(stored_enabled: bool) -> tuple[bool, bool]:
+    """
+    Whether to open new trades when main.py starts successfully.
+
+    Returns (effective_enabled, resumed_from_offline_pause).
+    """
+    if stored_enabled:
+        return True, False
+    return True, True

@@ -52,7 +52,7 @@ Hosted Supabase Free tier: see [docs/supabase-quota.md](../docs/supabase-quota.m
 
 System status lives in the **sidebar on every page**. It shows market hours, whether the trading engine is running, and whether the broker is connected. An amber warning appears when the engine is stopped or the broker is offline.
 
-Orders go to the IBKR paper account when the engine and broker are connected. The Python trader reads `bot_status.enabled` every ~5s for new entries. Sidebar **Pause new trades** toggles `enabled`; **Stop engine** sets `shutdown_requested` (polled every eval cycle) so the running process exits cleanly. If a stop request outlives the engine, use **Cancel stop request** before starting `python main.py` again. Status badges treat heartbeats older than 30s as **Trader offline** and hide stale IBKR/Jev connection flags.
+Orders go to the IBKR paper account when the engine and broker are connected. The Python trader reads `bot_status.enabled` every ~5s for new entries. Sidebar **Pause new trades** toggles `enabled` while the engine is running; starting `python main.py` again turns new entries back on if they were left paused while offline. **Stop engine** sets `shutdown_requested` (polled every eval cycle) so the running process exits cleanly. If a stop request outlives the engine, use **Cancel stop request** before starting `python main.py` again. Status badges treat heartbeats older than 30s as **Trader offline** and hide stale IBKR/Jev connection flags.
 
 ### Supabase: execution mode defaults
 
