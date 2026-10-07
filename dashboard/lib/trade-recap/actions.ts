@@ -9,6 +9,7 @@ import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
 import {
   closedTradeIsLoss,
   computeInTradePeak,
+  computeProfitTakePathStats,
   type PriceTick,
 } from "@/lib/trade-recap/in-trade-peak";
 import { buildTradeRecapPacket } from "@/lib/trade-recap/packet";
@@ -80,7 +81,8 @@ export async function explainTradeRecap(tradeId: string): Promise<TradeRecapResu
 
   const trade = tradeRow as Trade;
   let inTradePeak = null;
-  if (closedTradeIsLoss(trade) && trade.entry_time) {
+  let profitTakePath = null;
+  if (trade.entry_time) {
     const windowEnd = trade.exit_time ?? new Date().toISOString();
     const { data: priceRows, error: priceError } = await supabase
       .from("predictions")
@@ -96,11 +98,14 @@ export async function explainTradeRecap(tradeId: string): Promise<TradeRecapResu
           created_at: String(row.created_at),
         }))
         .filter((row) => Number.isFinite(row.price)) as PriceTick[];
-      inTradePeak = computeInTradePeak(trade, ticks);
+      profitTakePath = computeProfitTakePathStats(trade, ticks, settings);
+      if (closedTradeIsLoss(trade)) {
+        inTradePeak = computeInTradePeak(trade, ticks);
+      }
     }
   }
 
-  const packet = buildTradeRecapPacket(trade, settings, inTradePeak);
+  const packet = buildTradeRecapPacket(trade, settings, inTradePeak, profitTakePath);
 
   try {
     const result = await generateTradeRecap(packet);

@@ -20,6 +20,10 @@ Rules:
   the trade was briefly in the green before it closed at a loss — use peak_pct_from_entry (already
   percent), peak_pct_of_take_profit_path (percent of the way from entry to take profit), and
   peak_unrealized_dollars. Do not imply the bot should have exited at the peak.
+- When profit_take_path is present and profit_take_enabled, add one short sentence in exit_story:
+  whether max_path_progress_pct reached the early Soft Sell band (early_exit_band_path_pct min–max),
+  using reached_early_exit_min and entered_early_exit_band; mention band_touch_cycles vs
+  min_band_hits_required when early exit did not fire. Plain words: "path to take profit".
 - verdict: one sentence sanity-check (worked as designed / stopped out / still open).
 - Do not promise profit or suggest live trading.`;
 
