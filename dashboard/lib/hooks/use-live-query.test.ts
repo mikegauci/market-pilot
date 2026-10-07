@@ -72,6 +72,14 @@ describe("shouldApplyLiveQueryUpdate", () => {
       shouldApplyLiveQueryUpdate(current, next, { keepPreviousOnEmpty: true }),
     ).toBe(true);
   });
+
+  it("blocks replacing non-empty SSR initial with an empty list", () => {
+    const current = [{ id: "1" }];
+    const next: { id: string }[] = [];
+    expect(
+      shouldApplyLiveQueryUpdate(current, next, { keepPreviousOnEmpty: true }),
+    ).toBe(false);
+  });
 });
 
 describe("applyChartFetchResult", () => {

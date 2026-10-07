@@ -181,6 +181,7 @@ type Props = {
   title?: string;
   /** Pin live refresh to SSR trading-day boundary (midnight US Eastern). */
   tradingDayStartIso?: string;
+  defaultStatusFilter?: "all" | "open" | "closed";
 };
 
 export function TradesTable({
@@ -194,9 +195,10 @@ export function TradesTable({
   showChartExpand = true,
   title = "Trades",
   tradingDayStartIso,
+  defaultStatusFilter = "all",
 }: Props) {
   const traderOnline = useTraderOnline(botStatus);
-  const [filter, setFilter] = useState<"all" | "open" | "closed">("all");
+  const [filter, setFilter] = useState<"all" | "open" | "closed">(defaultStatusFilter);
   const [exitReasonFilter, setExitReasonFilter] = useState<ExitReasonFilterValue>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const fetchTrades = useCallback(
@@ -208,7 +210,9 @@ export function TradesTable({
   );
   const fetchCommands = useCallback(() => fetchActiveTradeCommands(), []);
 
-  const liveTrades = useLiveQuery(trades, fetchTrades, ["trades"]);
+  const liveTrades = useLiveQuery(trades, fetchTrades, ["trades"], undefined, {
+    keepPreviousOnEmpty: true,
+  });
   const liveCommands = useLiveQuery(tradeCommands, fetchCommands, ["trade_commands"]);
 
   const commandByTradeId = useMemo(() => {

@@ -15,7 +15,7 @@ export default async function PredictionsPage({
     : predictionParam ?? null;
   const predictionsLimit = initialExpandedId ? 200 : 50;
 
-  const [predictions, analyticsPredictions, settings] = await Promise.all([
+  const [{ predictions, loadError }, analyticsPredictions, settings] = await Promise.all([
     getPredictions(predictionsLimit),
     getAnalyticsPredictions(),
     getSettings(),
@@ -30,6 +30,8 @@ export default async function PredictionsPage({
       <h2 className="text-xl font-semibold sm:text-2xl">Predictions</h2>
       <PredictionsFeed
         predictions={predictions}
+        loadError={loadError}
+        analyticsCount={analyticsPredictions.length}
         initialExpandedId={initialExpandedId}
         limit={predictionsLimit}
         filterOptions={{

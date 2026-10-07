@@ -4,7 +4,6 @@ import {
   ANALYTICS_SKIP_REASON_LIMIT,
   LATEST_PREDICTIONS_PER_SYMBOL_LIMIT,
 } from "@/lib/analytics-data";
-import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
 import { filterTradesByActiveIbkrAccount } from "@/lib/ibkr-trade-scope";
 import { resolveTradeAccountScope } from "@/lib/trade-account-scope";
 import { tradingDayStartUtc } from "@/lib/market-hours";
@@ -13,7 +12,7 @@ import {
   normalizePredictionFeedRows,
   mapLatestPredictionRpcRows,
 } from "@/lib/prediction-feed-normalize";
-import { PREDICTION_FEED_SELECT } from "@/lib/prediction-columns";
+import { PREDICTION_FEED_COLUMNS } from "@/lib/prediction-columns";
 import { tradingDayTradesOrFilter } from "@/lib/trading-day-trades";
 import type {
   MarketNewsRow,
@@ -180,7 +179,7 @@ export async function readPortfolioHistory(
   supabase: SupabaseClient,
   limit = 5000,
 ): Promise<SupabaseRead<PortfolioSnapshot[]>> {
-  const accountId = await fetchActiveIbkrAccountId(supabase);
+  const { accountId } = await resolveTradeAccountScope(supabase);
   if (!accountId) {
     return { data: [], error: null };
   }
@@ -253,14 +252,14 @@ export async function readAnalyticsPredictions(
   return { data: (data ?? []) as Prediction[], error };
 }
 
-export async function readPredictionFeed(
+async function queryPredictionFeed(
   supabase: SupabaseClient,
-  limit = 50,
+  limit: number,
   symbol?: string,
 ): Promise<SupabaseRead<Prediction[]>> {
   let query = supabase
     .from("predictions")
-    .select(PREDICTION_FEED_SELECT)
+    .select(PREDICTION_FEED_COLUMNS)
     .order("timestamp", { ascending: false })
     .limit(limit);
   if (symbol) {
@@ -268,6 +267,23 @@ export async function readPredictionFeed(
   }
   const { data, error } = await query;
   return { data: normalizePredictionFeedRows(data ?? []), error };
+}
+
+/** Latest predictions for the feed — plain columns only (news loads on row expand). */
+export async function readPredictionFeed(
+  supabase: SupabaseClient,
+  limit = 50,
+  symbol?: string,
+): Promise<SupabaseRead<Prediction[]>> {
+  const first = await queryPredictionFeed(supabase, limit, symbol);
+  if (!first.error) {
+    return first;
+  }
+  const retry = await queryPredictionFeed(supabase, limit, symbol);
+  if (!retry.error) {
+    return retry;
+  }
+  return first;
 }
 
 export async function readLatestPredictionsBySymbol(

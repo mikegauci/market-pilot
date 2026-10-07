@@ -132,13 +132,30 @@ function NewsCell({ snapshot }: { snapshot?: MarketSnapshot | null }) {
   );
 }
 
+function predictionsEmptyMessage(
+  loadError: string | null,
+  analyticsCount: number,
+): string {
+  if (loadError) {
+    return "Could not load the predictions list. Stats below may still be current — this page retries every few seconds, or refresh the browser.";
+  }
+  if (analyticsCount > 0) {
+    return "The live list is empty but skip-reason stats loaded successfully. Wait for the next refresh or reload the page.";
+  }
+  return "No predictions yet";
+}
+
 export function PredictionsFeed({
   predictions,
+  loadError = null,
+  analyticsCount = 0,
   filterOptions = {},
   initialExpandedId = null,
   limit = 50,
 }: {
   predictions: Prediction[];
+  loadError?: string | null;
+  analyticsCount?: number;
   filterOptions?: EvaluateOptions;
   initialExpandedId?: string | null;
   limit?: number;
@@ -151,11 +168,23 @@ export function PredictionsFeed({
   >({});
   const snapshotCacheRef = useRef<Record<string, MarketSnapshot | null>>({});
   const [loadingSnapshotId, setLoadingSnapshotId] = useState<string | null>(null);
+  const [pollLoadError, setPollLoadError] = useState<string | null>(null);
 
-  const loadPredictions = useCallback(() => fetchPredictions(limit), [limit]);
+  const loadPredictions = useCallback(async () => {
+    try {
+      const rows = await fetchPredictions(limit);
+      setPollLoadError(null);
+      return rows;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Load failed";
+      setPollLoadError(message);
+      return [];
+    }
+  }, [limit]);
   const livePredictions = useLiveQuery(predictions, loadPredictions, ["predictions"], undefined, {
     keepPreviousOnEmpty: true,
   });
+  const effectiveLoadError = pollLoadError ?? loadError;
 
   const expandedSeed = initialExpandedId ?? null;
   if (prevExpandedSeed !== expandedSeed) {
@@ -246,7 +275,9 @@ export function PredictionsFeed({
         </select>
       </div>
       {filtered.length === 0 ? (
-        <p className="mt-4 text-sm text-zinc-500">No predictions yet</p>
+        <p className="mt-4 text-sm text-zinc-500">
+          {predictionsEmptyMessage(effectiveLoadError, analyticsCount)}
+        </p>
       ) : (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-sm">

@@ -1,12 +1,12 @@
 import "server-only";
 
-import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
+import { resolveDashboardIbkrAccount } from "@/lib/active-ibkr-account";
 import { createClient } from "@/lib/supabase/server";
 
 /** Resolve live equity from portfolio snapshot, falling back to account_capital. */
 export async function resolveCurrentEquity(): Promise<number> {
   const supabase = await createClient();
-  const accountId = await fetchActiveIbkrAccountId(supabase);
+  const { accountId } = await resolveDashboardIbkrAccount(supabase);
   if (!accountId) {
     const { data: settings } = await supabase
       .from("settings")

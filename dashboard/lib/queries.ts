@@ -16,6 +16,7 @@ import {
   type SessionConditionMinutes,
 } from "@/lib/session-brief/market-condition-mix";
 import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
+import { resolveTradeAccountScope, type TradeAccountScope } from "@/lib/trade-account-scope";
 import {
   readActivePositionCommands,
   readActiveTradeCommands,
@@ -234,10 +235,41 @@ export async function getAllTrades(status?: "open" | "closed" | "all"): Promise<
   return data;
 }
 
-export async function getPredictions(limit = 50, symbol?: string): Promise<Prediction[]> {
+export async function getTradeAccountScope(): Promise<TradeAccountScope> {
   const supabase = await createClient();
-  const { data } = await readPredictionFeed(supabase, limit, symbol);
-  return data;
+  return resolveTradeAccountScope(supabase);
+}
+
+export type TradesPageLoad = {
+  trades: Trade[];
+  tradeScope: TradeAccountScope;
+};
+
+/** Single scope resolution before trade read (avoids duplicate infer queries on first paint). */
+export async function getTradesPageLoad(
+  status: "open" | "closed" | "all" = "all",
+): Promise<TradesPageLoad> {
+  const supabase = await createClient();
+  const tradeScope = await resolveTradeAccountScope(supabase);
+  const { data: trades } = await readAllTrades(supabase, status);
+  return { trades, tradeScope };
+}
+
+export type PredictionsLoad = {
+  predictions: Prediction[];
+  loadError: string | null;
+};
+
+export async function getPredictions(
+  limit = 50,
+  symbol?: string,
+): Promise<PredictionsLoad> {
+  const supabase = await createClient();
+  const { data, error } = await readPredictionFeed(supabase, limit, symbol);
+  if (error) {
+    console.warn("predictions feed load failed:", error.message);
+  }
+  return { predictions: data, loadError: error?.message ?? null };
 }
 
 export async function getMarketNews(limit = 100): Promise<MarketNewsRow[]> {

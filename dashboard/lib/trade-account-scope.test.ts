@@ -5,14 +5,14 @@ import {
 } from "@/lib/trade-account-scope";
 
 vi.mock("@/lib/active-ibkr-account", () => ({
-  fetchActiveIbkrAccountId: vi.fn(),
+  resolveDashboardIbkrAccount: vi.fn(),
 }));
 
 vi.mock("@/lib/ibkr-trade-scope", () => ({
   includeLegacyUntaggedTrades: vi.fn(),
 }));
 
-import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
+import { resolveDashboardIbkrAccount } from "@/lib/active-ibkr-account";
 import { includeLegacyUntaggedTrades } from "@/lib/ibkr-trade-scope";
 
 describe("resolveTradeAccountScope", () => {
@@ -23,9 +23,9 @@ describe("resolveTradeAccountScope", () => {
 
   it("recomputes legacy scope when ibkr account id changes", async () => {
     const supabase = {} as never;
-    vi.mocked(fetchActiveIbkrAccountId)
-      .mockResolvedValueOnce("DU111")
-      .mockResolvedValueOnce("DU222");
+    vi.mocked(resolveDashboardIbkrAccount)
+      .mockResolvedValueOnce({ accountId: "DU111", source: "live" })
+      .mockResolvedValueOnce({ accountId: "DU222", source: "live" });
     vi.mocked(includeLegacyUntaggedTrades)
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false);
@@ -33,8 +33,8 @@ describe("resolveTradeAccountScope", () => {
     const first = await resolveTradeAccountScope(supabase);
     const second = await resolveTradeAccountScope(supabase);
 
-    expect(first).toEqual({ accountId: "DU111", includeLegacy: true });
-    expect(second).toEqual({ accountId: "DU222", includeLegacy: false });
+    expect(first).toEqual({ accountId: "DU111", includeLegacy: true, source: "live" });
+    expect(second).toEqual({ accountId: "DU222", includeLegacy: false, source: "live" });
     expect(includeLegacyUntaggedTrades).toHaveBeenCalledTimes(2);
   });
 });

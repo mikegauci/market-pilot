@@ -110,8 +110,18 @@ export function useLiveQuery<T>(
       return;
     }
     syncedInitialRef.current = initial;
-    setData(initial);
-  }, [initial]);
+    setData((current) => {
+      if (
+        !shouldApplyLiveQueryUpdate(current, initial, {
+          keepPreviousOnNull,
+          keepPreviousOnEmpty,
+        })
+      ) {
+        return current;
+      }
+      return initial;
+    });
+  }, [initial, keepPreviousOnNull, keepPreviousOnEmpty]);
 
   useEffect(() => {
     const kickoff = window.setTimeout(() => void refresh(), 0);

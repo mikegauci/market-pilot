@@ -3,7 +3,7 @@ import {
   normalizePredictionFeedRows,
 } from "@/lib/prediction-feed-normalize";
 import {
-  PREDICTION_FEED_SELECT,
+  PREDICTION_FEED_COLUMNS,
   PREDICTION_WITH_SNAPSHOT_COLUMNS,
 } from "@/lib/prediction-columns";
 import { tradingDayStartUtc } from "@/lib/market-hours";
@@ -203,7 +203,7 @@ export async function fetchRecentPredictions(
   const since = new Date(Date.now() - windowMinutes * 60_000).toISOString();
   const { data, error } = await supabase
     .from("predictions")
-    .select(PREDICTION_FEED_SELECT)
+    .select(PREDICTION_FEED_COLUMNS)
     .gte("timestamp", since)
     .order("buy_probability", { ascending: false })
     .limit(limit);
