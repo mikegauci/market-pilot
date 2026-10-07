@@ -37,6 +37,11 @@ import {
   type RiskProfile,
 } from "@/lib/risk-recommendations";
 import {
+  DEFAULT_ENTRY_EMA_GATE,
+  normalizeEntryEmaGate,
+  type EntryEmaGate,
+} from "@/lib/entry-ema-gate";
+import {
   SETTING_DESCRIPTIONS,
   SETTING_DESCRIPTIONS_FULL,
 } from "@/lib/settings-form-descriptions";
@@ -138,6 +143,9 @@ export function SettingsForm({
   );
   const [maxEntriesPerSymbol, setMaxEntriesPerSymbol] = useState(
     settings.max_entries_per_symbol_per_day ?? 3,
+  );
+  const [entryEmaGate, setEntryEmaGate] = useState<EntryEmaGate>(
+    normalizeEntryEmaGate(settings.entry_ema_gate ?? DEFAULT_ENTRY_EMA_GATE),
   );
   const [minVolumeRatio, setMinVolumeRatio] = useState(settings.min_volume_ratio ?? 0);
   const [minSharePrice, setMinSharePrice] = useState(settings.min_share_price ?? 20);
@@ -258,6 +266,7 @@ export function SettingsForm({
         jevSellExitPct,
         reentryCooldownMinutes,
         maxEntriesPerSymbol,
+        entryEmaGate,
         minVolumeRatio,
         minSharePrice,
         minDollarVolume,
@@ -292,6 +301,7 @@ export function SettingsForm({
       jevSellExitPct,
       reentryCooldownMinutes,
       maxEntriesPerSymbol,
+      entryEmaGate,
       minVolumeRatio,
       minSharePrice,
       minDollarVolume,
@@ -929,14 +939,36 @@ export function SettingsForm({
             description="Hard gates on share price and volume after a qualifying BUY."
           >
             <p className="text-[11px] leading-relaxed text-zinc-600 sm:col-span-2">
-              RSI max 70, spread 0.15%, and EMA-20 requirement come from trader{" "}
-              <code className="text-zinc-500">.env</code> — edit on the{" "}
+              RSI max 70 and spread 0.15% come from trader{" "}
+              <code className="text-zinc-500">.env</code> — see{" "}
               <a href="/strategy#entry-filters" className="text-emerald-500/80 hover:text-emerald-400">
                 Strategy
               </a>{" "}
-              page for details.
+              for details.
             </p>
             <SettingsFieldGroup>
+          <SettingsField
+            id="entry_ema_gate"
+            fieldKey="entry_ema_gate"
+            label="Trend filter (EMA)"
+            description={SETTING_DESCRIPTIONS.entry_ema_gate}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.entry_ema_gate}
+          >
+            <select
+              id="entry_ema_gate"
+              name="entry_ema_gate"
+              value={entryEmaGate}
+              onChange={(event) =>
+                setEntryEmaGate(normalizeEntryEmaGate(event.target.value))
+              }
+              className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100"
+              disabled={readOnly}
+            >
+              <option value="off">Off</option>
+              <option value="ema_9">Price above EMA-9 (~9 min)</option>
+              <option value="ema_20">Price above EMA-20 (~20 min)</option>
+            </select>
+          </SettingsField>
           <SettingsField
             id="min_volume_ratio"
             fieldKey="min_volume_ratio"

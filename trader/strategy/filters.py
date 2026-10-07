@@ -6,6 +6,7 @@ from typing import Iterable, List
 from models.types import MarketState, TradeRecord
 from strategy.config import StrategyConfig
 from strategy.correlation import count_china_factor_open, count_correlated_open
+from strategy.ema_gate import check_entry_ema_gate
 
 
 @dataclass(frozen=True)
@@ -50,11 +51,9 @@ def check_entry_filters(state: MarketState, config: StrategyConfig) -> FilterRes
                 f"volume_too_low ({state.volume_ratio:.2f} < {config.min_volume_ratio:.2f})",
             )
 
-    if config.require_price_above_ema20:
-        if state.ema_20 is None:
-            return FilterResult(False, "ema_warming_up")
-        if state.price <= state.ema_20:
-            return FilterResult(False, "price_below_ema20")
+    ema_skip = check_entry_ema_gate(state, config.entry_ema_gate)
+    if ema_skip is not None:
+        return FilterResult(False, ema_skip)
 
     benchmark_change = state.benchmark_change_5m
     if benchmark_change is None:

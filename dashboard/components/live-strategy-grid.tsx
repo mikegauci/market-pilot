@@ -140,7 +140,9 @@ export function LiveStrategyGrid({ predictions, settings }: Props) {
             const pred = bySymbol.get(symbol.toUpperCase()) ?? bySymbol.get(symbol);
             const snap = pred?.market_snapshot;
             const filterChecks = evaluateEntryFilters(snap, filterOptions);
-            const emaCheck = filterChecks.find((c) => c.name === "EMA-20");
+            const emaCheck = filterChecks.find((c) =>
+              c.name.startsWith("EMA-"),
+            );
 
             return (
               <Card key={symbol} className="p-4">
@@ -174,7 +176,7 @@ export function LiveStrategyGrid({ predictions, settings }: Props) {
                         )}
                         title={emaCheck?.detail}
                       >
-                        EMA-20{" "}
+                        {emaCheck?.name ?? "EMA"}{" "}
                         {emaCheck?.pass === false
                           ? emaCheck.detail.includes("warming")
                             ? "warming up"

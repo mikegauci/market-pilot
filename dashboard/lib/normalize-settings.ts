@@ -1,3 +1,4 @@
+import { DEFAULT_ENTRY_EMA_GATE, normalizeEntryEmaGate } from "@/lib/entry-ema-gate";
 import type { Settings } from "@/lib/types/database";
 import { normalizeWatchlistRotationHistory } from "@/lib/watchlist-rotation-history";
 
@@ -10,6 +11,7 @@ export type SettingsRow = Omit<
   | "jev_sell_exit_threshold"
   | "reentry_cooldown_minutes"
   | "max_entries_per_symbol_per_day"
+  | "entry_ema_gate"
   | "rotation_min_session_change_pct"
   | "profit_take_enabled"
   | "profit_take_min_fraction"
@@ -45,6 +47,7 @@ export type SettingsRow = Omit<
       | "jev_sell_exit_threshold"
       | "reentry_cooldown_minutes"
       | "max_entries_per_symbol_per_day"
+      | "entry_ema_gate"
       | "rotation_min_session_change_pct"
       | "confirmation_cycles"
       | "confirmation_seconds"
@@ -81,6 +84,7 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
 
   return {
     ...raw,
+    entry_ema_gate: normalizeEntryEmaGate(raw.entry_ema_gate ?? DEFAULT_ENTRY_EMA_GATE),
     min_share_price: raw.min_share_price ?? 20,
     min_hold_minutes: raw.min_hold_minutes ?? 15,
     jev_sell_exit_threshold: raw.jev_sell_exit_threshold ?? 0.95,

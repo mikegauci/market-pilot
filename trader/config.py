@@ -279,7 +279,11 @@ class Settings(BaseSettings):
         return StrategyConfig(
             max_spread_pct=self.strategy_max_spread_pct,
             max_rsi=self.strategy_max_rsi,
-            require_price_above_ema20=self.strategy_require_price_above_ema20,
+            entry_ema_gate=(
+                "off"
+                if not self.strategy_require_price_above_ema20
+                else "ema_20"
+            ),
             max_spy_drop_5m_pct=self.strategy_max_spy_drop_5m_pct,
             min_buy_hold_margin=self.strategy_min_buy_hold_margin,
             confirmation_cycles=self.strategy_confirmation_cycles,

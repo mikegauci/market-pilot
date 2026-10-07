@@ -82,6 +82,16 @@ class TestFilters(unittest.TestCase):
     def test_rejects_price_below_ema20(self) -> None:
         result = check_entry_filters(_state(price=97.0, ema_20=98.0), StrategyConfig())
         self.assertFalse(result.passed)
+        self.assertIn("price_below_ema20", result.reason)
+
+    def test_rejects_price_below_ema9(self) -> None:
+        config = StrategyConfig(entry_ema_gate="ema_9")
+        result = check_entry_filters(
+            _state(price=97.0, ema_9=98.0, ema_20=96.0),
+            config,
+        )
+        self.assertFalse(result.passed)
+        self.assertIn("price_below_ema9", result.reason)
 
     def test_rejects_ema_warming_up(self) -> None:
         result = check_entry_filters(_state(ema_20=None), StrategyConfig())
@@ -89,7 +99,7 @@ class TestFilters(unittest.TestCase):
         self.assertEqual(result.reason, "ema_warming_up")
 
     def test_allows_missing_ema_when_requirement_off(self) -> None:
-        config = StrategyConfig(require_price_above_ema20=False, min_volume_ratio=0.0)
+        config = StrategyConfig(entry_ema_gate="off", min_volume_ratio=0.0)
         result = check_entry_filters(_state(ema_20=None), config)
         self.assertTrue(result.passed)
 
@@ -119,7 +129,7 @@ class TestFilters(unittest.TestCase):
         self.assertTrue(result.passed)
 
     def test_rejects_price_below_min_share_price(self) -> None:
-        config = StrategyConfig(min_share_price=20.0, require_price_above_ema20=False)
+        config = StrategyConfig(min_share_price=20.0, entry_ema_gate="off")
         result = check_entry_filters(_state(price=1.69), config)
         self.assertFalse(result.passed)
         self.assertIn("price_too_low", result.reason)
@@ -127,14 +137,14 @@ class TestFilters(unittest.TestCase):
     def test_skips_benchmark_headwind_when_no_benchmark_data(self) -> None:
         result = check_entry_filters(
             _state(spy_change_5m=None, benchmark_change_5m=None),
-            StrategyConfig(require_price_above_ema20=False),
+            StrategyConfig(entry_ema_gate="off"),
         )
         self.assertTrue(result.passed)
 
     def test_rejects_benchmark_headwind_when_change_too_low(self) -> None:
         result = check_entry_filters(
             _state(benchmark_change_5m=-0.5, spy_change_5m=-0.5),
-            StrategyConfig(require_price_above_ema20=False),
+            StrategyConfig(entry_ema_gate="off"),
         )
         self.assertFalse(result.passed)
         self.assertIn("benchmark_headwind", result.reason)

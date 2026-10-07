@@ -1,3 +1,10 @@
+import {
+  DEFAULT_ENTRY_EMA_GATE,
+  entryEmaFilterName,
+  entryEmaWarmupBars,
+  normalizeEntryEmaGate,
+  type EntryEmaGate,
+} from "@/lib/entry-ema-gate";
 import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
 import type { MarketSnapshot, Settings } from "@/lib/types/database";
 
@@ -11,7 +18,37 @@ export type EvaluateOptions = {
   minVolumeRatio?: number;
   minSharePrice?: number;
   benchmarkSymbol?: string;
+  entryEmaGate?: EntryEmaGate;
 };
+
+function buildEmaFilterCheck(
+  snapshot: MarketSnapshot | null | undefined,
+  price: number | null,
+  gate: EntryEmaGate,
+): FilterCheck | null {
+  const name = entryEmaFilterName(gate);
+  if (!name) {
+    return null;
+  }
+  const ema =
+    gate === "ema_9" ? snapshot?.ema_9 ?? null : snapshot?.ema_20 ?? null;
+  const warmupBars = entryEmaWarmupBars(gate);
+  return {
+    name,
+    pass:
+      price == null
+        ? false
+        : ema == null
+          ? false
+          : price > ema,
+    detail:
+      price != null && ema != null
+        ? `${formatPrice(price)} vs ${formatPrice(ema)}`
+        : price != null && warmupBars != null
+          ? `warming up (need ~${warmupBars}×1m bars)`
+          : "—",
+  };
+}
 
 export function evaluateEntryFilters(
   snapshot: MarketSnapshot | null | undefined,
@@ -20,6 +57,9 @@ export function evaluateEntryFilters(
   const thresholds = STRATEGY_FILTER_THRESHOLDS;
   const minVolumeRatio = options.minVolumeRatio ?? thresholds.minVolumeRatio;
   const minSharePrice = options.minSharePrice ?? thresholds.minSharePrice;
+  const entryEmaGate = normalizeEntryEmaGate(
+    options.entryEmaGate ?? DEFAULT_ENTRY_EMA_GATE,
+  );
   const benchmark = (options.benchmarkSymbol ?? "").trim();
   const price = snapshot?.price ?? null;
 
@@ -75,25 +115,10 @@ export function evaluateEntryFilters(
             ? `${snapshot.volume_ratio.toFixed(2)} / min ${minVolumeRatio}`
             : "—",
     },
-    {
-      name: "EMA-20",
-      pass:
-        !thresholds.requirePriceAboveEma20
-          ? true
-          : price == null
-            ? false
-            : snapshot?.ema_20 == null
-              ? false
-              : price > snapshot.ema_20,
-      detail:
-        price != null && snapshot?.ema_20 != null
-          ? `${formatPrice(price)} vs ${formatPrice(snapshot.ema_20)}`
-          : thresholds.requirePriceAboveEma20 && price != null
-            ? "warming up (need ~20×1m bars)"
-            : thresholds.requirePriceAboveEma20
-              ? "—"
-              : "off",
-    },
+    ...(() => {
+      const emaCheck = buildEmaFilterCheck(snapshot, price, entryEmaGate);
+      return emaCheck ? [emaCheck] : [];
+    })(),
     ...(benchmark
       ? [
           {
@@ -145,5 +170,8 @@ export function filterSummaryFromSettings(settings: Settings | null | undefined)
     minVolumeRatio: settings?.min_volume_ratio ?? STRATEGY_FILTER_THRESHOLDS.minVolumeRatio,
     minSharePrice: settings?.min_share_price ?? STRATEGY_FILTER_THRESHOLDS.minSharePrice,
     benchmarkSymbol: settings?.benchmark_symbol ?? "",
+    entryEmaGate: normalizeEntryEmaGate(
+      settings?.entry_ema_gate ?? DEFAULT_ENTRY_EMA_GATE,
+    ),
   };
 }

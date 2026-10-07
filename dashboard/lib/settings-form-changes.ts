@@ -1,3 +1,4 @@
+import { entryEmaGateLabel, normalizeEntryEmaGate } from "@/lib/entry-ema-gate";
 import { parseRotationSessionPctInput } from "@/lib/format-rotation-session";
 import { resolveRiskProfile, type RiskProfile } from "@/lib/risk-recommendations";
 import {
@@ -80,6 +81,8 @@ function formatDraftValue(
       return (value as number) <= 0 ? "off" : formatCurrency(value as number, currency);
     case "min_volume_ratio":
       return (value as number) <= 0 ? "off" : String(value);
+    case "entry_ema_gate":
+      return entryEmaGateLabel(normalizeEntryEmaGate(value));
     case "rotation_min_session_change_pct": {
       const pct = value as number | null;
       if (pct == null) return "off";
@@ -115,6 +118,7 @@ export function settingsToFormDraft(settings: Settings): SettingsFormDraft {
     reentry_cooldown_minutes: settings.reentry_cooldown_minutes ?? 45,
     max_entries_per_symbol_per_day: settings.max_entries_per_symbol_per_day ?? 3,
     rotation_min_session_change_pct: settings.rotation_min_session_change_pct ?? null,
+    entry_ema_gate: normalizeEntryEmaGate(settings.entry_ema_gate),
     confirmation_cycles: settings.confirmation_cycles ?? 2,
     confirmation_seconds: settings.confirmation_seconds ?? 30,
     min_volume_ratio: settings.min_volume_ratio ?? 0,
@@ -223,6 +227,7 @@ const DRAFT_KEYS = [
   "reentry_cooldown_minutes",
   "max_entries_per_symbol_per_day",
   "rotation_min_session_change_pct",
+  "entry_ema_gate",
   "min_volume_ratio",
   "min_share_price",
   "min_dollar_volume",
@@ -287,6 +292,7 @@ export function buildMainSettingsFormDraft(input: {
   jevSellExitPct: number;
   reentryCooldownMinutes: number;
   maxEntriesPerSymbol: number;
+  entryEmaGate: SettingsFormDraft["entry_ema_gate"];
   minVolumeRatio: number;
   minSharePrice: number;
   minDollarVolume: number;
@@ -322,6 +328,7 @@ export function buildMainSettingsFormDraft(input: {
     jev_sell_exit_threshold: input.jevSellExitPct / 100,
     reentry_cooldown_minutes: input.reentryCooldownMinutes,
     max_entries_per_symbol_per_day: input.maxEntriesPerSymbol,
+    entry_ema_gate: input.entryEmaGate,
     min_volume_ratio: input.minVolumeRatio,
     min_share_price: input.minSharePrice,
     min_dollar_volume: input.minDollarVolume,

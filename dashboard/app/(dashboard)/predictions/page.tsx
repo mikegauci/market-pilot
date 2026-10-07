@@ -60,11 +60,16 @@ export default async function PredictionsPage({
         sessionStartIso={predictionsLoad.sessionStartIso}
         symbolFilter={symbolFilter || ""}
         symbolOptions={predictionsLoad.symbols}
-        filterOptions={{
-          minVolumeRatio: settings?.min_volume_ratio,
-          minSharePrice: settings?.min_share_price,
-          benchmarkSymbol: settings?.benchmark_symbol,
-        }}
+        filterOptions={
+          settings
+            ? {
+                minVolumeRatio: settings.min_volume_ratio,
+                minSharePrice: settings.min_share_price,
+                benchmarkSymbol: settings.benchmark_symbol,
+                entryEmaGate: settings.entry_ema_gate,
+              }
+            : {}
+        }
       />
       <SkipReasonAnalytics
         predictions={analyticsPredictions}

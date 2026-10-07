@@ -70,6 +70,7 @@ export type SettingsAiSummaryPacket = {
     min_share_price_usd: number | null;
     min_dollar_volume_usd: number | null;
     rotation_min_session_change_pct: number | null;
+    entry_ema_gate: string;
     profit_take: { enabled: boolean; band: string; jev_sell_pct: number | null };
     loss_cut: { enabled: boolean; band: string; jev_sell_pct: number | null };
   };
@@ -96,8 +97,8 @@ export function buildSettingsAiSummaryPacket(input: {
   botStatus: BotStatus | null;
   now?: Date;
 }): SettingsAiSummaryPacket {
-  const builtIn = traderBuiltInGatesForPacket();
   const settings = input.settings;
+  const builtIn = traderBuiltInGatesForPacket(settings.entry_ema_gate);
   const effective = resolveEffectiveWatchlist(settings);
 
   const profitBand = `${settings.profit_take_min_fraction}–${settings.profit_take_max_fraction} of entry→TP path`;
@@ -148,6 +149,7 @@ export function buildSettingsAiSummaryPacket(input: {
         settings.rotation_min_session_change_pct == null
           ? null
           : settings.rotation_min_session_change_pct,
+      entry_ema_gate: settings.entry_ema_gate,
       profit_take: {
         enabled: settings.profit_take_enabled,
         band: profitBand,

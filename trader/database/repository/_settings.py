@@ -107,7 +107,7 @@ class SupabaseSettingsMixin:
 
     def _merge_optional_settings_columns(self, data: dict) -> None:
         row = self._select_settings_row(
-            "max_entries_per_symbol_per_day, rotation_min_session_change_pct"
+            "max_entries_per_symbol_per_day, rotation_min_session_change_pct, entry_ema_gate"
         )
         if row is None:
             data.setdefault("max_entries_per_symbol_per_day", 3)
@@ -123,6 +123,8 @@ class SupabaseSettingsMixin:
             data["rotation_min_session_change_pct"] = (
                 None if raw_rotation is None else float(raw_rotation)
             )
+        if "entry_ema_gate" in row and row.get("entry_ema_gate") is not None:
+            data["entry_ema_gate"] = str(row["entry_ema_gate"]).strip().lower()
 
     def _load_settings_row(self) -> dict:
         data = self._select_settings_row(
@@ -248,6 +250,12 @@ class SupabaseSettingsMixin:
             rotation_session_pct_from_settings=(
                 "rotation_min_session_change_pct" in data
             ),
+            entry_ema_gate=(
+                str(data["entry_ema_gate"]).strip().lower()
+                if "entry_ema_gate" in data
+                else "ema_20"
+            ),
+            entry_ema_gate_from_settings=("entry_ema_gate" in data),
             confirmation_cycles=int(data.get("confirmation_cycles", 2)),
             confirmation_seconds=float(int(data.get("confirmation_seconds", 30))),
             min_volume_ratio=float(data.get("min_volume_ratio", 0.5)),

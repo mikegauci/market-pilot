@@ -16,6 +16,7 @@ class RotationCandidate:
     volume_ratio: Optional[float] = None
     rsi: Optional[float] = None
     price: Optional[float] = None
+    ema_9: Optional[float] = None
     ema_20: Optional[float] = None
     session_change_pct: Optional[float] = None
 
@@ -45,6 +46,7 @@ def score_candidate(
     min_volume_ratio: float,
     max_rsi: float,
     min_session_change_pct: Optional[float] = None,
+    entry_ema_gate: str = "ema_20",
 ) -> float:
     """Higher is better. Overbought names rank last, matching Jev's buy rules."""
     if min_session_change_pct is not None:
@@ -59,12 +61,20 @@ def score_candidate(
         score += rs5 * 2.0
     if rs15 is not None:
         score += rs15
-    if (
-        candidate.price is not None
-        and candidate.ema_20 is not None
-        and candidate.price > candidate.ema_20
-    ):
-        score += 0.25
+    if entry_ema_gate == "ema_9":
+        if (
+            candidate.price is not None
+            and candidate.ema_9 is not None
+            and candidate.price > candidate.ema_9
+        ):
+            score += 0.25
+    elif entry_ema_gate == "ema_20":
+        if (
+            candidate.price is not None
+            and candidate.ema_20 is not None
+            and candidate.price > candidate.ema_20
+        ):
+            score += 0.25
     if candidate.volume_ratio is not None:
         score += min(candidate.volume_ratio, 3.0) * 0.05
         if min_volume_ratio > 0 and candidate.volume_ratio < min_volume_ratio:

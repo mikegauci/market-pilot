@@ -26,6 +26,7 @@ from market.hours import is_us_regular_session_open  # noqa: E402
 from models.types import DataSource, Quote  # noqa: E402
 from strategy.config import (  # noqa: E402
     rotation_dashboard_override,
+    entry_ema_dashboard_override,
     strategy_config_with_risk_overrides,
 )
 from watchlist.resolution import effective_benchmark  # noqa: E402
@@ -102,6 +103,10 @@ def simulate_scores(
         **rotation_dashboard_override(
             from_settings=risk.rotation_session_pct_from_settings,
             value=risk.rotation_min_session_change_pct,
+        ),
+        **entry_ema_dashboard_override(
+            from_settings=risk.entry_ema_gate_from_settings,
+            value=risk.entry_ema_gate,
         ),
     )
 

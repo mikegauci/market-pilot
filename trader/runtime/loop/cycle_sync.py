@@ -19,6 +19,7 @@ from runtime.timing import should_refresh
 from runtime.trader_ops import merge_watchlist_symbols, sync_watchlist_symbols
 from strategy.config import (
     rotation_dashboard_override,
+    entry_ema_dashboard_override,
     strategy_config_with_risk_overrides,
 )
 from strategy.confirmation import ConfirmationTracker
@@ -103,6 +104,10 @@ def run_cycle_sync(
             **rotation_dashboard_override(
                 from_settings=scratch.risk_settings.rotation_session_pct_from_settings,
                 value=scratch.risk_settings.rotation_min_session_change_pct,
+            ),
+            **entry_ema_dashboard_override(
+                from_settings=scratch.risk_settings.entry_ema_gate_from_settings,
+                value=scratch.risk_settings.entry_ema_gate,
             ),
         )
         if (

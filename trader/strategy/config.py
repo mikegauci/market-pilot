@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Optional, Tuple
 
+from strategy.ema_gate import EntryEmaGate, normalize_entry_ema_gate
+
 
 @dataclass(frozen=True)
 class StrategyConfig:
@@ -10,7 +12,7 @@ class StrategyConfig:
 
     max_spread_pct: float = 0.0015
     max_rsi: float = 70.0
-    require_price_above_ema20: bool = True
+    entry_ema_gate: EntryEmaGate = "ema_20"
     max_spy_drop_5m_pct: float = -0.3
     max_benchmark_drop_5m_pct: float = -0.12
     min_buy_hold_margin: float = 0.15
@@ -60,6 +62,7 @@ def strategy_config_with_risk_overrides(
     confirmation_cycles: Optional[int] = None,
     confirmation_seconds: Optional[float] = None,
     rotation_min_session_change_pct: Optional[float] | object = _ROTATION_OVERRIDE_UNSET,
+    entry_ema_gate: Optional[EntryEmaGate] = None,
 ) -> StrategyConfig:
     """Apply dashboard settings overrides onto env-based strategy config."""
     updates: dict = {
@@ -75,7 +78,19 @@ def strategy_config_with_risk_overrides(
         updates["confirmation_cycles"] = max(1, int(confirmation_cycles))
     if confirmation_seconds is not None:
         updates["confirmation_seconds"] = max(0.0, float(confirmation_seconds))
+    if entry_ema_gate is not None:
+        updates["entry_ema_gate"] = normalize_entry_ema_gate(entry_ema_gate)
     return replace(base, **updates)
+
+
+def entry_ema_dashboard_override(
+    *,
+    from_settings: bool,
+    value: object,
+) -> dict[str, EntryEmaGate]:
+    if not from_settings:
+        return {}
+    return {"entry_ema_gate": normalize_entry_ema_gate(value)}
 
 
 def rotation_dashboard_override(

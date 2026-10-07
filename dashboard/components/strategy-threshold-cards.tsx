@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { StrategyDiagram } from "@/components/strategy-diagrams";
 import { formatRotationSessionPct } from "@/lib/format-rotation-session";
+import { entryEmaGateLabel, normalizeEntryEmaGate } from "@/lib/entry-ema-gate";
 import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
 import type { Settings } from "@/lib/types/database";
 
@@ -38,10 +39,10 @@ function buildCards(settings: Settings, benchmark: string): Card[] {
       source: "env",
     },
     {
-      title: "EMA-20",
-      value: STRATEGY_FILTER_THRESHOLDS.requirePriceAboveEma20 ? "Required" : "Off",
-      blurb: "Price above trend; warmup until ~20 bars",
-      source: "env",
+      title: "Trend (EMA)",
+      value: entryEmaGateLabel(normalizeEntryEmaGate(settings.entry_ema_gate)),
+      blurb: "Price above EMA gate from Settings",
+      source: "settings",
       diagram: "ema",
     },
     {

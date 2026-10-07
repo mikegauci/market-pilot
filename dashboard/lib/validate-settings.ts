@@ -1,3 +1,8 @@
+import {
+  ENTRY_EMA_GATE_VALUES,
+  normalizeEntryEmaGate,
+  type EntryEmaGate,
+} from "@/lib/entry-ema-gate";
 import { isRiskProfile, type RiskProfile } from "@/lib/risk-recommendations";
 
 const WATCHLIST_SYMBOL_PATTERN = /^[A-Z][A-Z0-9.]{0,9}$/;
@@ -23,6 +28,15 @@ export function parseWatchlistSymbols(
     throw new Error(`Invalid ticker(s): ${invalidWatchlist.join(", ")}`);
   }
   return watchlist;
+}
+
+function parseEntryEmaGate(formData: FormData): EntryEmaGate {
+  const raw = String(formData.get("entry_ema_gate") ?? "ema_20").trim().toLowerCase();
+  const gate = normalizeEntryEmaGate(raw);
+  if (!ENTRY_EMA_GATE_VALUES.includes(gate)) {
+    throw new Error(`${labelFor("entry_ema_gate")} must be off, EMA-9, or EMA-20`);
+  }
+  return gate;
 }
 
 function parseRequiredNumber(formData: FormData, name: string): number {
@@ -89,6 +103,7 @@ function labelFor(name: string): string {
     min_volume_ratio: "Min volume ratio",
     min_share_price: "Min share price ($)",
     min_dollar_volume: "Min dollar volume ($)",
+    entry_ema_gate: "Trend filter (EMA)",
   };
   return labels[name] ?? name;
 }
@@ -108,6 +123,7 @@ export type ParsedSettings = {
   reentry_cooldown_minutes: number;
   max_entries_per_symbol_per_day: number;
   rotation_min_session_change_pct: number | null;
+  entry_ema_gate: EntryEmaGate;
   confirmation_cycles: number;
   confirmation_seconds: number;
   min_volume_ratio: number;
@@ -191,6 +207,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     "max_entries_per_symbol_per_day",
   );
   const rotation_min_session_change_pct = parseOptionalRotationSessionPct(formData);
+  const entry_ema_gate = parseEntryEmaGate(formData);
   const confirmation_cycles = parseRequiredNumber(formData, "confirmation_cycles");
   const confirmation_seconds = parseRequiredNumber(formData, "confirmation_seconds");
   const min_volume_ratio = parseRequiredNumber(formData, "min_volume_ratio");
@@ -435,6 +452,7 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     reentry_cooldown_minutes,
     max_entries_per_symbol_per_day,
     rotation_min_session_change_pct,
+    entry_ema_gate,
     confirmation_cycles,
     confirmation_seconds,
     min_volume_ratio,

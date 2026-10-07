@@ -18,6 +18,7 @@ export function settingsFixture(overrides: Partial<Settings> = {}): Settings {
     reentry_cooldown_minutes: 45,
     max_entries_per_symbol_per_day: 3,
     rotation_min_session_change_pct: 0,
+    entry_ema_gate: "ema_20",
     confirmation_cycles: 2,
     confirmation_seconds: 30,
     min_volume_ratio: 0.5,

@@ -178,6 +178,8 @@ class RiskSettings:
     rotation_min_session_change_pct: Optional[float] = 0.0
     # When False, rotation floor comes from env StrategyConfig (optional column not loaded).
     rotation_session_pct_from_settings: bool = False
+    entry_ema_gate: str = "ema_20"
+    entry_ema_gate_from_settings: bool = False
     confirmation_cycles: int = 2
     confirmation_seconds: float = 30.0
     watchlist_pool: List[str] = field(default_factory=list)

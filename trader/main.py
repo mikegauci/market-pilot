@@ -50,6 +50,7 @@ from runtime.trader_ops import (
 from strategy.confirmation import ConfirmationTracker
 from strategy.config import (
     rotation_dashboard_override,
+    entry_ema_dashboard_override,
     strategy_config_with_risk_overrides,
 )
 from strategy.profit_take_tracker import ProfitTakeBandTracker
@@ -137,6 +138,10 @@ def run() -> int:
         **rotation_dashboard_override(
             from_settings=risk_settings.rotation_session_pct_from_settings,
             value=risk_settings.rotation_min_session_change_pct,
+        ),
+        **entry_ema_dashboard_override(
+            from_settings=risk_settings.entry_ema_gate_from_settings,
+            value=risk_settings.entry_ema_gate,
         ),
     )
     confirmation_tracker = ConfirmationTracker(

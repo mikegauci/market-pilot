@@ -9,7 +9,8 @@ export const STRATEGY_FILTER_THRESHOLDS = {
   /** Percent points on 5m benchmark change. Matches trader max_benchmark_drop_5m_pct. */
   maxBenchmarkDrop5mPct: -0.12,
   minNewsSentiment: -0.3,
-  requirePriceAboveEma20: true,
+  /** Deprecated: use Settings entry_ema_gate; default when column missing. */
+  entryEmaGate: "ema_20" as const,
   /** Default when settings row lacks column; dashboard Settings overrides. */
   rotationMinSessionChangePct: 0 as number | null,
   maxEntriesPerSymbolPerDay: 3,

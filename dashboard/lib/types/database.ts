@@ -44,6 +44,8 @@ export type Settings = {
   confirmation_cycles: number;
   /** Minimum seconds an eligible BUY must persist before entry (0 = cycle count only). */
   confirmation_seconds: number;
+  /** Off, EMA-9, or EMA-20 trend gate for entries (warmup + price above EMA). */
+  entry_ema_gate: "off" | "ema_9" | "ema_20";
   /** 0 = off; block entries when 1m volume ratio is below this vs 10-bar average */
   min_volume_ratio: number;
   /** 0 = off; block entries below this USD share price */

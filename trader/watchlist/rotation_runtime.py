@@ -46,6 +46,7 @@ def build_rotation_candidate(
         else None
     )
     rsi = None
+    ema_9 = None
     ema_20 = None
     volume_ratio = None
     cached = bar_store.get_intraday_bars(symbol) if bar_store is not None else []
@@ -56,6 +57,7 @@ def build_rotation_candidate(
         if change_15m is None:
             change_15m = intraday.change_15m
         rsi = intraday.rsi
+        ema_9 = intraday.ema_9
         ema_20 = intraday.ema_20
         volume_ratio = intraday.volume_ratio
     session_change_pct = session_change_pct_for_rotation(
@@ -71,6 +73,7 @@ def build_rotation_candidate(
         volume_ratio=volume_ratio,
         rsi=rsi,
         price=price,
+        ema_9=ema_9,
         ema_20=ema_20,
         session_change_pct=session_change_pct,
     )
@@ -158,6 +161,7 @@ def maybe_rotate_watchlist(
             min_volume_ratio=strategy_config.min_volume_ratio,
             max_rsi=strategy_config.max_rsi,
             min_session_change_pct=strategy_config.rotation_min_session_change_pct,
+            entry_ema_gate=strategy_config.entry_ema_gate,
         )
 
     requested = capped_active_size(

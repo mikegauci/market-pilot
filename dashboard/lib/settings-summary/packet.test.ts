@@ -33,7 +33,8 @@ describe("buildSettingsAiSummaryPacket", () => {
     expect(packet.jev_and_signals.minimum_jev_confidence_pct).toBe(85);
     expect(packet.watchlist.effective_symbols).toEqual(["BABA", "VALE"]);
     expect(packet.exits_and_filters.min_volume_ratio).toBe(0.5);
-    expect(packet.trader_built_in_gates.require_price_above_ema20).toBe(true);
+    expect(packet.trader_built_in_gates.entry_ema_gate).toBe("ema_20");
+    expect(packet.exits_and_filters.entry_ema_gate).toBe("ema_20");
     expect(packet.equity.current_usd).toBe(1050);
   });
 });
