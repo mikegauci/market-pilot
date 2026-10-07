@@ -16,6 +16,10 @@ Rules:
 - Plain language. Use "the bot" and "Jev". Percents in JSON are already percent.
 - entry_story: why the bot opened (Jev buy % at entry if present).
 - exit_story: how it closed or what would close it; use exit_reason_label when closed.
+- When net_pnl is negative and in_trade_peak is present, add one short sentence in exit_story:
+  the trade was briefly in the green before it closed at a loss — use peak_pct_from_entry (already
+  percent), peak_pct_of_take_profit_path (percent of the way from entry to take profit), and
+  peak_unrealized_dollars. Do not imply the bot should have exited at the peak.
 - verdict: one sentence sanity-check (worked as designed / stopped out / still open).
 - Do not promise profit or suggest live trading.`;
 

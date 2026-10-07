@@ -1,4 +1,5 @@
 import { exitReasonLabel } from "@/lib/trade-analytics";
+import type { InTradePeak } from "@/lib/trade-recap/in-trade-peak";
 import type { Settings, Trade } from "@/lib/types/database";
 
 function percentPoints(decimal: number | null | undefined): number | null {
@@ -26,9 +27,14 @@ export type TradeRecapPacket = {
     take_profit_pct: number;
     max_hold_minutes: number;
   };
+  in_trade_peak: InTradePeak | null;
 };
 
-export function buildTradeRecapPacket(trade: Trade, settings: Settings): TradeRecapPacket {
+export function buildTradeRecapPacket(
+  trade: Trade,
+  settings: Settings,
+  inTradePeak: InTradePeak | null = null,
+): TradeRecapPacket {
   const reason = trade.exit_reason?.trim() || null;
   return {
     note:
@@ -51,5 +57,6 @@ export function buildTradeRecapPacket(trade: Trade, settings: Settings): TradeRe
       take_profit_pct: Math.round(settings.take_profit_percentage * 1000) / 10,
       max_hold_minutes: settings.max_hold_minutes,
     },
+    in_trade_peak: inTradePeak,
   };
 }

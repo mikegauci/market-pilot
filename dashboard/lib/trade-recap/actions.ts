@@ -6,6 +6,11 @@ import {
 } from "@/lib/openai-action-cooldown";
 import { normalizeSettings, type SettingsRow } from "@/lib/normalize-settings";
 import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
+import {
+  closedTradeIsLoss,
+  computeInTradePeak,
+  type PriceTick,
+} from "@/lib/trade-recap/in-trade-peak";
 import { buildTradeRecapPacket } from "@/lib/trade-recap/packet";
 import { generateTradeRecap } from "@/lib/trade-recap/openai.server";
 import type { TradeRecap } from "@/lib/trade-recap/schema";
@@ -73,7 +78,29 @@ export async function explainTradeRecap(tradeId: string): Promise<TradeRecapResu
     return { ok: false, error: "Settings not found." };
   }
 
-  const packet = buildTradeRecapPacket(tradeRow as Trade, settings);
+  const trade = tradeRow as Trade;
+  let inTradePeak = null;
+  if (closedTradeIsLoss(trade) && trade.entry_time) {
+    const windowEnd = trade.exit_time ?? new Date().toISOString();
+    const { data: priceRows, error: priceError } = await supabase
+      .from("predictions")
+      .select("price, created_at")
+      .eq("symbol", trade.symbol)
+      .gte("created_at", trade.entry_time)
+      .lte("created_at", windowEnd)
+      .not("price", "is", null);
+    if (!priceError && priceRows?.length) {
+      const ticks = priceRows
+        .map((row) => ({
+          price: Number(row.price),
+          created_at: String(row.created_at),
+        }))
+        .filter((row) => Number.isFinite(row.price)) as PriceTick[];
+      inTradePeak = computeInTradePeak(trade, ticks);
+    }
+  }
+
+  const packet = buildTradeRecapPacket(trade, settings, inTradePeak);
 
   try {
     const result = await generateTradeRecap(packet);
