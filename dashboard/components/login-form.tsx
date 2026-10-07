@@ -93,8 +93,7 @@ export function LoginForm({ viewerLoginEnabled }: LoginFormProps) {
             <p className="text-xs text-zinc-500">Just browsing?</p>
             <Button
               type="button"
-              variant="ghost"
-              className="mt-2 w-full text-zinc-400 hover:text-zinc-200"
+              className="mt-2 w-full bg-transparent text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
               disabled={loading || viewerLoading}
               onClick={handleViewerSignIn}
             >

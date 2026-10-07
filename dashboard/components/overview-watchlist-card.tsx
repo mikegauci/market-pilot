@@ -223,18 +223,18 @@ export function OverviewWatchlistCard({ settings, openSymbols = [] }: Props) {
       />
 
       {!readOnly && !rotating ? (
-      <div
-        className={`mt-4 border-t border-zinc-800/70 pt-4 ${pending ? "pointer-events-none opacity-60" : ""}`}
-      >
-        <WatchlistPicker
-          defaultValue={symbols}
-          value={symbols}
-          onChange={persistWatchlist}
-          hideChipList
-          compact
-        />
-      </div>
-      )}
+        <div
+          className={`mt-4 border-t border-zinc-800/70 pt-4 ${pending ? "pointer-events-none opacity-60" : ""}`}
+        >
+          <WatchlistPicker
+            defaultValue={symbols}
+            value={symbols}
+            onChange={persistWatchlist}
+            hideChipList
+            compact
+          />
+        </div>
+      ) : null}
 
       {saveError ? <p className="mt-2 text-xs text-red-400">{saveError}</p> : null}
       {pending ? <p className="mt-2 text-xs text-zinc-500">Saving watchlist…</p> : null}
