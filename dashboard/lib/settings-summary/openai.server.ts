@@ -34,23 +34,47 @@ const settingsSummaryTextFormat = makeParseableTextFormat(
   parseSettingsAiSummaryText,
 );
 
+/** gpt-6-luna and similar models can exceed 1100 tokens on structured summaries with rotation watchlists. */
+const SETTINGS_SUMMARY_MAX_OUTPUT_TOKENS = 2500;
+const SETTINGS_SUMMARY_RETRY_MAX_OUTPUT_TOKENS = 4000;
+
+function incompleteReason(response: OpenAI.Responses.Response): string | null {
+  const details = response.incomplete_details;
+  if (!details || typeof details !== "object" || !("reason" in details)) {
+    return null;
+  }
+  const reason = details.reason;
+  return typeof reason === "string" ? reason : null;
+}
+
 export async function generateSettingsAiSummaryFromPacket(
   packet: SettingsAiSummaryPacket,
 ): Promise<{ summary: SettingsAiSummary; model: string }> {
   const client = new OpenAI({ apiKey: requireOpenAiKey() });
   const model = openAiBriefModel();
 
-  const response = await client.responses.parse({
-    model,
-    max_output_tokens: 1100,
-    input: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: JSON.stringify(packet) },
-    ],
-    text: {
-      format: settingsSummaryTextFormat,
-    },
-  });
+  const request = (maxOutputTokens: number) =>
+    client.responses.parse({
+      model,
+      max_output_tokens: maxOutputTokens,
+      input: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: JSON.stringify(packet) },
+      ],
+      text: {
+        format: settingsSummaryTextFormat,
+      },
+    });
+
+  let response = await request(SETTINGS_SUMMARY_MAX_OUTPUT_TOKENS);
+
+  if (
+    !response.output_parsed &&
+    response.status === "incomplete" &&
+    incompleteReason(response) === "max_output_tokens"
+  ) {
+    response = await request(SETTINGS_SUMMARY_RETRY_MAX_OUTPUT_TOKENS);
+  }
 
   if (response.error) {
     throw new Error(response.error.message ?? "OpenAI request failed.");
@@ -59,7 +83,16 @@ export async function generateSettingsAiSummaryFromPacket(
   const summary = response.output_parsed;
   if (!summary) {
     const status = "status" in response ? String(response.status) : "unknown";
-    throw new Error(`OpenAI did not return a settings summary (status: ${status}). Try again.`);
+    const reason = incompleteReason(response);
+    const detail =
+      reason === "max_output_tokens"
+        ? " The model ran out of output space — try again or set OPENAI_BRIEF_MODEL to gpt-4o-mini."
+        : reason
+          ? ` (${reason})`
+          : "";
+    throw new Error(
+      `OpenAI did not return a settings summary (status: ${status})${detail} Try again.`,
+    );
   }
 
   return { summary, model };
