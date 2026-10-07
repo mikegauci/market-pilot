@@ -51,6 +51,11 @@ function labelFor(name: string): string {
     profit_take_min_band_hits: "Early take profit band touches",
     profit_take_band_window_cycles: "Early take profit lookback (cycles)",
     profit_take_jev_sell_threshold: "Early take profit Jev SELL (%)",
+    loss_cut_min_fraction: "Early loss cut min (% toward stop)",
+    loss_cut_max_fraction: "Early loss cut max (% toward stop)",
+    loss_cut_min_band_hits: "Early loss cut band touches",
+    loss_cut_band_window_cycles: "Early loss cut lookback (cycles)",
+    loss_cut_jev_sell_threshold: "Early loss cut Jev SELL (%)",
     reentry_cooldown_minutes: "Re-entry cooldown (minutes)",
     confirmation_cycles: "Confirmation cycles",
     confirmation_seconds: "Confirmation seconds",
@@ -99,6 +104,12 @@ export type ParsedSettings = {
   profit_take_min_band_hits: number;
   profit_take_band_window_cycles: number;
   profit_take_jev_sell_threshold: number;
+  loss_cut_enabled: boolean;
+  loss_cut_min_fraction: number;
+  loss_cut_max_fraction: number;
+  loss_cut_min_band_hits: number;
+  loss_cut_band_window_cycles: number;
+  loss_cut_jev_sell_threshold: number;
 };
 
 function parseRiskProfile(formData: FormData): RiskProfile {
@@ -242,6 +253,60 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   const profit_take_jev_sell_threshold =
     profit_take_jev_sell_pct <= 0 ? 0 : profit_take_jev_sell_pct / 100;
+  const loss_cut_enabled =
+    String(formData.get("loss_cut_enabled") ?? "") === "on";
+  const loss_cut_min_fraction = parseTargetPathPercent(
+    formData,
+    "loss_cut_min_fraction",
+  );
+  const loss_cut_max_fraction = parseTargetPathPercent(
+    formData,
+    "loss_cut_max_fraction",
+  );
+  if (loss_cut_max_fraction <= loss_cut_min_fraction) {
+    throw new Error(
+      "Early loss cut max (% toward stop) must be greater than min (% toward stop)",
+    );
+  }
+  const loss_cut_min_band_hits = Number(
+    formData.get("loss_cut_min_band_hits") ?? 3,
+  );
+  if (
+    !Number.isInteger(loss_cut_min_band_hits) ||
+    loss_cut_min_band_hits < 1 ||
+    loss_cut_min_band_hits > 20
+  ) {
+    throw new Error("Early loss cut band touches must be a whole number from 1 to 20");
+  }
+  const loss_cut_band_window_cycles = Number(
+    formData.get("loss_cut_band_window_cycles") ?? 10,
+  );
+  if (
+    !Number.isInteger(loss_cut_band_window_cycles) ||
+    loss_cut_band_window_cycles < 1 ||
+    loss_cut_band_window_cycles > 30
+  ) {
+    throw new Error(
+      "Early loss cut lookback (cycles) must be a whole number from 1 to 30",
+    );
+  }
+  if (loss_cut_min_band_hits > loss_cut_band_window_cycles) {
+    throw new Error(
+      "Early loss cut band touches must be at most the lookback window",
+    );
+  }
+  const loss_cut_jev_sell_pct = Number(
+    formData.get("loss_cut_jev_sell_threshold") ?? 0,
+  );
+  if (
+    !Number.isFinite(loss_cut_jev_sell_pct) ||
+    loss_cut_jev_sell_pct < 0 ||
+    loss_cut_jev_sell_pct > 100
+  ) {
+    throw new Error("Early loss cut Jev SELL (%) must be from 0 (off) to 100");
+  }
+  const loss_cut_jev_sell_threshold =
+    loss_cut_jev_sell_pct <= 0 ? 0 : loss_cut_jev_sell_pct / 100;
   if (
     !Number.isInteger(reentry_cooldown_minutes) ||
     reentry_cooldown_minutes < 0 ||
@@ -352,5 +417,11 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     profit_take_min_band_hits,
     profit_take_band_window_cycles,
     profit_take_jev_sell_threshold,
+    loss_cut_enabled,
+    loss_cut_min_fraction,
+    loss_cut_max_fraction,
+    loss_cut_min_band_hits,
+    loss_cut_band_window_cycles,
+    loss_cut_jev_sell_threshold,
   };
 }

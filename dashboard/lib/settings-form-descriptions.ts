@@ -30,10 +30,22 @@ export const SETTING_DESCRIPTIONS_FULL = {
     "How many recent eval cycles to count band touches in (one cycle ≈ your eval interval).",
   profit_take_jev_sell_threshold:
     "Optional: also exit early when Jev SELL reaches this % (dominant) and price is at least at the min band. 0 = off.",
+  loss_cut_enabled:
+    "When on, the bot can market-sell after price keeps visiting the early band toward stop loss, on a soft Jev SELL, or on a fast spike (see fields below).",
+  loss_cut_min_fraction:
+    "Lower bound of the early loss-cut band, as % of the distance from entry to stop (e.g. 70 = sell when price has reached 70% of the way to the stop).",
+  loss_cut_max_fraction:
+    "Upper bound of the ideal band (% of distance to stop). If price drops above this but is still above the hard stop, the bot still exits early.",
+  loss_cut_min_band_hits:
+    "How many recent eval cycles must land in the early band before a market exit (reduces one-tick false exits).",
+  loss_cut_band_window_cycles:
+    "How many recent eval cycles to count band touches in (one cycle ≈ your eval interval).",
+  loss_cut_jev_sell_threshold:
+    "Optional: also exit early when Jev SELL reaches this % (dominant) and price is at least at the min band. 0 = off.",
   max_hold_minutes:
     "Force-close open trades after this many minutes (0 = off). When off, exits use stop loss, take profit, and Jev SELL only.",
   min_hold_minutes:
-    "Block Jev SELL and early take-profit exits until a trade has been open this many minutes (0 = off). Stop loss and bracket take profit still work immediately.",
+    "Block Jev SELL and early take-profit / loss-cut exits until a trade has been open this many minutes (0 = off). Stop loss and bracket take profit still work immediately.",
   jev_sell_exit_threshold:
     "Only soft-exit on a Jev SELL when sell probability reaches this % (and sell is dominant). Higher values let bracket take-profit work more often.",
   reentry_cooldown_minutes:
@@ -64,6 +76,12 @@ export const SETTING_DESCRIPTIONS = {
   profit_take_min_band_hits: "Band touches required before early exit.",
   profit_take_band_window_cycles: "Eval cycles to count band touches.",
   profit_take_jev_sell_threshold: "Soft Jev SELL % for early exit (0 = off).",
+  loss_cut_enabled: "Early loss cut along the path to full stop.",
+  loss_cut_min_fraction: "Min % of entry→stop distance to start early exit band.",
+  loss_cut_max_fraction: "Max % of entry→stop distance for early exit band.",
+  loss_cut_min_band_hits: "Band touches required before early loss exit.",
+  loss_cut_band_window_cycles: "Eval cycles to count band touches.",
+  loss_cut_jev_sell_threshold: "Soft Jev SELL % for early loss exit (0 = off).",
   max_hold_minutes: "Force-close after N minutes (0 = off).",
   min_hold_minutes: "No Jev SELL exit until N minutes (0 = off).",
   jev_sell_exit_threshold: "Min Jev SELL % required to soft-exit.",

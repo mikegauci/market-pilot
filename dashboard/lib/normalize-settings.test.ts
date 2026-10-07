@@ -33,6 +33,9 @@ describe("normalizeSettings", () => {
     expect(normalized?.profit_take_enabled).toBe(false);
     expect(normalized?.profit_take_min_fraction).toBe(0.7);
     expect(normalized?.profit_take_max_fraction).toBe(0.8);
+    expect(normalized?.loss_cut_enabled).toBe(false);
+    expect(normalized?.loss_cut_min_fraction).toBe(0.7);
+    expect(normalized?.loss_cut_jev_sell_threshold).toBe(0);
     expect(normalized?.confirmation_cycles).toBe(2);
     expect(normalized?.confirmation_seconds).toBe(30);
   });

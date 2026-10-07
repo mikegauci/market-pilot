@@ -24,6 +24,7 @@ _EXIT_REASON_LABELS = {
     "stop_loss": "Stop loss",
     "take_profit": "Top profit take",
     "profit_take": "Soft Sell",
+    "loss_cut": "Soft Stop",
     "time_exit": "Max hold",
     "jev_sell": "JEV hard sell",
     "demotion_exit": "Demotion exit",
@@ -36,6 +37,7 @@ _EXIT_REASON_LABELS = {
 _EXIT_REASON_EMOJI = {
     "stop_loss": "🛑",
     "profit_take": "✳️",
+    "loss_cut": "⚠️",
     "take_profit": "🤑",
 }
 

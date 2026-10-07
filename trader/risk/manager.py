@@ -14,7 +14,7 @@ from strategy.exits import (
 
 from market.hours import trading_calendar_date
 from strategy.config import StrategyConfig
-from strategy.exits import profit_take_should_exit
+from strategy.exits import loss_cut_should_exit, profit_take_should_exit
 from strategy.profit_take_tracker import ProfitTakeBandTracker
 
 from models.types import (
@@ -402,6 +402,65 @@ class RiskManager:
             ):
                 exit_price = quote.bid if quote.bid is not None else price
                 closed.append(self._build_closed_trade(trade, exit_price, "profit_take"))
+                band_tracker.clear(trade.id)
+                continue
+
+            remaining.append(trade)
+
+        open_ids = {t.id for t in remaining}
+        band_tracker.prune(open_ids)
+        self.open_trades = remaining
+        return closed
+
+    def check_loss_cut_exits(
+        self,
+        quotes_by_symbol: Dict[str, Quote],
+        band_tracker: ProfitTakeBandTracker,
+        predictions_by_symbol: Optional[Dict[str, JevPrediction]] = None,
+    ) -> List[ClosedTrade]:
+        """Simulated early loss cut (runs after Jev eval when predictions are available)."""
+        from strategy.exits import normalize_loss_cut_fractions, stop_loss_path_progress
+
+        closed: List[ClosedTrade] = []
+        remaining: List[TradeRecord] = []
+        min_fraction, max_fraction = normalize_loss_cut_fractions(
+            self.settings.loss_cut_min_fraction,
+            self.settings.loss_cut_max_fraction,
+        )
+        predictions = predictions_by_symbol or {}
+
+        if not self.settings.loss_cut_enabled:
+            return []
+
+        for trade in self.open_trades:
+            if trade.execution_mode == "ibkr":
+                remaining.append(trade)
+                continue
+
+            quote = quotes_by_symbol.get(trade.symbol)
+            if quote is None or quote.price is None:
+                band_tracker.record(trade.id, False)
+                remaining.append(trade)
+                continue
+
+            price = quote.price
+            progress = stop_loss_path_progress(trade, price)
+            in_band = (
+                progress is not None
+                and min_fraction <= progress <= max_fraction
+            )
+            band_hits = band_tracker.record(trade.id, in_band)
+            prediction = predictions.get(trade.symbol)
+
+            if loss_cut_should_exit(
+                trade,
+                price,
+                self.settings,
+                band_hits=band_hits,
+                prediction=prediction,
+            ):
+                exit_price = quote.bid if quote.bid is not None else price
+                closed.append(self._build_closed_trade(trade, exit_price, "loss_cut"))
                 band_tracker.clear(trade.id)
                 continue
 

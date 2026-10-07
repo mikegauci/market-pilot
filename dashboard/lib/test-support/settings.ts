@@ -40,6 +40,12 @@ export function settingsFixture(overrides: Partial<Settings> = {}): Settings {
     profit_take_min_band_hits: 3,
     profit_take_band_window_cycles: 10,
     profit_take_jev_sell_threshold: 0.7,
+    loss_cut_enabled: false,
+    loss_cut_min_fraction: 0.7,
+    loss_cut_max_fraction: 0.9,
+    loss_cut_min_band_hits: 3,
+    loss_cut_band_window_cycles: 10,
+    loss_cut_jev_sell_threshold: 0,
     updated_at: "2026-01-10T15:00:00Z",
     ...overrides,
   };

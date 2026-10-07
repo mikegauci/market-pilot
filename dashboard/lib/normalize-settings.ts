@@ -14,6 +14,12 @@ export type SettingsRow = Omit<
   | "profit_take_min_band_hits"
   | "profit_take_band_window_cycles"
   | "profit_take_jev_sell_threshold"
+  | "loss_cut_enabled"
+  | "loss_cut_min_fraction"
+  | "loss_cut_max_fraction"
+  | "loss_cut_min_band_hits"
+  | "loss_cut_band_window_cycles"
+  | "loss_cut_jev_sell_threshold"
   | "confirmation_cycles"
   | "confirmation_seconds"
   | "watchlist_pool"
@@ -42,6 +48,12 @@ export type SettingsRow = Omit<
       | "profit_take_min_band_hits"
       | "profit_take_band_window_cycles"
       | "profit_take_jev_sell_threshold"
+      | "loss_cut_enabled"
+      | "loss_cut_min_fraction"
+      | "loss_cut_max_fraction"
+      | "loss_cut_min_band_hits"
+      | "loss_cut_band_window_cycles"
+      | "loss_cut_jev_sell_threshold"
       | "watchlist_pool"
       | "watchlist_active"
       | "watchlist_rotation_enabled"
@@ -72,6 +84,12 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     profit_take_min_band_hits: raw.profit_take_min_band_hits ?? 3,
     profit_take_band_window_cycles: raw.profit_take_band_window_cycles ?? 10,
     profit_take_jev_sell_threshold: raw.profit_take_jev_sell_threshold ?? 0.7,
+    loss_cut_enabled: raw.loss_cut_enabled ?? false,
+    loss_cut_min_fraction: raw.loss_cut_min_fraction ?? 0.7,
+    loss_cut_max_fraction: raw.loss_cut_max_fraction ?? 0.9,
+    loss_cut_min_band_hits: raw.loss_cut_min_band_hits ?? 3,
+    loss_cut_band_window_cycles: raw.loss_cut_band_window_cycles ?? 10,
+    loss_cut_jev_sell_threshold: raw.loss_cut_jev_sell_threshold ?? 0,
     min_dollar_volume: raw.min_dollar_volume ?? 250_000,
     confirmation_cycles: raw.confirmation_cycles ?? 2,
     confirmation_seconds: raw.confirmation_seconds ?? 30,

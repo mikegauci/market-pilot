@@ -48,6 +48,7 @@ class EvalCycleContext:
     risk_manager: Optional[RiskManager]
     confirmation_tracker: ConfirmationTracker
     profit_take_tracker: ProfitTakeBandTracker
+    loss_cut_tracker: ProfitTakeBandTracker
     bot_enabled: bool
     trading_mode: TradingMode
     configured_execution_mode: ExecutionMode
@@ -94,6 +95,7 @@ def run_eval_cycle(
                 risk_manager=ctx.risk_manager,
                 confirmation_tracker=ctx.confirmation_tracker,
                 profit_take_tracker=ctx.profit_take_tracker,
+                loss_cut_tracker=ctx.loss_cut_tracker,
                 scratch=scratch,
                 news_client=ctx.news_client,
                 last_general_news_refresh=ctx.last_general_news_refresh,
@@ -156,6 +158,7 @@ def run_eval_cycle(
             risk_manager=ctx.risk_manager,
             confirmation_tracker=ctx.confirmation_tracker,
             profit_take_tracker=ctx.profit_take_tracker,
+            loss_cut_tracker=ctx.loss_cut_tracker,
             scratch=scratch,
             strategy_config=scratch.strategy_config,
             runtime=runtime,

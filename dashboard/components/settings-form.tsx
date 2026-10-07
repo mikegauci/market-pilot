@@ -88,6 +88,22 @@ export function SettingsForm({
   const [profitTakeJevSellPct, setProfitTakeJevSellPct] = useState(
     fractionToDisplayPercent(settings.profit_take_jev_sell_threshold ?? 0.7),
   );
+  const [lossCutEnabled, setLossCutEnabled] = useState(settings.loss_cut_enabled ?? false);
+  const [lossCutMinPct, setLossCutMinPct] = useState(
+    fractionToDisplayPercent(settings.loss_cut_min_fraction ?? 0.7),
+  );
+  const [lossCutMaxPct, setLossCutMaxPct] = useState(
+    fractionToDisplayPercent(settings.loss_cut_max_fraction ?? 0.9),
+  );
+  const [lossCutMinBandHits, setLossCutMinBandHits] = useState(
+    settings.loss_cut_min_band_hits ?? 3,
+  );
+  const [lossCutBandWindow, setLossCutBandWindow] = useState(
+    settings.loss_cut_band_window_cycles ?? 10,
+  );
+  const [lossCutJevSellPct, setLossCutJevSellPct] = useState(
+    fractionToDisplayPercent(settings.loss_cut_jev_sell_threshold ?? 0),
+  );
   const [maxHoldMinutes, setMaxHoldMinutes] = useState(settings.max_hold_minutes ?? 0);
   const [minHoldMinutes, setMinHoldMinutes] = useState(settings.min_hold_minutes ?? 15);
   const [jevSellExitPct, setJevSellExitPct] = useState(
@@ -502,6 +518,115 @@ export function SettingsForm({
               integer
               value={profitTakeJevSellPct}
               onChange={setProfitTakeJevSellPct}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="loss_cut_enabled"
+            label="Early loss cut"
+            description={SETTING_DESCRIPTIONS.loss_cut_enabled}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.loss_cut_enabled}
+          >
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
+              <input
+                type="checkbox"
+                id="loss_cut_enabled"
+                name="loss_cut_enabled"
+                value="on"
+                checked={lossCutEnabled}
+                onChange={(event) => setLossCutEnabled(event.target.checked)}
+                className="rounded border-zinc-700"
+              />
+              <span className="text-xs">Enable band exit toward stop loss</span>
+            </label>
+          </SettingsField>
+          <SettingsField
+            id="loss_cut_min_fraction"
+            label="Early loss cut min (% toward stop)"
+            description={SETTING_DESCRIPTIONS.loss_cut_min_fraction}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.loss_cut_min_fraction}
+          >
+            <SettingsNumberInput
+              id="loss_cut_min_fraction"
+              name="loss_cut_min_fraction"
+              step="1"
+              min={1}
+              max={100}
+              integer
+              value={lossCutMinPct}
+              onChange={setLossCutMinPct}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="loss_cut_max_fraction"
+            label="Early loss cut max (% toward stop)"
+            description={SETTING_DESCRIPTIONS.loss_cut_max_fraction}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.loss_cut_max_fraction}
+          >
+            <SettingsNumberInput
+              id="loss_cut_max_fraction"
+              name="loss_cut_max_fraction"
+              step="1"
+              min={1}
+              max={100}
+              integer
+              value={lossCutMaxPct}
+              onChange={setLossCutMaxPct}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="loss_cut_min_band_hits"
+            label="Early loss cut band touches"
+            description={SETTING_DESCRIPTIONS.loss_cut_min_band_hits}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.loss_cut_min_band_hits}
+          >
+            <SettingsNumberInput
+              id="loss_cut_min_band_hits"
+              name="loss_cut_min_band_hits"
+              step="1"
+              min={1}
+              max={20}
+              integer
+              value={lossCutMinBandHits}
+              onChange={setLossCutMinBandHits}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="loss_cut_band_window_cycles"
+            label="Early loss cut lookback (cycles)"
+            description={SETTING_DESCRIPTIONS.loss_cut_band_window_cycles}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.loss_cut_band_window_cycles}
+          >
+            <SettingsNumberInput
+              id="loss_cut_band_window_cycles"
+              name="loss_cut_band_window_cycles"
+              step="1"
+              min={1}
+              max={30}
+              integer
+              value={lossCutBandWindow}
+              onChange={setLossCutBandWindow}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="loss_cut_jev_sell_threshold"
+            label="Early loss cut Jev SELL (%)"
+            description={SETTING_DESCRIPTIONS.loss_cut_jev_sell_threshold}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.loss_cut_jev_sell_threshold}
+          >
+            <SettingsNumberInput
+              id="loss_cut_jev_sell_threshold"
+              name="loss_cut_jev_sell_threshold"
+              step="1"
+              min={0}
+              max={100}
+              integer
+              value={lossCutJevSellPct}
+              onChange={setLossCutJevSellPct}
               required
             />
           </SettingsField>

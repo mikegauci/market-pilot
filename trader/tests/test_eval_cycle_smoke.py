@@ -74,6 +74,7 @@ class EvalCycleSmokeTests(unittest.TestCase):
             risk_manager=None,
             confirmation_tracker=MagicMock(),
             profit_take_tracker=MagicMock(),
+            loss_cut_tracker=MagicMock(),
             bot_enabled=True,
             trading_mode=TradingMode.PAPER,
             configured_execution_mode=ExecutionMode.SIMULATED,

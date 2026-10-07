@@ -69,6 +69,14 @@ export type Settings = {
   profit_take_band_window_cycles: number;
   /** 0 = off; otherwise min SELL % (fraction 0–1) for optional early exit with progress ≥ min band. */
   profit_take_jev_sell_threshold: number;
+  /** Market-sell when price is in the entry→stop path band (fractions 0–1). */
+  loss_cut_enabled: boolean;
+  loss_cut_min_fraction: number;
+  loss_cut_max_fraction: number;
+  loss_cut_min_band_hits: number;
+  loss_cut_band_window_cycles: number;
+  /** 0 = off; otherwise min SELL % (fraction 0–1) for optional early exit with progress ≥ min band. */
+  loss_cut_jev_sell_threshold: number;
   updated_at: string;
 };
 

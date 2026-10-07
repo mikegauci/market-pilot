@@ -74,6 +74,22 @@ def take_profit_path_progress(trade: TradeRecord, price: float) -> Optional[floa
     return (price - trade.entry_price) / span
 
 
+DEFAULT_LOSS_CUT_MIN = 0.70
+DEFAULT_LOSS_CUT_MAX = 0.90
+
+
+def stop_loss_path_progress(trade: TradeRecord, price: float) -> Optional[float]:
+    """Fraction of entry→stop distance when underwater (0 = entry, 1 = hard stop)."""
+    if trade.entry_price <= 0 or trade.stop_loss >= trade.entry_price:
+        return None
+    if price >= trade.entry_price:
+        return None
+    span = trade.entry_price - trade.stop_loss
+    if price <= trade.stop_loss:
+        return 1.0
+    return (trade.entry_price - price) / span
+
+
 def normalize_profit_take_band_hits(min_hits: int, window_cycles: int) -> int:
     """Ensure band-touch requirement fits the rolling window."""
     hits = max(1, int(min_hits or 1))
@@ -211,3 +227,90 @@ def is_profit_take_eligible(
     if progress_in_band(progress, min_fraction, max_fraction):
         return True
     return is_fast_spike_exit(progress, max_fraction)
+
+
+def normalize_loss_cut_fractions(
+    min_fraction: float,
+    max_fraction: float,
+) -> Tuple[float, float]:
+    """Clamp invalid DB values to safe defaults."""
+    min_f = float(min_fraction)
+    max_f = float(max_fraction)
+    valid = (
+        0 < min_f < 1
+        and 0 < max_f <= 1
+        and max_f > min_f
+    )
+    if not valid:
+        logger.warning(
+            "Invalid loss_cut fractions (min=%.4f max=%.4f) — using %.2f/%.2f",
+            min_f,
+            max_f,
+            DEFAULT_LOSS_CUT_MIN,
+            DEFAULT_LOSS_CUT_MAX,
+        )
+        return DEFAULT_LOSS_CUT_MIN, DEFAULT_LOSS_CUT_MAX
+    return min_f, max_f
+
+
+def normalize_loss_cut_band_hits(min_hits: int, window_cycles: int) -> int:
+    """Ensure band-touch requirement fits the rolling window."""
+    return normalize_profit_take_band_hits(min_hits, window_cycles)
+
+
+def is_soft_jev_loss_cut(
+    prediction: Optional[JevPrediction],
+    threshold: float,
+    *,
+    min_progress: float,
+    progress: Optional[float],
+) -> bool:
+    return is_soft_jev_profit_take(
+        prediction,
+        threshold,
+        min_progress=min_progress,
+        progress=progress,
+    )
+
+
+def loss_cut_should_exit(
+    trade: TradeRecord,
+    price: float,
+    settings: RiskSettings,
+    *,
+    band_hits: int,
+    prediction: Optional[JevPrediction] = None,
+) -> bool:
+    if not settings.loss_cut_enabled:
+        return False
+    if min_hold_remaining_minutes(trade, settings) > 0:
+        return False
+
+    min_fraction, max_fraction = normalize_loss_cut_fractions(
+        settings.loss_cut_min_fraction,
+        settings.loss_cut_max_fraction,
+    )
+    progress = stop_loss_path_progress(trade, price)
+    if progress is None or progress <= 0:
+        return False
+
+    if is_fast_spike_exit(progress, max_fraction):
+        return True
+
+    min_hits = normalize_loss_cut_band_hits(
+        getattr(settings, "loss_cut_min_band_hits", 1),
+        getattr(settings, "loss_cut_band_window_cycles", 10),
+    )
+    if band_hits >= min_hits and min_fraction <= progress < 1.0:
+        return True
+
+    jev_threshold = float(getattr(settings, "loss_cut_jev_sell_threshold", 0) or 0)
+    if is_soft_jev_loss_cut(
+        prediction,
+        jev_threshold,
+        min_progress=min_fraction,
+        progress=progress,
+    ):
+        return True
+
+    return False

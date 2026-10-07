@@ -46,6 +46,7 @@ def run_cycle_sync(
     risk_manager: RiskManager | None,
     confirmation_tracker: ConfirmationTracker,
     profit_take_tracker: ProfitTakeBandTracker,
+    loss_cut_tracker: ProfitTakeBandTracker,
     scratch: EvalCycleScratch,
     news_client: object | None,
     last_general_news_refresh: float,
@@ -107,6 +108,9 @@ def run_cycle_sync(
             )
         profit_take_tracker.reconfigure(
             scratch.risk_settings.profit_take_band_window_cycles,
+        )
+        loss_cut_tracker.reconfigure(
+            scratch.risk_settings.loss_cut_band_window_cycles,
         )
         scratch.last_settings_sync = now_mono
 

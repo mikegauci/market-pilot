@@ -27,8 +27,14 @@ class SupabaseSettingsMixin:
         "profit_take_min_band_hits, profit_take_band_window_cycles, "
         "profit_take_jev_sell_threshold"
     )
+    _SETTINGS_SELECT_WITH_LOSS_CUT = (
+        f"{_SETTINGS_SELECT_WITH_PROFIT_TAKE}, "
+        "loss_cut_enabled, loss_cut_min_fraction, loss_cut_max_fraction, "
+        "loss_cut_min_band_hits, loss_cut_band_window_cycles, "
+        "loss_cut_jev_sell_threshold"
+    )
     _SETTINGS_SELECT_BASE = (
-        f"{_SETTINGS_SELECT_WITH_PROFIT_TAKE}, confirmation_cycles, confirmation_seconds"
+        f"{_SETTINGS_SELECT_WITH_LOSS_CUT}, confirmation_cycles, confirmation_seconds"
     )
     _SETTINGS_SELECT_ROTATION = (
         "watchlist_pool, watchlist_active, watchlist_rotation_enabled, "
@@ -45,6 +51,15 @@ class SupabaseSettingsMixin:
         data.setdefault("profit_take_min_band_hits", 3)
         data.setdefault("profit_take_band_window_cycles", 10)
         data.setdefault("profit_take_jev_sell_threshold", 0.70)
+
+    @staticmethod
+    def _apply_loss_cut_defaults(data: dict) -> None:
+        data.setdefault("loss_cut_enabled", False)
+        data.setdefault("loss_cut_min_fraction", 0.70)
+        data.setdefault("loss_cut_max_fraction", 0.90)
+        data.setdefault("loss_cut_min_band_hits", 3)
+        data.setdefault("loss_cut_band_window_cycles", 10)
+        data.setdefault("loss_cut_jev_sell_threshold", 0.0)
 
     @staticmethod
     def _apply_rotation_defaults(data: dict) -> None:
@@ -106,6 +121,27 @@ class SupabaseSettingsMixin:
             return data
 
         logger.warning(
+            "Settings read without loss_cut columns — using defaults",
+        )
+        data = self._select_settings_row(
+            f"{self._SETTINGS_SELECT_WITH_PROFIT_TAKE}, confirmation_cycles, "
+            "confirmation_seconds, min_dollar_volume, "
+            f"{self._SETTINGS_SELECT_ROTATION}"
+        )
+        if data is not None:
+            self._apply_loss_cut_defaults(data)
+            return data
+
+        data = self._select_settings_row(
+            f"{self._SETTINGS_SELECT_WITH_PROFIT_TAKE}, confirmation_cycles, "
+            "confirmation_seconds, min_dollar_volume"
+        )
+        if data is not None:
+            self._apply_rotation_defaults(data)
+            self._apply_loss_cut_defaults(data)
+            return data
+
+        logger.warning(
             "Settings read without profit_take columns — using defaults",
         )
         data = self._select_settings_row(
@@ -114,6 +150,7 @@ class SupabaseSettingsMixin:
         )
         if data is not None:
             self._apply_profit_take_defaults(data)
+            self._apply_loss_cut_defaults(data)
             return data
 
         logger.warning(
@@ -124,6 +161,7 @@ class SupabaseSettingsMixin:
             data.setdefault("confirmation_cycles", 2)
             data.setdefault("confirmation_seconds", 30)
             self._apply_profit_take_defaults(data)
+            self._apply_loss_cut_defaults(data)
             return data
 
         data = self._select_settings_row(self._SETTINGS_SELECT_CORE)
@@ -132,6 +170,7 @@ class SupabaseSettingsMixin:
             data.setdefault("confirmation_cycles", 2)
             data.setdefault("confirmation_seconds", 30)
             self._apply_profit_take_defaults(data)
+            self._apply_loss_cut_defaults(data)
             return data
 
         raise RuntimeError("Unable to load settings row from Supabase")
@@ -150,6 +189,12 @@ class SupabaseSettingsMixin:
         profit_min, profit_max = normalize_profit_take_fractions(
             float(data.get("profit_take_min_fraction", 0.70)),
             float(data.get("profit_take_max_fraction", 0.80)),
+        )
+        from strategy.exits import normalize_loss_cut_fractions
+
+        loss_min, loss_max = normalize_loss_cut_fractions(
+            float(data.get("loss_cut_min_fraction", 0.70)),
+            float(data.get("loss_cut_max_fraction", 0.90)),
         )
         return RiskSettings(
             minimum_jev_confidence=float(data.get("minimum_jev_confidence", 0.85)),
@@ -182,6 +227,16 @@ class SupabaseSettingsMixin:
             ),
             profit_take_jev_sell_threshold=float(
                 data.get("profit_take_jev_sell_threshold", 0.70)
+            ),
+            loss_cut_enabled=bool(data.get("loss_cut_enabled", False)),
+            loss_cut_min_fraction=loss_min,
+            loss_cut_max_fraction=loss_max,
+            loss_cut_min_band_hits=int(data.get("loss_cut_min_band_hits", 3)),
+            loss_cut_band_window_cycles=int(
+                data.get("loss_cut_band_window_cycles", 10)
+            ),
+            loss_cut_jev_sell_threshold=float(
+                data.get("loss_cut_jev_sell_threshold", 0.0)
             ),
             watchlist_pool=[str(s).upper() for s in (data.get("watchlist_pool") or []) if str(s).strip()],
             watchlist_active=[str(s).upper() for s in (data.get("watchlist_active") or []) if str(s).strip()],

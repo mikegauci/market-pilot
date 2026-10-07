@@ -4,7 +4,11 @@ import logging
 import time
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from broker.execution import close_ibkr_signal_exits, collect_profit_take_trade_ids
+from broker.execution import (
+    close_ibkr_signal_exits,
+    collect_loss_cut_trade_ids,
+    collect_profit_take_trade_ids,
+)
 from config import Settings
 from database.prediction_payload import build_filter_skip_payload
 from database.supabase import SupabaseRepository
@@ -102,6 +106,7 @@ def run_cycle_eval_and_exits_after_jev(
     risk_manager: RiskManager | None,
     confirmation_tracker: ConfirmationTracker,
     profit_take_tracker: ProfitTakeBandTracker,
+    loss_cut_tracker: ProfitTakeBandTracker,
     scratch: EvalCycleScratch,
     strategy_config: StrategyConfig,
     runtime: TraderRuntimeState,
@@ -231,6 +236,20 @@ def run_cycle_eval_and_exits_after_jev(
         ):
             scratch.portfolio_dirty = True
 
+        closed_loss_cut_sim = risk_manager.check_loss_cut_exits(
+            scratch.quotes_by_symbol,
+            loss_cut_tracker,
+            scratch.predictions_by_symbol,
+        )
+        if persist_simulated_closes(
+            db,
+            risk_manager,
+            closed_loss_cut_sim,
+            daily_pnl_account_id=scratch.daily_pnl_account_id,
+            quotes_by_symbol=scratch.quotes_by_symbol,
+        ):
+            scratch.portfolio_dirty = True
+
     if (
         risk_manager
         and db
@@ -244,6 +263,13 @@ def run_cycle_eval_and_exits_after_jev(
             profit_take_tracker,
             scratch.predictions_by_symbol,
         )
+        loss_cut_trade_ids = collect_loss_cut_trade_ids(
+            risk_manager.open_trades,
+            scratch.quotes_by_symbol,
+            scratch.risk_settings,
+            loss_cut_tracker,
+            scratch.predictions_by_symbol,
+        )
         closed_signals, closed_trade_ids = close_ibkr_signal_exits(
             ibkr,
             risk_manager,
@@ -252,6 +278,7 @@ def run_cycle_eval_and_exits_after_jev(
             max_hold_for_symbol=lambda sym: float(scratch.risk_settings.max_hold_minutes),
             jev_sell_symbols=scratch.jev_sell_symbols,
             profit_take_trade_ids=profit_take_trade_ids,
+            loss_cut_trade_ids=loss_cut_trade_ids,
             fill_timeout_sec=settings.ibkr_fill_timeout_sec,
             ibkr_account_id=scratch.daily_pnl_account_id,
         )
@@ -259,6 +286,7 @@ def run_cycle_eval_and_exits_after_jev(
             scratch.portfolio_dirty = True
             for trade_id in closed_trade_ids:
                 profit_take_tracker.clear(trade_id)
+                loss_cut_tracker.clear(trade_id)
 
     if scratch.portfolio_dirty and db:
         sync_portfolio_state(

@@ -116,6 +116,7 @@ class MessageFormatTests(unittest.TestCase):
             "stop_loss": "Stop loss",
             "take_profit": "Top profit take",
             "profit_take": "Soft Sell",
+            "loss_cut": "Soft Stop",
             "time_exit": "Max hold",
             "jev_sell": "JEV hard sell",
             "demotion_exit": "Demotion exit",

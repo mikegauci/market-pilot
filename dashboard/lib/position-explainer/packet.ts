@@ -33,6 +33,7 @@ export type PositionExplainPacket = {
     min_hold_minutes: number;
     jev_sell_exit_threshold_pct: number;
     profit_take_enabled: boolean;
+    loss_cut_enabled: boolean;
   };
 };
 
@@ -86,6 +87,7 @@ export function buildPositionExplainPacket(
       jev_sell_exit_threshold_pct:
         Math.round(settings.jev_sell_exit_threshold * 1000) / 10,
       profit_take_enabled: settings.profit_take_enabled,
+      loss_cut_enabled: settings.loss_cut_enabled,
     },
   };
 }

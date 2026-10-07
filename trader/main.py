@@ -138,6 +138,9 @@ def run() -> int:
     profit_take_tracker = ProfitTakeBandTracker(
         risk_settings.profit_take_band_window_cycles,
     )
+    loss_cut_tracker = ProfitTakeBandTracker(
+        risk_settings.loss_cut_band_window_cycles,
+    )
     logger.info(
         "Strategy filters: min confidence from settings, margin %.0f%%, "
         "confirmation %sx, max hold %.0fm (dashboard), min hold %.0fm, "
@@ -445,6 +448,7 @@ def run() -> int:
         risk_manager=risk_manager,
         confirmation_tracker=confirmation_tracker,
         profit_take_tracker=profit_take_tracker,
+        loss_cut_tracker=loss_cut_tracker,
         bot_enabled=bot_enabled,
         trading_mode=trading_mode,
         configured_execution_mode=configured_execution_mode,

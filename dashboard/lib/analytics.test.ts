@@ -132,6 +132,10 @@ describe("trade-analytics", () => {
     expect(exitReasonLabel("profit_take")).toBe("Soft Sell");
   });
 
+  it("labels loss_cut exits as Soft Stop", () => {
+    expect(exitReasonLabel("loss_cut")).toBe("Soft Stop");
+  });
+
   it("sums pnl by exit reason", () => {
     const breakdown = exitReasonBreakdown([closedWin, closedLoss]);
     expect(breakdown.find((r) => r.reason === "take_profit")?.pnl).toBe(5);

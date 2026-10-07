@@ -163,6 +163,13 @@ class RiskSettings:
     profit_take_min_band_hits: int = 3
     profit_take_band_window_cycles: int = 10
     profit_take_jev_sell_threshold: float = 0.70
+    # Early loss cut when price reaches a band along entry→stop (fractions 0–1).
+    loss_cut_enabled: bool = False
+    loss_cut_min_fraction: float = 0.70
+    loss_cut_max_fraction: float = 0.90
+    loss_cut_min_band_hits: int = 3
+    loss_cut_band_window_cycles: int = 10
+    loss_cut_jev_sell_threshold: float = 0.0
     # Block new entries in a symbol for this many minutes after an exit. 0 = off.
     reentry_cooldown_minutes: float = 45.0
     confirmation_cycles: int = 2
