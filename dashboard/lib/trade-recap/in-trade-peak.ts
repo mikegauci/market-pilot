@@ -11,6 +11,8 @@ export type ProfitTakePathStats = {
   early_exit_band_path_pct: { min: number; max: number } | null;
   min_band_hits_required: number | null;
   max_path_progress_pct: number | null;
+  /** True when price never exceeded entry (do not describe as "reached 0%"). */
+  never_reached_profit_on_path: boolean;
   reached_early_exit_min: boolean;
   entered_early_exit_band: boolean;
   would_fast_spike_exit: boolean;
@@ -20,6 +22,23 @@ export type ProfitTakePathStats = {
 
 const DEFAULT_PROFIT_TAKE_MIN = 0.7;
 const DEFAULT_PROFIT_TAKE_MAX = 0.8;
+const DEFAULT_LOSS_CUT_MIN = 0.7;
+const DEFAULT_LOSS_CUT_MAX = 0.9;
+
+export type LossCutPathStats = {
+  loss_cut_enabled: boolean;
+  /** Early soft-stop band as % along entry → hard stop path (matches bot settings). */
+  early_loss_cut_band_path_pct: { min: number; max: number } | null;
+  min_band_hits_required: number | null;
+  max_stop_path_progress_pct: number | null;
+  /** True when price never traded below entry (do not describe as "reached 0% toward stop"). */
+  never_went_underwater_on_stop_path: boolean;
+  reached_early_loss_cut_min: boolean;
+  entered_early_loss_cut_band: boolean;
+  would_fast_spike_loss_cut: boolean;
+  band_touch_cycles: number;
+  sample_note: string;
+};
 
 export type InTradePeak = {
   peak_price: number;
@@ -69,6 +88,101 @@ function isFastSpikeExit(progress: number, maxFraction: number): boolean {
   return maxFraction < progress && progress < 1.0;
 }
 
+function normalizeLossCutFractions(
+  minFraction: number,
+  maxFraction: number,
+): { min: number; max: number } {
+  const minF = minFraction;
+  const maxF = maxFraction;
+  const valid =
+    minF > 0 && minF < 1 && maxF > 0 && maxF <= 1 && maxF > minF;
+  if (!valid) {
+    return { min: DEFAULT_LOSS_CUT_MIN, max: DEFAULT_LOSS_CUT_MAX };
+  }
+  return { min: minF, max: maxF };
+}
+
+function stopLossPathProgress(
+  entryPrice: number,
+  stopLoss: number,
+  price: number,
+): number | null {
+  if (entryPrice <= 0 || stopLoss >= entryPrice) return null;
+  if (price >= entryPrice) return null;
+  if (price <= stopLoss) return 1.0;
+  return (entryPrice - price) / (entryPrice - stopLoss);
+}
+
+/** Max entry→stop path progress from quote snapshots (mirrors trader stop_loss_path_progress). */
+export function computeLossCutPathStats(
+  trade: Pick<Trade, "entry_price" | "stop_loss" | "side">,
+  ticks: PriceTick[],
+  settings: Pick<
+    Settings,
+    | "loss_cut_enabled"
+    | "loss_cut_min_fraction"
+    | "loss_cut_max_fraction"
+    | "loss_cut_min_band_hits"
+  >,
+): LossCutPathStats | null {
+  if (trade.side !== "buy" || trade.entry_price <= 0 || ticks.length === 0) {
+    return null;
+  }
+  const stop = trade.stop_loss;
+  if (stop == null || stop >= trade.entry_price) {
+    return null;
+  }
+
+  const { min: minFraction, max: maxFraction } = normalizeLossCutFractions(
+    settings.loss_cut_min_fraction,
+    settings.loss_cut_max_fraction,
+  );
+  const bandMinPct = round1(minFraction * 100);
+  const bandMaxPct = round1(maxFraction * 100);
+
+  let maxProgress: number | null = null;
+  let enteredBand = false;
+  let fastSpike = false;
+  let bandTouches = 0;
+
+  for (const tick of ticks) {
+    const progress = stopLossPathProgress(trade.entry_price, stop, tick.price);
+    if (progress == null || progress <= 0) continue;
+    if (maxProgress == null || progress > maxProgress) {
+      maxProgress = progress;
+    }
+    if (progressInBand(progress, minFraction, maxFraction)) {
+      enteredBand = true;
+      bandTouches += 1;
+    }
+    if (isFastSpikeExit(progress, maxFraction)) {
+      fastSpike = true;
+    }
+  }
+
+  const neverUnderwater = maxProgress == null;
+  const maxStopPathProgressPct = neverUnderwater ? null : round1(maxProgress * 100);
+  const reachedMin = maxProgress != null && maxProgress >= minFraction;
+
+  return {
+    loss_cut_enabled: settings.loss_cut_enabled,
+    early_loss_cut_band_path_pct: settings.loss_cut_enabled
+      ? { min: bandMinPct, max: bandMaxPct }
+      : null,
+    min_band_hits_required: settings.loss_cut_enabled
+      ? Math.max(1, settings.loss_cut_min_band_hits)
+      : null,
+    max_stop_path_progress_pct: maxStopPathProgressPct,
+    never_went_underwater_on_stop_path: neverUnderwater,
+    reached_early_loss_cut_min: reachedMin,
+    entered_early_loss_cut_band: enteredBand,
+    would_fast_spike_loss_cut: fastSpike,
+    band_touch_cycles: bandTouches,
+    sample_note:
+      "Stop path progress is % from entry toward hard stop (100 = at stop). Band matches early Soft Stop settings.",
+  };
+}
+
 /** Max entry→TP path progress from quote snapshots (mirrors trader take_profit_path_progress). */
 export function computeProfitTakePathStats(
   trade: Pick<Trade, "entry_price" | "take_profit" | "side">,
@@ -116,8 +230,11 @@ export function computeProfitTakePathStats(
     }
   }
 
-  const maxPathProgressPct =
-    maxProgress == null ? null : round1(Math.max(0, maxProgress) * 100);
+  const neverReachedProfit =
+    maxProgress == null || maxProgress <= 0;
+  const maxPathProgressPct = neverReachedProfit
+    ? null
+    : round1(maxProgress * 100);
   const reachedMin =
     maxProgress != null && maxProgress >= minFraction;
 
@@ -130,6 +247,7 @@ export function computeProfitTakePathStats(
       ? Math.max(1, settings.profit_take_min_band_hits)
       : null,
     max_path_progress_pct: maxPathProgressPct,
+    never_reached_profit_on_path: neverReachedProfit,
     reached_early_exit_min: reachedMin,
     entered_early_exit_band: enteredBand,
     would_fast_spike_exit: fastSpike,

@@ -1,10 +1,29 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { TradeRecapRichText } from "@/components/trade-recap-rich-text";
 import { explainTradeRecap } from "@/lib/trade-recap/actions";
+import { recapHeadlineClass } from "@/lib/trade-recap/rich-text";
 import type { TradeRecap } from "@/lib/trade-recap/schema";
+import { cn } from "@/lib/utils";
 
-export function TradeRecapButton({ tradeId }: { tradeId: string }) {
+type TradeRecapButtonProps = {
+  tradeId: string;
+  netPnl?: number | null;
+  entryPrice?: number;
+  exitPrice?: number | null;
+};
+
+export function TradeRecapButton({
+  tradeId,
+  netPnl = null,
+  entryPrice = 0,
+  exitPrice = null,
+}: TradeRecapButtonProps) {
+  const tone =
+    entryPrice > 0
+      ? { netPnl, entryPrice, exitPrice }
+      : undefined;
   const [pending, startTransition] = useTransition();
   const [recap, setRecap] = useState<TradeRecap | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,11 +58,19 @@ export function TradeRecapButton({ tradeId }: { tradeId: string }) {
       </button>
       {open && error ? <p className="mt-1 text-xs text-red-400">{error}</p> : null}
       {open && recap ? (
-        <div className="mt-2 max-w-md space-y-1 rounded-md border border-zinc-800 bg-zinc-950/80 p-2 text-xs leading-relaxed text-zinc-300">
-          <p className="font-medium text-zinc-200">{recap.headline}</p>
-          <p>{recap.entry_story}</p>
-          <p className="text-zinc-400">{recap.exit_story}</p>
-          <p>{recap.verdict}</p>
+        <div className="mt-2 max-w-md space-y-2 rounded-md border border-zinc-800 bg-zinc-950/80 p-2.5 text-xs leading-relaxed text-zinc-300">
+          <p className={cn(recapHeadlineClass(netPnl))}>
+            <TradeRecapRichText text={recap.headline} tone={tone} />
+          </p>
+          <p>
+            <TradeRecapRichText text={recap.entry_story} tone={tone} />
+          </p>
+          <p className="text-zinc-400">
+            <TradeRecapRichText text={recap.exit_story} tone={tone} />
+          </p>
+          <p className="border-t border-zinc-800/80 pt-2 text-zinc-300">
+            <TradeRecapRichText text={recap.verdict} tone={tone} />
+          </p>
           <p className="text-zinc-500">Recap only. Exit settings may have changed since this trade.</p>
         </div>
       ) : null}

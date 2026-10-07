@@ -1,5 +1,9 @@
 import { exitReasonLabel } from "@/lib/trade-analytics";
-import type { InTradePeak, ProfitTakePathStats } from "@/lib/trade-recap/in-trade-peak";
+import type {
+  InTradePeak,
+  LossCutPathStats,
+  ProfitTakePathStats,
+} from "@/lib/trade-recap/in-trade-peak";
 import type { Settings, Trade } from "@/lib/types/database";
 
 function percentPoints(decimal: number | null | undefined): number | null {
@@ -29,6 +33,7 @@ export type TradeRecapPacket = {
   };
   in_trade_peak: InTradePeak | null;
   profit_take_path: ProfitTakePathStats | null;
+  loss_cut_path: LossCutPathStats | null;
 };
 
 export function buildTradeRecapPacket(
@@ -36,6 +41,7 @@ export function buildTradeRecapPacket(
   settings: Settings,
   inTradePeak: InTradePeak | null = null,
   profitTakePath: ProfitTakePathStats | null = null,
+  lossCutPath: LossCutPathStats | null = null,
 ): TradeRecapPacket {
   const reason = trade.exit_reason?.trim() || null;
   return {
@@ -61,5 +67,6 @@ export function buildTradeRecapPacket(
     },
     in_trade_peak: inTradePeak,
     profit_take_path: profitTakePath,
+    loss_cut_path: lossCutPath,
   };
 }

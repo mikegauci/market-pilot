@@ -413,7 +413,12 @@ export function TradesTable({
                       {t.status === "closed" ? (
                         <div className="mt-1 text-xs text-zinc-500">
                           {exitReasonLabel(t.exit_reason ?? "unknown")}
-                          <TradeRecapButton tradeId={t.id} />
+                          <TradeRecapButton
+                            tradeId={t.id}
+                            netPnl={t.net_pnl}
+                            entryPrice={t.entry_price}
+                            exitPrice={t.exit_price}
+                          />
                         </div>
                       ) : null}
                     </td>

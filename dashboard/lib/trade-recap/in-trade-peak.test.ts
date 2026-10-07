@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeInTradePeak,
+  computeLossCutPathStats,
   computeProfitTakePathStats,
 } from "@/lib/trade-recap/in-trade-peak";
 
@@ -55,6 +56,7 @@ describe("computeProfitTakePathStats", () => {
     );
     expect(stats).not.toBeNull();
     expect(stats!.max_path_progress_pct).toBe(33.7);
+    expect(stats!.never_reached_profit_on_path).toBe(false);
     expect(stats!.reached_early_exit_min).toBe(false);
     expect(stats!.entered_early_exit_band).toBe(false);
     expect(stats!.early_exit_band_path_pct).toEqual({ min: 70, max: 80 });
@@ -70,5 +72,58 @@ describe("computeProfitTakePathStats", () => {
     expect(stats!.reached_early_exit_min).toBe(true);
     expect(stats!.entered_early_exit_band).toBe(true);
     expect(stats!.band_touch_cycles).toBe(1);
+    expect(stats!.never_reached_profit_on_path).toBe(false);
+  });
+
+  it("marks never_reached_profit when price stayed at or below entry", () => {
+    const stats = computeProfitTakePathStats(
+      trade,
+      [
+        { price: 333.75, created_at: "2026-10-06T15:54:00Z" },
+        { price: 332.6, created_at: "2026-10-06T16:40:00Z" },
+      ],
+      settings,
+    );
+    expect(stats!.never_reached_profit_on_path).toBe(true);
+    expect(stats!.max_path_progress_pct).toBeNull();
+    expect(stats!.reached_early_exit_min).toBe(false);
+  });
+});
+
+describe("computeLossCutPathStats", () => {
+  const trade = {
+    side: "buy" as const,
+    entry_price: 198.6,
+    stop_loss: 197.92,
+  };
+  const settings = {
+    loss_cut_enabled: true,
+    loss_cut_min_fraction: 0.7,
+    loss_cut_max_fraction: 0.9,
+    loss_cut_min_band_hits: 3,
+  };
+
+  it("reports no stop path when price never went below entry", () => {
+    const stats = computeLossCutPathStats(
+      trade,
+      [{ price: 199.05, created_at: "2026-10-06T17:49:00Z" }],
+      settings,
+    );
+    expect(stats!.never_went_underwater_on_stop_path).toBe(true);
+    expect(stats!.max_stop_path_progress_pct).toBeNull();
+  });
+
+  it("reports max stop path progress when underwater", () => {
+    const stats = computeLossCutPathStats(
+      trade,
+      [
+        { price: 198.2, created_at: "2026-10-06T17:45:00Z" },
+        { price: 199.05, created_at: "2026-10-06T17:49:00Z" },
+      ],
+      settings,
+    );
+    expect(stats!.never_went_underwater_on_stop_path).toBe(false);
+    expect(stats!.max_stop_path_progress_pct).toBe(58.8);
+    expect(stats!.early_loss_cut_band_path_pct).toEqual({ min: 70, max: 90 });
   });
 });
