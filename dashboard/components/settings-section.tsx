@@ -1,10 +1,6 @@
-import {
-  SettingsFieldExample,
-  SettingsFieldHelp,
-} from "@/components/settings-field-help";
+import { SettingsFieldHelp } from "@/components/settings-field-help";
 import { Label } from "@/components/ui/label";
 import type { SettingDescriptionKey } from "@/lib/settings-form-descriptions";
-import { settingFieldExample } from "@/lib/settings-field-meta";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
@@ -136,16 +132,16 @@ export function SettingsField({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="shrink-0 space-y-1 sm:max-w-[55%]">
           <Label htmlFor={id}>{label}</Label>
-          <FieldDescription id={describedBy} title={descriptionTitle ?? description}>
+          <FieldDescription
+            id={describedBy}
+            title={fieldKey ? undefined : (descriptionTitle ?? description)}
+          >
             {description}
           </FieldDescription>
-          {fieldKey && settingFieldExample(fieldKey) ? (
-            <SettingsFieldExample fieldKey={fieldKey} />
-          ) : null}
+          {fieldKey ? <SettingsFieldHelp fieldKey={fieldKey} /> : null}
         </div>
         <div className="w-full sm:max-w-[11rem] sm:shrink-0 sm:pt-0">{children}</div>
       </div>
-      {fieldKey ? <SettingsFieldHelp fieldKey={fieldKey} /> : null}
     </div>
   );
 }
