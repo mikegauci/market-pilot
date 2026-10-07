@@ -19,7 +19,7 @@ import {
   readOpenTrades,
   readPortfolioHistory,
   readPositions,
-  readPredictionFeed,
+  readPredictionFeedPage,
   readSettings,
   readSymbolBars,
   readTradedPredictions,
@@ -54,14 +54,30 @@ export async function fetchPositions(): Promise<Position[]> {
   return data;
 }
 
-export async function fetchPredictions(limit = 50, symbol?: string): Promise<Prediction[]> {
+export type FetchPredictionsOptions = {
+  page?: number;
+  pageSize?: number;
+  symbol?: string;
+  sinceIso?: string;
+};
+
+export async function fetchPredictions(
+  options: FetchPredictionsOptions = {},
+): Promise<Prediction[]> {
+  const pageSize = options.pageSize ?? 50;
+  const page = Math.max(1, options.page ?? 1);
   const supabase = createClient();
-  const { data, error } = await readPredictionFeed(supabase, limit, symbol);
+  const { data, error } = await readPredictionFeedPage(supabase, {
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    symbol: options.symbol,
+    sinceIso: options.sinceIso,
+  });
   if (error) {
     logFetchError("predictions", error.message);
     throw new Error(error.message);
   }
-  return data;
+  return data.predictions;
 }
 
 export async function fetchPredictionWithSnapshot(

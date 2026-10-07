@@ -29,7 +29,9 @@ import {
   readOpenTrades,
   readPortfolioHistory,
   readPositions,
-  readPredictionFeed,
+  readPredictionFeedPage,
+  readPredictionFeedPageForId,
+  readPredictionFeedSymbols,
   readSettings,
   readSymbolBars,
   readTradedPredictions,
@@ -265,21 +267,90 @@ export async function getTradesPageLoad(
   return { trades, tradeScope };
 }
 
-export type PredictionsLoad = {
+export type PredictionsPageLoad = {
   predictions: Prediction[];
   loadError: string | null;
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  sessionStartIso: string;
+  symbols: string[];
 };
 
-export async function getPredictions(
-  limit = 50,
-  symbol?: string,
-): Promise<PredictionsLoad> {
+export async function getPredictionsPage(
+  page: number,
+  pageSize: number,
+  options?: {
+    symbol?: string;
+    sessionStartIso?: string;
+    /** When set, jump to the page that contains this prediction (deep link). */
+    expandToPredictionId?: string | null;
+  },
+): Promise<PredictionsPageLoad> {
   const supabase = await createClient();
-  const { data, error } = await readPredictionFeed(supabase, limit, symbol);
+  const sessionStartIso = options?.sessionStartIso ?? tradingDayStartUtc();
+  const symbol = options?.symbol?.trim() || undefined;
+
+  let resolvedPage = Math.max(1, page);
+  if (options?.expandToPredictionId) {
+    const { data: pageForId } = await readPredictionFeedPageForId(
+      supabase,
+      options.expandToPredictionId,
+      pageSize,
+      sessionStartIso,
+      symbol,
+    );
+    resolvedPage = pageForId;
+  }
+
+  const [{ data, error }, { data: symbols, error: symbolsError }] = await Promise.all([
+    readPredictionFeedPage(supabase, {
+      limit: pageSize,
+      offset: (resolvedPage - 1) * pageSize,
+      symbol,
+      sinceIso: sessionStartIso,
+    }),
+    readPredictionFeedSymbols(supabase, sessionStartIso),
+  ]);
+
   if (error) {
     console.warn("predictions feed load failed:", error.message);
   }
-  return { predictions: data, loadError: error?.message ?? null };
+  if (symbolsError) {
+    console.warn("prediction symbols load failed:", symbolsError.message);
+  }
+
+  const totalCount = data.totalCount;
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize) || 1);
+  const clampedPage = Math.min(resolvedPage, pageCount);
+
+  if (clampedPage !== resolvedPage) {
+    const retry = await readPredictionFeedPage(supabase, {
+      limit: pageSize,
+      offset: (clampedPage - 1) * pageSize,
+      symbol,
+      sinceIso: sessionStartIso,
+    });
+    return {
+      predictions: retry.data.predictions,
+      loadError: retry.error?.message ?? error?.message ?? null,
+      totalCount: retry.data.totalCount,
+      page: clampedPage,
+      pageSize,
+      sessionStartIso,
+      symbols,
+    };
+  }
+
+  return {
+    predictions: data.predictions,
+    loadError: error?.message ?? null,
+    totalCount,
+    page: clampedPage,
+    pageSize,
+    sessionStartIso,
+    symbols,
+  };
 }
 
 export async function getMarketNews(limit = 100): Promise<MarketNewsRow[]> {

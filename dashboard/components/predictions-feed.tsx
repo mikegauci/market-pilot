@@ -1,7 +1,9 @@
 "use client";
 
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { PredictionIndicators } from "@/components/prediction-indicators";
 import { SkipExplanation } from "@/components/skip-explanation";
 import { SortableTh } from "@/components/sortable-th";
@@ -26,7 +28,8 @@ import {
   formatJevProbabilityPercent,
   formatSkipReason,
 } from "@/lib/prediction-skip-reason";
-import { formatCurrency, formatDateTime, formatPercent } from "@/lib/utils";
+import { predictionFeedPageCount } from "@/lib/prediction-feed";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 
 type SortKey =
   | "timestamp"
@@ -135,6 +138,39 @@ function NewsCell({ snapshot }: { snapshot?: MarketSnapshot | null }) {
   );
 }
 
+function predictionsQueryHref(
+  pathname: string,
+  searchParams: URLSearchParams,
+  updates: { page?: number; symbol?: string | null; prediction?: string | null },
+): string {
+  const next = new URLSearchParams(searchParams.toString());
+  if (updates.page != null) {
+    if (updates.page <= 1) {
+      next.delete("page");
+    } else {
+      next.set("page", String(updates.page));
+    }
+  }
+  if (updates.symbol !== undefined) {
+    const value = updates.symbol?.trim();
+    if (!value) {
+      next.delete("symbol");
+    } else {
+      next.set("symbol", value);
+    }
+    next.delete("page");
+  }
+  if (updates.prediction !== undefined) {
+    if (!updates.prediction) {
+      next.delete("prediction");
+    } else {
+      next.set("prediction", updates.prediction);
+    }
+  }
+  const qs = next.toString();
+  return qs ? `${pathname}?${qs}` : pathname;
+}
+
 function predictionsEmptyMessage(
   loadError: string | null,
   analyticsCount: number,
@@ -154,16 +190,28 @@ export function PredictionsFeed({
   analyticsCount = 0,
   filterOptions = {},
   initialExpandedId = null,
-  limit = 50,
+  page = 1,
+  pageSize = 50,
+  totalCount = 0,
+  sessionStartIso,
+  symbolFilter = "",
+  symbolOptions = [],
 }: {
   predictions: Prediction[];
   loadError?: string | null;
   analyticsCount?: number;
   filterOptions?: EvaluateOptions;
   initialExpandedId?: string | null;
-  limit?: number;
+  page?: number;
+  pageSize?: number;
+  totalCount?: number;
+  sessionStartIso: string;
+  symbolFilter?: string;
+  symbolOptions?: string[];
 }) {
-  const [symbolFilter, setSymbolFilter] = useState("");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [expandedId, setExpandedId] = useState<string | null>(initialExpandedId ?? null);
   const [prevExpandedSeed, setPrevExpandedSeed] = useState(initialExpandedId ?? null);
   const [snapshotById, setSnapshotById] = useState<
@@ -173,9 +221,17 @@ export function PredictionsFeed({
   const [loadingSnapshotId, setLoadingSnapshotId] = useState<string | null>(null);
   const [pollLoadError, setPollLoadError] = useState<string | null>(null);
 
+  const activeSymbol = symbolFilter.trim() || undefined;
+  const liveQueryKey = `${page}:${activeSymbol ?? ""}:${sessionStartIso}`;
+
   const loadPredictions = useCallback(async () => {
     try {
-      const rows = await fetchPredictions(limit);
+      const rows = await fetchPredictions({
+        page,
+        pageSize,
+        symbol: activeSymbol,
+        sinceIso: sessionStartIso,
+      });
       setPollLoadError(null);
       return rows;
     } catch (err) {
@@ -183,9 +239,10 @@ export function PredictionsFeed({
       setPollLoadError(message);
       return [];
     }
-  }, [limit]);
+  }, [page, pageSize, activeSymbol, sessionStartIso]);
   const livePredictions = useLiveQuery(predictions, loadPredictions, ["predictions"], undefined, {
     keepPreviousOnEmpty: true,
+    resetKey: liveQueryKey,
   });
   const effectiveLoadError = pollLoadError ?? loadError;
 
@@ -201,17 +258,20 @@ export function PredictionsFeed({
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [initialExpandedId, livePredictions]);
 
-  const symbols = [...new Set(livePredictions.map((p) => p.symbol))].sort();
-  const activeSymbolFilter =
-    symbolFilter && symbols.includes(symbolFilter) ? symbolFilter : "";
+  const symbols =
+    symbolOptions.length > 0
+      ? symbolOptions
+      : [...new Set(livePredictions.map((p) => p.symbol))].sort();
 
-  const filtered = useMemo(
-    () =>
-      activeSymbolFilter
-        ? livePredictions.filter((p) => p.symbol === activeSymbolFilter)
-        : livePredictions,
-    [livePredictions, activeSymbolFilter],
-  );
+  const filtered = livePredictions;
+
+  const pageCount = predictionFeedPageCount(totalCount, pageSize);
+  const rangeStart = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const rangeEnd = Math.min(page * pageSize, totalCount);
+
+  const queryString = searchParams.toString();
+  const hrefForPage = (targetPage: number) =>
+    predictionsQueryHref(pathname, new URLSearchParams(queryString), { page: targetPage });
 
   const compare = useCallback(
     (a: Prediction, b: Prediction, key: SortKey, dir: SortDir) =>
@@ -262,11 +322,23 @@ export function PredictionsFeed({
 
   return (
     <Card>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <CardTitle>Latest Predictions</CardTitle>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <CardTitle>Latest Predictions</CardTitle>
+          <p className="mt-1 text-xs text-zinc-500">
+            US Eastern trading day · {totalCount.toLocaleString()} row
+            {totalCount === 1 ? "" : "s"}
+            {activeSymbol ? ` for ${activeSymbol}` : ""}
+          </p>
+        </div>
         <select
           value={symbolFilter}
-          onChange={(e) => setSymbolFilter(e.target.value)}
+          onChange={(e) => {
+            const href = predictionsQueryHref(pathname, new URLSearchParams(queryString), {
+              symbol: e.target.value || null,
+            });
+            router.push(href);
+          }}
           className="rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm text-zinc-300"
         >
           <option value="">All symbols</option>
@@ -485,6 +557,40 @@ export function PredictionsFeed({
               })}
             </tbody>
           </table>
+          {totalCount > pageSize ? (
+            <div className="mt-4 flex flex-col gap-3 border-t border-zinc-800 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-zinc-500">
+                Showing {rangeStart.toLocaleString()}–{rangeEnd.toLocaleString()} of{" "}
+                {totalCount.toLocaleString()} · Page {page} of {pageCount}
+              </p>
+              <div className="flex items-center gap-2">
+                {page <= 1 ? (
+                  <span className="rounded-md border border-zinc-800 px-3 py-1.5 text-sm text-zinc-600">
+                    Previous
+                  </span>
+                ) : (
+                  <Link
+                    href={hrefForPage(page - 1)}
+                    className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:border-zinc-500 hover:text-zinc-100"
+                  >
+                    Previous
+                  </Link>
+                )}
+                {page >= pageCount ? (
+                  <span className="rounded-md border border-zinc-800 px-3 py-1.5 text-sm text-zinc-600">
+                    Next
+                  </span>
+                ) : (
+                  <Link
+                    href={hrefForPage(page + 1)}
+                    className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:border-zinc-500 hover:text-zinc-100"
+                  >
+                    Next
+                  </Link>
+                )}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </Card>

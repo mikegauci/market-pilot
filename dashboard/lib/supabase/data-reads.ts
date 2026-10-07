@@ -13,6 +13,7 @@ import {
   mapLatestPredictionRpcRows,
 } from "@/lib/prediction-feed-normalize";
 import { PREDICTION_FEED_COLUMNS } from "@/lib/prediction-columns";
+import type { PredictionFeedFilters } from "@/lib/prediction-feed";
 import { tradingDayTradesOrFilter } from "@/lib/trading-day-trades";
 import type {
   MarketNewsRow,
@@ -254,19 +255,124 @@ export async function readAnalyticsPredictions(
 
 async function queryPredictionFeed(
   supabase: SupabaseClient,
-  limit: number,
-  symbol?: string,
+  filters: PredictionFeedFilters,
 ): Promise<SupabaseRead<Prediction[]>> {
+  const limit = filters.limit ?? 50;
+  const offset = filters.offset ?? 0;
+  let query = supabase.from("predictions").select(PREDICTION_FEED_COLUMNS);
+  if (filters.sinceIso) {
+    query = query.gte("timestamp", filters.sinceIso);
+  }
+  if (filters.symbol) {
+    query = query.eq("symbol", filters.symbol);
+  }
+  const { data, error } = await query
+    .order("timestamp", { ascending: false })
+    .range(offset, offset + limit - 1);
+  return { data: normalizePredictionFeedRows(data ?? []), error };
+}
+
+export type PredictionFeedPageLoad = {
+  predictions: Prediction[];
+  totalCount: number;
+};
+
+async function countPredictionFeed(
+  supabase: SupabaseClient,
+  filters: Pick<PredictionFeedFilters, "symbol" | "sinceIso">,
+): Promise<{ count: number; error: PostgrestError | null }> {
+  let query = supabase.from("predictions").select("*", { count: "exact", head: true });
+  if (filters.sinceIso) {
+    query = query.gte("timestamp", filters.sinceIso);
+  }
+  if (filters.symbol) {
+    query = query.eq("symbol", filters.symbol);
+  }
+  const { count, error } = await query;
+  return { count: count ?? 0, error };
+}
+
+/** Paginated feed for the predictions table (plain columns; news loads on row expand). */
+export async function readPredictionFeedPage(
+  supabase: SupabaseClient,
+  filters: PredictionFeedFilters,
+): Promise<SupabaseRead<PredictionFeedPageLoad>> {
+  const first = await queryPredictionFeed(supabase, filters);
+  const countResult = await countPredictionFeed(supabase, filters);
+  if (!first.error && !countResult.error) {
+    return {
+      data: { predictions: first.data, totalCount: countResult.count },
+      error: null,
+    };
+  }
+  const retry = await queryPredictionFeed(supabase, filters);
+  const retryCount = await countPredictionFeed(supabase, filters);
+  if (!retry.error && !retryCount.error) {
+    return {
+      data: { predictions: retry.data, totalCount: retryCount.count },
+      error: null,
+    };
+  }
+  return {
+    data: { predictions: first.data, totalCount: countResult.count },
+    error: first.error ?? countResult.error,
+  };
+}
+
+/** Distinct symbols with predictions since `sinceIso` (for feed filter dropdown). */
+export async function readPredictionFeedSymbols(
+  supabase: SupabaseClient,
+  sinceIso: string,
+): Promise<SupabaseRead<string[]>> {
+  const { data, error } = await supabase
+    .from("predictions")
+    .select("symbol")
+    .gte("timestamp", sinceIso)
+    .order("symbol", { ascending: true })
+    .limit(5000);
+  if (error) {
+    return { data: [], error };
+  }
+  const symbols = [...new Set((data ?? []).map((row) => row.symbol as string))].sort();
+  return { data: symbols, error: null };
+}
+
+/** Page number (1-based) for a prediction id in timestamp-desc feed order. */
+export async function readPredictionFeedPageForId(
+  supabase: SupabaseClient,
+  predictionId: string,
+  pageSize: number,
+  sinceIso: string,
+  symbol?: string,
+): Promise<SupabaseRead<number>> {
+  const { data: row, error: rowError } = await supabase
+    .from("predictions")
+    .select("timestamp,symbol")
+    .eq("id", predictionId)
+    .maybeSingle();
+  if (rowError) {
+    return { data: 1, error: rowError };
+  }
+  if (!row) {
+    return { data: 1, error: null };
+  }
+  if (symbol && row.symbol !== symbol) {
+    return { data: 1, error: null };
+  }
   let query = supabase
     .from("predictions")
-    .select(PREDICTION_FEED_COLUMNS)
-    .order("timestamp", { ascending: false })
-    .limit(limit);
+    .select("*", { count: "exact", head: true })
+    .gte("timestamp", sinceIso)
+    .gt("timestamp", row.timestamp as string);
   if (symbol) {
     query = query.eq("symbol", symbol);
   }
-  const { data, error } = await query;
-  return { data: normalizePredictionFeedRows(data ?? []), error };
+  const { count, error } = await query;
+  if (error) {
+    return { data: 1, error };
+  }
+  const index = count ?? 0;
+  return { data: Math.floor(index / pageSize) + 1, error: null };
 }
 
 /** Latest predictions for the feed — plain columns only (news loads on row expand). */
@@ -275,15 +381,8 @@ export async function readPredictionFeed(
   limit = 50,
   symbol?: string,
 ): Promise<SupabaseRead<Prediction[]>> {
-  const first = await queryPredictionFeed(supabase, limit, symbol);
-  if (!first.error) {
-    return first;
-  }
-  const retry = await queryPredictionFeed(supabase, limit, symbol);
-  if (!retry.error) {
-    return retry;
-  }
-  return first;
+  const { data, error } = await readPredictionFeedPage(supabase, { limit, offset: 0, symbol });
+  return { data: data.predictions, error };
 }
 
 export async function readLatestPredictionsBySymbol(
