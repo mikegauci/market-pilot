@@ -5,7 +5,7 @@ export function isPreJevFilterSkip(prediction: {
   buy_probability: number;
   hold_probability: number;
   sell_probability: number;
-  trade_skip_reason: string | null;
+  trade_skip_reason?: string | null;
   trade_created: boolean;
 }): boolean {
   if (prediction.trade_created || !prediction.trade_skip_reason) return false;
