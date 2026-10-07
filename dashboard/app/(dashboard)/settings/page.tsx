@@ -7,8 +7,6 @@ import {
   getLatestSessionBriefForUser,
   getSettings,
 } from "@/lib/queries";
-import { formatCurrency } from "@/lib/utils";
-
 export default async function SettingsPage() {
   const [settings, portfolio, latestBrief] = await Promise.all([
     getSettings(),
@@ -34,25 +32,6 @@ export default async function SettingsPage() {
         <h2 className="text-xl font-semibold sm:text-2xl">Settings</h2>
         <p className="text-sm leading-relaxed text-zinc-500">
           Configure how Jev trades, how much risk to take, and which symbols to watch.
-        </p>
-        <p className="text-xs leading-relaxed text-zinc-600">
-          Stop the trading engine to halt new trades. Trading mode:{" "}
-          <span className="text-zinc-400">{settings.trading_mode}</span> (live requires server{" "}
-          <code className="text-zinc-500">.env</code>).
-          {baselineEquity > 0 && (
-            <>
-              {" "}
-              Risk tier baseline:{" "}
-              <span className="text-zinc-400">{formatCurrency(baselineEquity, currency)}</span>
-              {currentEquity > 0 && currentEquity !== baselineEquity && (
-                <>
-                  {" "}
-                  · current equity{" "}
-                  <span className="text-zinc-400">{formatCurrency(currentEquity, currency)}</span>
-                </>
-              )}
-            </>
-          )}
         </p>
       </header>
 
