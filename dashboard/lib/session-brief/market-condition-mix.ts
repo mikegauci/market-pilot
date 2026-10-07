@@ -116,7 +116,7 @@ export function formatConditionShareLine(shares: ConditionShare[]): string {
 export function sessionConditionCoverageNote(observedMinutes: number): string {
   const recorded = observedMinutes.toLocaleString("en-US");
   const scope =
-    "Each minute uses the median 5-minute move of symbols the bot evaluated then (watchlist and open positions, excluding the benchmark).";
+    "Each minute uses the median 5-minute move of symbols the bot evaluated then (excluding the benchmark), not only the current watchlist.";
   if (observedMinutes === REGULAR_SESSION_MINUTES) {
     return `Share of all ${recorded} minutes from 9:30 to 16:00 New York. ${scope}`;
   }

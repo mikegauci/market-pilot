@@ -62,7 +62,7 @@ describe("parseSessionConditionMix", () => {
 describe("sessionConditionCoverageNote", () => {
   it("names a full session without a shortfall", () => {
     expect(sessionConditionCoverageNote(390)).toMatch(/all 390 minutes/);
-    expect(sessionConditionCoverageNote(390)).toMatch(/open positions/i);
+    expect(sessionConditionCoverageNote(390)).toMatch(/symbols the bot evaluated/i);
   });
 
   it("names a short session against a full day", () => {

@@ -144,14 +144,23 @@ export type SessionConditionMixLoad = {
 
 export async function getSessionMarketConditionMix(): Promise<SessionConditionMixLoad> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("list_session_market_condition_mix", {
+  const mixParams = {
     p_since: SESSION_BRIEF_FIRST_DATE,
     p_headwind_floor: STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct,
-  });
+  };
+  const { error: refreshError } = await supabase.rpc(
+    "refresh_session_market_condition_mix",
+    mixParams,
+  );
+  const { data, error } = await supabase.rpc("list_session_market_condition_mix", mixParams);
   if (error) {
     return { rows: [], loadError: error.message };
   }
-  return { rows: parseSessionConditionMix(data), loadError: null };
+  const rows = parseSessionConditionMix(data);
+  if (rows.length === 0 && refreshError) {
+    return { rows: [], loadError: refreshError.message };
+  }
+  return { rows, loadError: null };
 }
 
 export async function getLatestSessionBriefForUser(): Promise<SessionBriefRow | null> {

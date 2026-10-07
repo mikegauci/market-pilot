@@ -153,7 +153,21 @@ export type Prediction = {
   trade_created: boolean;
   trade_skip_reason?: string | null;
   market_snapshot?: MarketSnapshot | null;
+  /** Postgres generated column from market_snapshot.change_5m (analytics queries). */
+  change_5m_pct?: number | null;
   created_at: string;
+};
+
+/** Cached session-brief watchlist condition mix (session_market_condition_daily). */
+export type SessionMarketConditionDaily = {
+  session_date: string;
+  favorable_minutes: number;
+  caution_minutes: number;
+  headwind_minutes: number;
+  unknown_minutes: number;
+  observed_minutes: number;
+  headwind_floor: number;
+  refreshed_at: string;
 };
 
 export type Trade = {
