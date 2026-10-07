@@ -13,9 +13,11 @@ import { Input } from "@/components/ui/input";
 import { RiskProfilePicker } from "@/components/risk-profile-picker";
 import { WatchlistSettingsSection } from "@/components/watchlist-settings-section";
 import {
+  SettingsCollapsible,
   SettingsField,
   SettingsFieldGroup,
   SettingsSection,
+  SettingsSubsection,
 } from "@/components/settings-section";
 import { updateSettings } from "@/lib/actions";
 import {
@@ -245,6 +247,7 @@ export function SettingsForm({
       ) : null}
 
       <SettingsSection
+        id="jev-signals"
         title="Jev & signals"
         description="When the bot acts on AI predictions and how aggressively it filters buys."
       >
@@ -328,6 +331,7 @@ export function SettingsForm({
       </SettingsSection>
 
       <SettingsSection
+        id="risk-limits"
         title="Risk & limits"
         description="Capital at risk per trade, position caps, and daily loss guardrails."
       >
@@ -385,10 +389,17 @@ export function SettingsForm({
       </SettingsSection>
 
       <SettingsSection
+        id="exits-filters"
         title="Exits & entry filters"
-        description="Stop/take-profit exits, time-based closes, and hard volume gate after Jev BUY."
+        description="How trades close and which liquidity gates apply after Jev says BUY."
       >
-        <SettingsFieldGroup>
+        <div className="space-y-1">
+          <SettingsSubsection
+            first
+            title="Bracket targets"
+            description="Primary stop and take-profit on each new position."
+          >
+            <SettingsFieldGroup>
           <StrategyPercentField
             id="stop_loss_percentage"
             label="Stop loss (%)"
@@ -415,6 +426,14 @@ export function SettingsForm({
               STRATEGY_RECOMMENDATIONS.take_profit_percentage,
             )}
           />
+            </SettingsFieldGroup>
+          </SettingsSubsection>
+
+          <SettingsCollapsible
+            summary="Early take profit (optional band exit)"
+            defaultOpen={profitTakeEnabled}
+          >
+            <SettingsFieldGroup className="mt-3">
           <SettingsField
             id="profit_take_enabled"
             label="Early take profit"
@@ -524,6 +543,14 @@ export function SettingsForm({
               required
             />
           </SettingsField>
+            </SettingsFieldGroup>
+          </SettingsCollapsible>
+
+          <SettingsCollapsible
+            summary="Early loss cut (optional band exit)"
+            defaultOpen={lossCutEnabled}
+          >
+            <SettingsFieldGroup className="mt-3">
           <SettingsField
             id="loss_cut_enabled"
             label="Early loss cut"
@@ -633,23 +660,36 @@ export function SettingsForm({
               required
             />
           </SettingsField>
+            </SettingsFieldGroup>
+          </SettingsCollapsible>
+
+          <SettingsSubsection
+            title="Time & Jev exits"
+            description="Optional time cap and when soft Jev SELL exits are allowed."
+          >
+            <SettingsFieldGroup>
           <SettingsField
             id="max_hold_minutes"
             label="Max hold (minutes)"
             description={SETTING_DESCRIPTIONS.max_hold_minutes}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.max_hold_minutes}
           >
-            <SettingsNumberInput
-              id="max_hold_minutes"
-              name="max_hold_minutes"
-              step="1"
-              min={0}
-              max={480}
-              integer
-              value={maxHoldMinutes}
-              onChange={setMaxHoldMinutes}
-              required
-            />
+            <div className="space-y-1.5">
+              <SettingsNumberInput
+                id="max_hold_minutes"
+                name="max_hold_minutes"
+                step="1"
+                min={0}
+                max={480}
+                integer
+                value={maxHoldMinutes}
+                onChange={setMaxHoldMinutes}
+                required
+              />
+              {maxHoldHints.map((hint) => (
+                <StrategyHintLine key={hint.message} hint={hint} />
+              ))}
+            </div>
           </SettingsField>
           <SettingsField
             id="min_hold_minutes"
@@ -687,6 +727,14 @@ export function SettingsForm({
               required
             />
           </SettingsField>
+            </SettingsFieldGroup>
+          </SettingsSubsection>
+
+          <SettingsSubsection
+            title="Re-entry & churn"
+            description="Limits repeat entries in the same symbol after an exit."
+          >
+            <SettingsFieldGroup>
           <SettingsField
             id="reentry_cooldown_minutes"
             label="Re-entry cooldown (minutes)"
@@ -723,6 +771,14 @@ export function SettingsForm({
               required
             />
           </SettingsField>
+            </SettingsFieldGroup>
+          </SettingsSubsection>
+
+          <SettingsSubsection
+            title="Entry filters"
+            description="Hard gates on share price and volume after a qualifying BUY."
+          >
+            <SettingsFieldGroup>
           <SettingsField
             id="min_volume_ratio"
             label="Min volume ratio"
@@ -776,14 +832,9 @@ export function SettingsForm({
               required
             />
           </SettingsField>
-        </SettingsFieldGroup>
-        {maxHoldHints.length > 0 && (
-          <div className="mt-3 space-y-1 border-t border-zinc-800/60 pt-3">
-            {maxHoldHints.map((hint) => (
-              <StrategyHintLine key={hint.message} hint={hint} />
-            ))}
-          </div>
-        )}
+            </SettingsFieldGroup>
+          </SettingsSubsection>
+        </div>
       </SettingsSection>
 
       <SettingsSection

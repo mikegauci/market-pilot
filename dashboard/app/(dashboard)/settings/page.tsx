@@ -55,6 +55,21 @@ export default async function SettingsPage() {
         </p>
       </header>
 
+      <nav className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600">
+        <a href="#jev-signals" className="text-emerald-500/80 hover:text-emerald-400">
+          Jev & signals
+        </a>
+        <a href="#risk-limits" className="text-emerald-500/80 hover:text-emerald-400">
+          Risk & limits
+        </a>
+        <a href="#exits-filters" className="text-emerald-500/80 hover:text-emerald-400">
+          Exits & filters
+        </a>
+        <a href="#watchlist" className="text-emerald-500/80 hover:text-emerald-400">
+          Watchlist
+        </a>
+      </nav>
+
       <SettingsForm
         settings={settings}
         baselineEquity={baselineEquity}

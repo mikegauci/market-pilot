@@ -46,6 +46,39 @@ export function SettingsFieldGroup({
   );
 }
 
+/** Group fields inside a SettingsSection with a visible sub-heading. */
+export function SettingsSubsection({
+  title,
+  description,
+  children,
+  first = false,
+  className,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+  first?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "space-y-3",
+        !first && "border-t border-zinc-800/60 pt-5",
+        className,
+      )}
+    >
+      <div>
+        <h4 className="text-sm font-medium text-zinc-300">{title}</h4>
+        {description ? (
+          <p className="mt-0.5 text-xs leading-relaxed text-zinc-600">{description}</p>
+        ) : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function FieldDescription({
   children,
   title,

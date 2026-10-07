@@ -133,20 +133,17 @@ export function getMaxHoldHints(minutes: number): StrategyHint[] {
   const hints: StrategyHint[] = [];
   const rec = STRATEGY_RECOMMENDATIONS.max_hold_minutes;
 
-  if (minutes === rec) {
+  if (minutes === rec || minutes === 0) {
     hints.push({
       tone: "ok",
-      message: "Off — recommended with 1% / 1.5% bracket targets on large caps.",
+      message:
+        minutes === rec
+          ? "Recommended: 0 = no time cap; use bracket stop (1%) and take profit (1.5%)."
+          : "No time cap — exits use stop loss, take profit, and Jev SELL.",
     });
-    return hints;
-  }
-
-  if (minutes === 0) {
-    hints.push({
-      tone: "ok",
-      message: "Time cutoff disabled — exits rely on stop loss, take profit, and Jev SELL.",
-    });
-    return hints;
+    if (minutes === rec) {
+      return hints;
+    }
   }
 
   hints.push({
