@@ -878,7 +878,17 @@ export function SettingsForm({
       <div className="sticky bottom-0 z-10 border-t border-zinc-800 bg-zinc-950/95 py-3 backdrop-blur">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-h-[1.25rem] space-y-1">
-            {profileSelectionError && !saveError && (
+            {saveSuccess && !saveError ? (
+              <p
+                className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm leading-snug text-emerald-200"
+                role="status"
+              >
+                <span className="font-medium text-emerald-100">Saved</span>
+                {" — "}
+                trader reloads these on the next settings sync (no restart).
+              </p>
+            ) : null}
+            {profileSelectionError && !saveError && !saveSuccess && (
               <p className="text-sm text-amber-400">{profileSelectionError}</p>
             )}
             {saveError && <p className="text-sm text-red-400">{saveError}</p>}
