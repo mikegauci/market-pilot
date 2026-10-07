@@ -59,7 +59,10 @@ export function buildSkipExplainPacket(
   prediction: Prediction,
   settings: Settings,
 ): SkipExplainPacket {
-  const builtIn = traderBuiltInGatesForPacket();
+  const builtIn = traderBuiltInGatesForPacket(settings.entry_ema_gate, {
+    max_rsi: settings.max_rsi,
+    max_spread_pct: settings.max_spread_pct,
+  });
   const snapshot: MarketSnapshot = prediction.market_snapshot ?? {};
   const price = prediction.price;
   const spreadPct =
@@ -119,7 +122,7 @@ export function buildSkipExplainPacket(
       confirmation_cycles: settings.confirmation_cycles,
       confirmation_seconds: settings.confirmation_seconds,
       gates_note:
-        "Jev confidence, record threshold, max positions, volume, share price, dollar volume, and confirmation are current settings. Spread, RSI, benchmark drop, news sentiment, EMA, buy margins, and news tags are the bot's built-in gates.",
+        "Values under settings are current dashboard settings. Benchmark drop, news sentiment, buy margins, and news tags still come from trader env defaults unless noted.",
     },
   };
 }

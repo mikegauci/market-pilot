@@ -12,6 +12,8 @@ export type SettingsRow = Omit<
   | "reentry_cooldown_minutes"
   | "max_entries_per_symbol_per_day"
   | "entry_ema_gate"
+  | "max_rsi"
+  | "max_spread_pct"
   | "rotation_min_session_change_pct"
   | "profit_take_enabled"
   | "profit_take_min_fraction"
@@ -48,6 +50,8 @@ export type SettingsRow = Omit<
       | "reentry_cooldown_minutes"
       | "max_entries_per_symbol_per_day"
       | "entry_ema_gate"
+      | "max_rsi"
+      | "max_spread_pct"
       | "rotation_min_session_change_pct"
       | "confirmation_cycles"
       | "confirmation_seconds"
@@ -85,6 +89,8 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
   return {
     ...raw,
     entry_ema_gate: normalizeEntryEmaGate(raw.entry_ema_gate ?? DEFAULT_ENTRY_EMA_GATE),
+    max_rsi: raw.max_rsi ?? 70,
+    max_spread_pct: raw.max_spread_pct ?? 0.0015,
     min_share_price: raw.min_share_price ?? 20,
     min_hold_minutes: raw.min_hold_minutes ?? 15,
     jev_sell_exit_threshold: raw.jev_sell_exit_threshold ?? 0.95,

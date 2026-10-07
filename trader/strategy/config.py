@@ -63,6 +63,8 @@ def strategy_config_with_risk_overrides(
     confirmation_seconds: Optional[float] = None,
     rotation_min_session_change_pct: Optional[float] | object = _ROTATION_OVERRIDE_UNSET,
     entry_ema_gate: Optional[EntryEmaGate] = None,
+    max_rsi: Optional[float] = None,
+    max_spread_pct: Optional[float] = None,
 ) -> StrategyConfig:
     """Apply dashboard settings overrides onto env-based strategy config."""
     updates: dict = {
@@ -80,6 +82,10 @@ def strategy_config_with_risk_overrides(
         updates["confirmation_seconds"] = max(0.0, float(confirmation_seconds))
     if entry_ema_gate is not None:
         updates["entry_ema_gate"] = normalize_entry_ema_gate(entry_ema_gate)
+    if max_rsi is not None:
+        updates["max_rsi"] = float(max_rsi)
+    if max_spread_pct is not None:
+        updates["max_spread_pct"] = float(max_spread_pct)
     return replace(base, **updates)
 
 
@@ -91,6 +97,21 @@ def entry_ema_dashboard_override(
     if not from_settings:
         return {}
     return {"entry_ema_gate": normalize_entry_ema_gate(value)}
+
+
+def entry_rsi_spread_dashboard_overrides(
+    *,
+    max_rsi_from_settings: bool,
+    max_rsi: float,
+    max_spread_pct_from_settings: bool,
+    max_spread_pct: float,
+) -> dict[str, float]:
+    updates: dict[str, float] = {}
+    if max_rsi_from_settings:
+        updates["max_rsi"] = float(max_rsi)
+    if max_spread_pct_from_settings:
+        updates["max_spread_pct"] = float(max_spread_pct)
+    return updates
 
 
 def rotation_dashboard_override(

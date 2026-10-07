@@ -17,6 +17,8 @@ export type FilterCheck = {
 export type EvaluateOptions = {
   minVolumeRatio?: number;
   minSharePrice?: number;
+  maxRsi?: number;
+  maxSpreadPct?: number;
   benchmarkSymbol?: string;
   entryEmaGate?: EntryEmaGate;
 };
@@ -57,6 +59,8 @@ export function evaluateEntryFilters(
   const thresholds = STRATEGY_FILTER_THRESHOLDS;
   const minVolumeRatio = options.minVolumeRatio ?? thresholds.minVolumeRatio;
   const minSharePrice = options.minSharePrice ?? thresholds.minSharePrice;
+  const maxRsi = options.maxRsi ?? thresholds.maxRsi;
+  const maxSpreadPct = options.maxSpreadPct ?? thresholds.maxSpreadPct;
   const entryEmaGate = normalizeEntryEmaGate(
     options.entryEmaGate ?? DEFAULT_ENTRY_EMA_GATE,
   );
@@ -86,20 +90,18 @@ export function evaluateEntryFilters(
     },
     {
       name: "RSI",
-      pass:
-        snapshot?.rsi == null ? null : snapshot.rsi <= thresholds.maxRsi,
+      pass: snapshot?.rsi == null ? null : snapshot.rsi <= maxRsi,
       detail:
         snapshot?.rsi != null
-          ? `${snapshot.rsi.toFixed(1)} / max ${thresholds.maxRsi}`
+          ? `${snapshot.rsi.toFixed(1)} / max ${maxRsi}`
           : "—",
     },
     {
       name: "Spread",
-      pass:
-        spreadPct == null ? null : spreadPct <= thresholds.maxSpreadPct,
+      pass: spreadPct == null ? null : spreadPct <= maxSpreadPct,
       detail:
         spreadPct != null
-          ? `${(spreadPct * 100).toFixed(3)}% / max ${(thresholds.maxSpreadPct * 100).toFixed(2)}%`
+          ? `${(spreadPct * 100).toFixed(3)}% / max ${(maxSpreadPct * 100).toFixed(2)}%`
           : "—",
     },
     {
@@ -169,6 +171,8 @@ export function filterSummaryFromSettings(settings: Settings | null | undefined)
   return {
     minVolumeRatio: settings?.min_volume_ratio ?? STRATEGY_FILTER_THRESHOLDS.minVolumeRatio,
     minSharePrice: settings?.min_share_price ?? STRATEGY_FILTER_THRESHOLDS.minSharePrice,
+    maxRsi: settings?.max_rsi ?? STRATEGY_FILTER_THRESHOLDS.maxRsi,
+    maxSpreadPct: settings?.max_spread_pct ?? STRATEGY_FILTER_THRESHOLDS.maxSpreadPct,
     benchmarkSymbol: settings?.benchmark_symbol ?? "",
     entryEmaGate: normalizeEntryEmaGate(
       settings?.entry_ema_gate ?? DEFAULT_ENTRY_EMA_GATE,

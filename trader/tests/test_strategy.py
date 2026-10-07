@@ -7,6 +7,7 @@ from models.types import JevPrediction, MarketState, Quote, RiskSettings, TradeR
 from risk.manager import RiskManager
 from strategy.config import (
     StrategyConfig,
+    entry_rsi_spread_dashboard_overrides,
     rotation_dashboard_override,
     strategy_config_with_risk_overrides,
 )
@@ -367,6 +368,38 @@ class TestTimeExit(unittest.TestCase):
 
         self.assertEqual(len(closed), 1)
         self.assertEqual(closed[0].reason, "time_exit")
+
+
+class EntryRsiSpreadDashboardOverridesTest(unittest.TestCase):
+    def test_applies_when_loaded_from_settings(self) -> None:
+        base = StrategyConfig(max_rsi=70.0, max_spread_pct=0.0015)
+        merged = strategy_config_with_risk_overrides(
+            base,
+            min_volume_ratio=0.5,
+            **entry_rsi_spread_dashboard_overrides(
+                max_rsi_from_settings=True,
+                max_rsi=65.0,
+                max_spread_pct_from_settings=True,
+                max_spread_pct=0.002,
+            ),
+        )
+        self.assertEqual(merged.max_rsi, 65.0)
+        self.assertEqual(merged.max_spread_pct, 0.002)
+
+    def test_skips_when_columns_not_loaded(self) -> None:
+        base = StrategyConfig(max_rsi=70.0, max_spread_pct=0.0015)
+        merged = strategy_config_with_risk_overrides(
+            base,
+            min_volume_ratio=0.5,
+            **entry_rsi_spread_dashboard_overrides(
+                max_rsi_from_settings=False,
+                max_rsi=65.0,
+                max_spread_pct_from_settings=False,
+                max_spread_pct=0.002,
+            ),
+        )
+        self.assertEqual(merged.max_rsi, 70.0)
+        self.assertEqual(merged.max_spread_pct, 0.0015)
 
 
 if __name__ == "__main__":

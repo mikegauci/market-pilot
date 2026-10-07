@@ -46,6 +46,10 @@ export type Settings = {
   confirmation_seconds: number;
   /** Off, EMA-9, or EMA-20 trend gate for entries (warmup + price above EMA). */
   entry_ema_gate: "off" | "ema_9" | "ema_20";
+  /** Block entries when RSI exceeds this value. */
+  max_rsi: number;
+  /** Max bid-ask spread as fraction of price (0.0015 = 0.15%). */
+  max_spread_pct: number;
   /** 0 = off; block entries when 1m volume ratio is below this vs 10-bar average */
   min_volume_ratio: number;
   /** 0 = off; block entries below this USD share price */

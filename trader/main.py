@@ -51,6 +51,7 @@ from strategy.confirmation import ConfirmationTracker
 from strategy.config import (
     rotation_dashboard_override,
     entry_ema_dashboard_override,
+    entry_rsi_spread_dashboard_overrides,
     strategy_config_with_risk_overrides,
 )
 from strategy.profit_take_tracker import ProfitTakeBandTracker
@@ -142,6 +143,12 @@ def run() -> int:
         **entry_ema_dashboard_override(
             from_settings=risk_settings.entry_ema_gate_from_settings,
             value=risk_settings.entry_ema_gate,
+        ),
+        **entry_rsi_spread_dashboard_overrides(
+            max_rsi_from_settings=risk_settings.max_rsi_from_settings,
+            max_rsi=risk_settings.max_rsi,
+            max_spread_pct_from_settings=risk_settings.max_spread_pct_from_settings,
+            max_spread_pct=risk_settings.max_spread_pct,
         ),
     )
     confirmation_tracker = ConfirmationTracker(

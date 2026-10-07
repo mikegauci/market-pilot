@@ -27,16 +27,16 @@ function buildCards(settings: Settings, benchmark: string): Card[] {
   return [
     {
       title: "RSI max",
-      value: String(STRATEGY_FILTER_THRESHOLDS.maxRsi),
+      value: String(settings.max_rsi ?? STRATEGY_FILTER_THRESHOLDS.maxRsi),
       blurb: "Blocks overbought entries",
-      source: "env",
+      source: "settings",
       diagram: "rsi",
     },
     {
       title: "Spread max",
-      value: `${(STRATEGY_FILTER_THRESHOLDS.maxSpreadPct * 100).toFixed(2)}%`,
+      value: `${((settings.max_spread_pct ?? STRATEGY_FILTER_THRESHOLDS.maxSpreadPct) * 100).toFixed(2)}%`,
       blurb: "Skips wide quotes",
-      source: "env",
+      source: "settings",
     },
     {
       title: "Trend (EMA)",

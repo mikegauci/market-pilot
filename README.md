@@ -314,12 +314,12 @@ The trader applies additional gates before opening a position:
 |---|---|---|
 | BUY − HOLD margin | 15% | Reject weak BUY signals |
 | Confirmation cycles | 2 | Require consecutive ELIGIBLE signals |
-| Max RSI | 70 | Skip overbought entries |
+| Max RSI | 70 (Settings) | Skip overbought entries |
+| Max spread | 0.15% (Settings) | Skip illiquid quotes |
 | Trend filter (EMA) | EMA-20 (Settings) | Off, EMA-9, or EMA-20 — warmup + price above chosen EMA |
 | Rotation session % | ≥ 0% vs RTH open | Keep red-day names off active scan (`STRATEGY_ROTATION_MIN_SESSION_CHANGE_PCT`) |
 | Max entries / symbol / day | 3 (settings) | Limits repeat stop/re-entry churn (0 = off) |
 | SPY 5m change | ≥ −0.3% | Avoid broad-market headwinds |
-| Max spread | 0.15% | Skip illiquid quotes |
 | Max hold time | 15 min | Time-based exit (matches Jev horizon) |
 | Jev SELL exit | 75% | Close on high-confidence SELL |
 | Correlated positions | 2 max | Limit mega-cap tech stacking |

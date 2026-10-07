@@ -107,7 +107,8 @@ class SupabaseSettingsMixin:
 
     def _merge_optional_settings_columns(self, data: dict) -> None:
         row = self._select_settings_row(
-            "max_entries_per_symbol_per_day, rotation_min_session_change_pct, entry_ema_gate"
+            "max_entries_per_symbol_per_day, rotation_min_session_change_pct, "
+            "entry_ema_gate, max_rsi, max_spread_pct"
         )
         if row is None:
             data.setdefault("max_entries_per_symbol_per_day", 3)
@@ -125,6 +126,10 @@ class SupabaseSettingsMixin:
             )
         if "entry_ema_gate" in row and row.get("entry_ema_gate") is not None:
             data["entry_ema_gate"] = str(row["entry_ema_gate"]).strip().lower()
+        if "max_rsi" in row and row.get("max_rsi") is not None:
+            data["max_rsi"] = float(row["max_rsi"])
+        if "max_spread_pct" in row and row.get("max_spread_pct") is not None:
+            data["max_spread_pct"] = float(row["max_spread_pct"])
 
     def _load_settings_row(self) -> dict:
         data = self._select_settings_row(
@@ -256,6 +261,10 @@ class SupabaseSettingsMixin:
                 else "ema_20"
             ),
             entry_ema_gate_from_settings=("entry_ema_gate" in data),
+            max_rsi=float(data.get("max_rsi", 70)),
+            max_rsi_from_settings=("max_rsi" in data),
+            max_spread_pct=float(data.get("max_spread_pct", 0.0015)),
+            max_spread_pct_from_settings=("max_spread_pct" in data),
             confirmation_cycles=int(data.get("confirmation_cycles", 2)),
             confirmation_seconds=float(int(data.get("confirmation_seconds", 30))),
             min_volume_ratio=float(data.get("min_volume_ratio", 0.5)),

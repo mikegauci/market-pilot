@@ -1,6 +1,7 @@
 import { PredictionsFeed } from "@/components/predictions-feed";
 import { SkipReasonAnalytics } from "@/components/skip-reason-analytics";
 import { tradingDayStartUtc } from "@/lib/market-hours";
+import { filterSummaryFromSettings } from "@/lib/prediction-filters";
 import { PREDICTION_FEED_PAGE_SIZE } from "@/lib/prediction-feed";
 import { getAnalyticsPredictions, getPredictionsPage, getSettings } from "@/lib/queries";
 
@@ -60,16 +61,7 @@ export default async function PredictionsPage({
         sessionStartIso={predictionsLoad.sessionStartIso}
         symbolFilter={symbolFilter || ""}
         symbolOptions={predictionsLoad.symbols}
-        filterOptions={
-          settings
-            ? {
-                minVolumeRatio: settings.min_volume_ratio,
-                minSharePrice: settings.min_share_price,
-                benchmarkSymbol: settings.benchmark_symbol,
-                entryEmaGate: settings.entry_ema_gate,
-              }
-            : {}
-        }
+        filterOptions={settings ? filterSummaryFromSettings(settings) : {}}
       />
       <SkipReasonAnalytics
         predictions={analyticsPredictions}

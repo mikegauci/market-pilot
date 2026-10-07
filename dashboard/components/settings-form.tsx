@@ -147,6 +147,10 @@ export function SettingsForm({
   const [entryEmaGate, setEntryEmaGate] = useState<EntryEmaGate>(
     normalizeEntryEmaGate(settings.entry_ema_gate ?? DEFAULT_ENTRY_EMA_GATE),
   );
+  const [maxRsi, setMaxRsi] = useState(settings.max_rsi ?? 70);
+  const [maxSpreadPct, setMaxSpreadPct] = useState(
+    Number(((settings.max_spread_pct ?? 0.0015) * 100).toFixed(4)),
+  );
   const [minVolumeRatio, setMinVolumeRatio] = useState(settings.min_volume_ratio ?? 0);
   const [minSharePrice, setMinSharePrice] = useState(settings.min_share_price ?? 20);
   const [minDollarVolume, setMinDollarVolume] = useState(
@@ -267,6 +271,8 @@ export function SettingsForm({
         reentryCooldownMinutes,
         maxEntriesPerSymbol,
         entryEmaGate,
+        maxRsi,
+        maxSpreadPct,
         minVolumeRatio,
         minSharePrice,
         minDollarVolume,
@@ -302,6 +308,8 @@ export function SettingsForm({
       reentryCooldownMinutes,
       maxEntriesPerSymbol,
       entryEmaGate,
+      maxRsi,
+      maxSpreadPct,
       minVolumeRatio,
       minSharePrice,
       minDollarVolume,
@@ -936,16 +944,8 @@ export function SettingsForm({
 
           <SettingsSubsection
             title="Entry filters"
-            description="Hard gates on share price and volume after a qualifying BUY."
+            description="Hard gates on share price, momentum, liquidity, and volume after a qualifying BUY."
           >
-            <p className="text-[11px] leading-relaxed text-zinc-600 sm:col-span-2">
-              RSI max 70 and spread 0.15% come from trader{" "}
-              <code className="text-zinc-500">.env</code> — see{" "}
-              <a href="/strategy#entry-filters" className="text-emerald-500/80 hover:text-emerald-400">
-                Strategy
-              </a>{" "}
-              for details.
-            </p>
             <SettingsFieldGroup>
           <SettingsField
             id="entry_ema_gate"
@@ -968,6 +968,43 @@ export function SettingsForm({
               <option value="ema_9">Price above EMA-9 (~9 min)</option>
               <option value="ema_20">Price above EMA-20 (~20 min)</option>
             </select>
+          </SettingsField>
+          <SettingsField
+            id="max_rsi"
+            fieldKey="max_rsi"
+            label="Max RSI"
+            description={SETTING_DESCRIPTIONS.max_rsi}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.max_rsi}
+          >
+            <SettingsNumberInput
+              id="max_rsi"
+              name="max_rsi"
+              step="1"
+              min={1}
+              max={100}
+              integer
+              value={maxRsi}
+              onChange={setMaxRsi}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="max_spread_pct"
+            fieldKey="max_spread_pct"
+            label="Max spread (%)"
+            description={SETTING_DESCRIPTIONS.max_spread_pct}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.max_spread_pct}
+          >
+            <SettingsNumberInput
+              id="max_spread_pct"
+              name="max_spread_pct"
+              step="0.01"
+              min={0.01}
+              max={5}
+              value={maxSpreadPct}
+              onChange={setMaxSpreadPct}
+              required
+            />
           </SettingsField>
           <SettingsField
             id="min_volume_ratio"

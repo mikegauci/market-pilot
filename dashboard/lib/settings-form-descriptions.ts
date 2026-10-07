@@ -56,6 +56,10 @@ export const SETTING_DESCRIPTIONS_FULL = {
     "While rotation is on: names below this % vs today's price when the market opened are not promoted to the active list. Blank = off. 0 = flat or green since open.",
   entry_ema_gate:
     "After a qualifying BUY, the bot only enters when price is above the chosen EMA on 1-minute bars — or skip this check when Off. EMA-9 reacts faster; EMA-20 is stricter.",
+  max_rsi:
+    "Block new entries when the 1-minute RSI is above this level. Lower values skip more overbought names; 70 is a common default.",
+  max_spread_pct:
+    "Block entries when the bid–ask spread is wider than this percent of the share price. Example: 0.15 means 0.15% — tight for liquid large caps.",
   min_volume_ratio:
     "Block new entries when latest 1-min volume is below this fraction of the 10-bar average (0 = off). Example: 0.5 requires at least half the recent average volume.",
   min_share_price:
@@ -97,6 +101,8 @@ export const SETTING_DESCRIPTIONS = {
   rotation_min_session_change_pct:
     "Rotation only: min % since market open (blank = off, 0 = flat or up).",
   entry_ema_gate: "Require price above EMA-9, EMA-20, or Off.",
+  max_rsi: "Skip entries when RSI is above this (1–100).",
+  max_spread_pct: "Skip when spread exceeds this % of price (e.g. 0.15).",
   min_volume_ratio: "Block entries when volume is below this fraction of average (0 = off).",
   min_share_price: "Block entries below this USD price (0 = off).",
   min_dollar_volume: "Min avg $ volume per 5m bar for entries (0 = off).",

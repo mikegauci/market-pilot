@@ -104,6 +104,8 @@ function labelFor(name: string): string {
     min_share_price: "Min share price ($)",
     min_dollar_volume: "Min dollar volume ($)",
     entry_ema_gate: "Trend filter (EMA)",
+    max_rsi: "Max RSI",
+    max_spread_pct: "Max spread (%)",
   };
   return labels[name] ?? name;
 }
@@ -124,6 +126,8 @@ export type ParsedSettings = {
   max_entries_per_symbol_per_day: number;
   rotation_min_session_change_pct: number | null;
   entry_ema_gate: EntryEmaGate;
+  max_rsi: number;
+  max_spread_pct: number;
   confirmation_cycles: number;
   confirmation_seconds: number;
   min_volume_ratio: number;
@@ -183,6 +187,14 @@ function parseTargetPathPercent(formData: FormData, name: string): number {
   return pct / 100;
 }
 
+function parseMaxSpreadPercent(formData: FormData): number {
+  const pct = parseRequiredNumber(formData, "max_spread_pct");
+  if (pct < 0.01 || pct > 5) {
+    throw new Error(`${labelFor("max_spread_pct")} must be between 0.01 and 5`);
+  }
+  return pct / 100;
+}
+
 export function parseSettingsForm(formData: FormData): ParsedSettings {
   const minimum_jev_confidence = parseConfidencePercent(formData, "minimum_jev_confidence");
   const signal_record_threshold = parseConfidencePercent(formData, "signal_record_threshold");
@@ -208,6 +220,8 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   );
   const rotation_min_session_change_pct = parseOptionalRotationSessionPct(formData);
   const entry_ema_gate = parseEntryEmaGate(formData);
+  const max_rsi = parseRequiredNumber(formData, "max_rsi");
+  const max_spread_pct = parseMaxSpreadPercent(formData);
   const confirmation_cycles = parseRequiredNumber(formData, "confirmation_cycles");
   const confirmation_seconds = parseRequiredNumber(formData, "confirmation_seconds");
   const min_volume_ratio = parseRequiredNumber(formData, "min_volume_ratio");
@@ -376,6 +390,9 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   ) {
     throw new Error("Confirmation seconds must be a whole number from 0 to 300");
   }
+  if (!Number.isInteger(max_rsi) || max_rsi < 1 || max_rsi > 100) {
+    throw new Error(`${labelFor("max_rsi")} must be a whole number from 1 to 100`);
+  }
   if (min_volume_ratio < 0 || min_volume_ratio > 5) {
     throw new Error("Min volume ratio must be between 0 (off) and 5");
   }
@@ -453,6 +470,8 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     max_entries_per_symbol_per_day,
     rotation_min_session_change_pct,
     entry_ema_gate,
+    max_rsi,
+    max_spread_pct,
     confirmation_cycles,
     confirmation_seconds,
     min_volume_ratio,

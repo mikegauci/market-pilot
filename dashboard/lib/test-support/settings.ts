@@ -19,6 +19,8 @@ export function settingsFixture(overrides: Partial<Settings> = {}): Settings {
     max_entries_per_symbol_per_day: 3,
     rotation_min_session_change_pct: 0,
     entry_ema_gate: "ema_20",
+    max_rsi: 70,
+    max_spread_pct: 0.0015,
     confirmation_cycles: 2,
     confirmation_seconds: 30,
     min_volume_ratio: 0.5,

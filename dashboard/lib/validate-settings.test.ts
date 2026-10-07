@@ -35,6 +35,8 @@ const baseFields = {
   max_entries_per_symbol_per_day: "3",
   rotation_min_session_change_pct: "0",
   entry_ema_gate: "ema_20",
+  max_rsi: "70",
+  max_spread_pct: "0.15",
   confirmation_cycles: "2",
   confirmation_seconds: "30",
   min_volume_ratio: "0.5",
@@ -140,6 +142,13 @@ describe("parseSettingsForm confirmation gate", () => {
     expect(() =>
       parseSettingsForm(form({ ...baseFields, confirmation_seconds: "301" })),
     ).toThrow(/Confirmation seconds/);
+  });
+});
+
+describe("parseSettingsForm entry filters", () => {
+  it("stores max spread as price fraction", () => {
+    const parsed = parseSettingsForm(form({ ...baseFields, max_spread_pct: "0.2" }));
+    expect(parsed.max_spread_pct).toBeCloseTo(0.002);
   });
 });
 

@@ -20,6 +20,7 @@ from runtime.trader_ops import merge_watchlist_symbols, sync_watchlist_symbols
 from strategy.config import (
     rotation_dashboard_override,
     entry_ema_dashboard_override,
+    entry_rsi_spread_dashboard_overrides,
     strategy_config_with_risk_overrides,
 )
 from strategy.confirmation import ConfirmationTracker
@@ -108,6 +109,12 @@ def run_cycle_sync(
             **entry_ema_dashboard_override(
                 from_settings=scratch.risk_settings.entry_ema_gate_from_settings,
                 value=scratch.risk_settings.entry_ema_gate,
+            ),
+            **entry_rsi_spread_dashboard_overrides(
+                max_rsi_from_settings=scratch.risk_settings.max_rsi_from_settings,
+                max_rsi=scratch.risk_settings.max_rsi,
+                max_spread_pct_from_settings=scratch.risk_settings.max_spread_pct_from_settings,
+                max_spread_pct=scratch.risk_settings.max_spread_pct,
             ),
         )
         if (

@@ -71,6 +71,8 @@ export type SettingsAiSummaryPacket = {
     min_dollar_volume_usd: number | null;
     rotation_min_session_change_pct: number | null;
     entry_ema_gate: string;
+    max_rsi: number;
+    max_spread_pct: number;
     profit_take: { enabled: boolean; band: string; jev_sell_pct: number | null };
     loss_cut: { enabled: boolean; band: string; jev_sell_pct: number | null };
   };
@@ -98,7 +100,10 @@ export function buildSettingsAiSummaryPacket(input: {
   now?: Date;
 }): SettingsAiSummaryPacket {
   const settings = input.settings;
-  const builtIn = traderBuiltInGatesForPacket(settings.entry_ema_gate);
+  const builtIn = traderBuiltInGatesForPacket(settings.entry_ema_gate, {
+    max_rsi: settings.max_rsi,
+    max_spread_pct: settings.max_spread_pct,
+  });
   const effective = resolveEffectiveWatchlist(settings);
 
   const profitBand = `${settings.profit_take_min_fraction}–${settings.profit_take_max_fraction} of entry→TP path`;
@@ -106,7 +111,7 @@ export function buildSettingsAiSummaryPacket(input: {
 
   return {
     note:
-      "Summarize only this packet. Percents are already human-readable (85 means 85% Jev BUY). A numeric gate of 0 or null means off. trader_built_in_gates are fixed in the trader .env, not the Settings form. Do not invent symbols beyond effective_symbols. Do not recommend live trading or promise profit.",
+      "Summarize only this packet. Percents are already human-readable (85 means 85% Jev BUY). A numeric gate of 0 or null means off. trader_built_in_gates still include env-only gates (benchmark, news margins); RSI and spread match Settings when listed under exits_and_filters. Do not invent symbols beyond effective_symbols. Do not recommend live trading or promise profit.",
     generated_at: (input.now ?? new Date()).toISOString(),
     trading_mode: settings.trading_mode,
     bot: input.botStatus
@@ -150,6 +155,8 @@ export function buildSettingsAiSummaryPacket(input: {
           ? null
           : settings.rotation_min_session_change_pct,
       entry_ema_gate: settings.entry_ema_gate,
+      max_rsi: settings.max_rsi,
+      max_spread_pct: settings.max_spread_pct * 100,
       profit_take: {
         enabled: settings.profit_take_enabled,
         band: profitBand,

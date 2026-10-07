@@ -180,6 +180,10 @@ class RiskSettings:
     rotation_session_pct_from_settings: bool = False
     entry_ema_gate: str = "ema_20"
     entry_ema_gate_from_settings: bool = False
+    max_rsi: float = 70.0
+    max_rsi_from_settings: bool = False
+    max_spread_pct: float = 0.0015
+    max_spread_pct_from_settings: bool = False
     confirmation_cycles: int = 2
     confirmation_seconds: float = 30.0
     watchlist_pool: List[str] = field(default_factory=list)

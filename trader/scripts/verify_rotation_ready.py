@@ -27,6 +27,7 @@ from models.types import DataSource, Quote  # noqa: E402
 from strategy.config import (  # noqa: E402
     rotation_dashboard_override,
     entry_ema_dashboard_override,
+    entry_rsi_spread_dashboard_overrides,
     strategy_config_with_risk_overrides,
 )
 from watchlist.resolution import effective_benchmark  # noqa: E402
@@ -107,6 +108,12 @@ def simulate_scores(
         **entry_ema_dashboard_override(
             from_settings=risk.entry_ema_gate_from_settings,
             value=risk.entry_ema_gate,
+        ),
+        **entry_rsi_spread_dashboard_overrides(
+            max_rsi_from_settings=risk.max_rsi_from_settings,
+            max_rsi=risk.max_rsi,
+            max_spread_pct_from_settings=risk.max_spread_pct_from_settings,
+            max_spread_pct=risk.max_spread_pct,
         ),
     )
 

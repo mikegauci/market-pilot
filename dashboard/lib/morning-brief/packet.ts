@@ -43,7 +43,11 @@ export function buildMorningBriefPacket(input: {
   articles: MarketNewsRow[];
   now?: Date;
 }): MorningBriefPacket {
-  const builtIn = traderBuiltInGatesForPacket();
+  const settings = input.settings;
+  const builtIn = traderBuiltInGatesForPacket(settings.entry_ema_gate, {
+    max_rsi: settings.max_rsi,
+    max_spread_pct: settings.max_spread_pct,
+  });
   const now = input.now ?? new Date();
   const windowStart = now.getTime() - MORNING_BRIEF_WINDOW_HOURS * 60 * 60 * 1000;
   const watchlist = resolveEffectiveWatchlist(input.settings);
@@ -95,7 +99,7 @@ export function buildMorningBriefPacket(input: {
       confirmation_cycles: input.settings.confirmation_cycles,
       confirmation_seconds: input.settings.confirmation_seconds,
       gates_note:
-        "Confidence, volume, share price, max positions, and confirmation come from current settings. Spread, RSI, news sentiment, EMA, and news tags are the bot's built-in gates.",
+        "Confidence, volume, share price, max positions, confirmation, RSI, spread, and EMA come from current settings. News sentiment and news tags still use trader env defaults.",
     },
     headlines,
   };

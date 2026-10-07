@@ -37,6 +37,8 @@ export const SETTING_FIELD_EXAMPLES: Partial<Record<SettingDescriptionKey, strin
   rotation_min_session_change_pct:
     "0 → rotation favors flat or green since open; blank → ignore day color.",
   entry_ema_gate: "EMA-20 → price must stay above the 20-bar trend (Off skips this).",
+  max_rsi: "70 → skip when RSI is above 70.",
+  max_spread_pct: "0.15 → skip when spread is wider than 0.15% of price.",
   min_volume_ratio: "0.5 → need at least half the usual 1m volume vs the last 10 bars.",
   min_share_price: "20 → no entries below $20/share.",
   min_dollar_volume: "250000 → need about $250k avg per 5m bar (0 = off).",
@@ -45,6 +47,8 @@ export const SETTING_FIELD_EXAMPLES: Partial<Record<SettingDescriptionKey, strin
 /** Strategy page subsection anchors (see strategy-guide.tsx). */
 export const SETTING_STRATEGY_ANCHORS: Partial<Record<SettingDescriptionKey, string>> = {
   entry_ema_gate: "entry-filters",
+  max_rsi: "entry-filters",
+  max_spread_pct: "entry-filters",
   min_volume_ratio: "entry-filters",
   min_share_price: "entry-filters",
   min_dollar_volume: "entry-filters",
