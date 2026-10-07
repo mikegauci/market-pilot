@@ -81,16 +81,9 @@ export function RiskField({
             Recommended
           </span>
         )}
-        {baselineEquity > 0 && pct != null && (
-          <p
-            className={cn(
-              "text-xs",
-              matchesRecommended ? "text-emerald-400/90" : "text-amber-400/90",
-            )}
-          >
-            {formatRiskPct(pct)} of Equity
-            {!matchesRecommended &&
-              ` · Suggested ${formatCurrency(recommended, currency)}`}
+        {baselineEquity > 0 && !matchesRecommended && pct != null && (
+          <p className="text-xs text-amber-400/90">
+            {formatRiskPct(pct)} of Equity · Suggested {formatCurrency(recommended, currency)}
           </p>
         )}
       </div>
@@ -145,11 +138,13 @@ export function StrategyPercentField({
             Recommended
           </span>
         )}
-        <div className="space-y-1">
-          {hints.map((hint) => (
-            <StrategyHintLine key={hint.message} hint={hint} />
-          ))}
-        </div>
+        {hints.length > 0 ? (
+          <div className="space-y-1">
+            {hints.map((hint) => (
+              <StrategyHintLine key={hint.message} hint={hint} />
+            ))}
+          </div>
+        ) : null}
       </div>
     </SettingsField>
   );

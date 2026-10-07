@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { BriefSettingDiff } from "@/components/brief-setting-diff";
 import {
   RiskField,
@@ -9,7 +10,6 @@ import {
 } from "@/components/settings-form-fields";
 import { Button } from "@/components/ui/button";
 import { SettingsNumberInput } from "@/components/settings-number-input";
-import { Input } from "@/components/ui/input";
 import { RiskProfilePicker } from "@/components/risk-profile-picker";
 import { WatchlistSettingsSection } from "@/components/watchlist-settings-section";
 import {
@@ -20,6 +20,13 @@ import {
   SettingsSubsection,
 } from "@/components/settings-section";
 import { updateSettings } from "@/lib/actions";
+import {
+  buildMainSettingsFormDraft,
+  diffSettingsFormDraft,
+  settingsToFormDraft,
+  watchlistDraftFromSettings,
+  type WatchlistFormDraftSlice,
+} from "@/lib/settings-form-changes";
 import {
   areAllRecommendationsApplied,
   detectMatchingProfile,
@@ -61,9 +68,21 @@ export function SettingsForm({
   briefSessionDate?: string | null;
   briefSuggestions?: SessionBriefSuggestion[];
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [savedBaseline, setSavedBaseline] = useState(() => settingsToFormDraft(settings));
+  const [watchlistDraft, setWatchlistDraft] = useState<WatchlistFormDraftSlice>(() =>
+    watchlistDraftFromSettings(settings),
+  );
+  const handleWatchlistDraftChange = useCallback((slice: WatchlistFormDraftSlice) => {
+    setWatchlistDraft(slice);
+  }, []);
+
+  useEffect(() => {
+    setSavedBaseline(settingsToFormDraft(settings));
+  }, [settings.updated_at]);
   const [riskPerTrade, setRiskPerTrade] = useState(settings.risk_per_trade);
   const [maxPositionSize, setMaxPositionSize] = useState(settings.max_position_size);
   const [maxDailyLoss, setMaxDailyLoss] = useState(settings.max_daily_loss);
@@ -130,6 +149,12 @@ export function SettingsForm({
     confidencePercentFromDecimal(settings.signal_record_threshold),
   );
   const [maxOpenPositions, setMaxOpenPositions] = useState(settings.max_open_positions);
+  const [confirmationCycles, setConfirmationCycles] = useState(
+    settings.confirmation_cycles ?? 2,
+  );
+  const [confirmationSeconds, setConfirmationSeconds] = useState(
+    settings.confirmation_seconds ?? 30,
+  );
   const [dismissedBriefSession, setDismissedBriefSession] = useState<string | null>(
     () =>
       briefSessionDate && isBriefSettingsDismissed(briefSessionDate)
@@ -213,10 +238,89 @@ export function SettingsForm({
     setMaxDailyLoss(rec.max_daily_loss);
   };
 
+  const formDraft = useMemo(
+    () =>
+      buildMainSettingsFormDraft({
+        minJevPct,
+        signalRecordPct,
+        confirmationCycles,
+        confirmationSeconds,
+        riskPerTrade,
+        maxPositionSize,
+        maxDailyLoss,
+        maxOpenPositions,
+        stopLossPct,
+        takeProfitPct,
+        maxHoldMinutes,
+        minHoldMinutes,
+        jevSellExitPct,
+        reentryCooldownMinutes,
+        maxEntriesPerSymbol,
+        minVolumeRatio,
+        minSharePrice,
+        minDollarVolume,
+        selectedProfile,
+        profitTakeEnabled,
+        profitTakeMinPct,
+        profitTakeMaxPct,
+        profitTakeMinBandHits,
+        profitTakeBandWindow,
+        profitTakeJevSellPct,
+        lossCutEnabled,
+        lossCutMinPct,
+        lossCutMaxPct,
+        lossCutMinBandHits,
+        lossCutBandWindow,
+        lossCutJevSellPct,
+        watchlist: watchlistDraft,
+      }),
+    [
+      minJevPct,
+      signalRecordPct,
+      confirmationCycles,
+      confirmationSeconds,
+      riskPerTrade,
+      maxPositionSize,
+      maxDailyLoss,
+      maxOpenPositions,
+      stopLossPct,
+      takeProfitPct,
+      maxHoldMinutes,
+      minHoldMinutes,
+      jevSellExitPct,
+      reentryCooldownMinutes,
+      maxEntriesPerSymbol,
+      minVolumeRatio,
+      minSharePrice,
+      minDollarVolume,
+      selectedProfile,
+      profitTakeEnabled,
+      profitTakeMinPct,
+      profitTakeMaxPct,
+      profitTakeMinBandHits,
+      profitTakeBandWindow,
+      profitTakeJevSellPct,
+      lossCutEnabled,
+      lossCutMinPct,
+      lossCutMaxPct,
+      lossCutMinBandHits,
+      lossCutBandWindow,
+      lossCutJevSellPct,
+      watchlistDraft,
+    ],
+  );
+
+  const pendingChanges = useMemo(
+    () => diffSettingsFormDraft(savedBaseline, formDraft, currency),
+    [savedBaseline, formDraft, currency],
+  );
+  const hasPendingChanges = pendingChanges.length > 0;
+
   return (
     <form
-      className="space-y-6 pb-24"
+      className={hasPendingChanges ? "space-y-6 pb-24" : "space-y-6 pb-8"}
       action={(formData) => {
+        if (!hasPendingChanges) return;
         setSaveError(null);
         setSaveSuccess(false);
         const selectionError = validateProfileSelection(
@@ -231,7 +335,9 @@ export function SettingsForm({
         startTransition(async () => {
           try {
             await updateSettings(formData);
+            setSavedBaseline(formDraft);
             setSaveSuccess(true);
+            router.refresh();
           } catch (err) {
             setSaveError(err instanceof Error ? err.message : "Failed to save settings");
           }
@@ -304,14 +410,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.confirmation_cycles}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.confirmation_cycles}
           >
-            <Input
+            <SettingsNumberInput
               id="confirmation_cycles"
               name="confirmation_cycles"
-              type="number"
               step="1"
               min={1}
               max={10}
-              defaultValue={settings.confirmation_cycles ?? 2}
+              integer
+              value={confirmationCycles}
+              onChange={setConfirmationCycles}
               required
             />
           </SettingsField>
@@ -321,14 +428,15 @@ export function SettingsForm({
             description={SETTING_DESCRIPTIONS.confirmation_seconds}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.confirmation_seconds}
           >
-            <Input
+            <SettingsNumberInput
               id="confirmation_seconds"
               name="confirmation_seconds"
-              type="number"
               step="1"
               min={0}
               max={300}
-              defaultValue={settings.confirmation_seconds ?? 30}
+              integer
+              value={confirmationSeconds}
+              onChange={setConfirmationSeconds}
               required
             />
           </SettingsField>
@@ -872,32 +980,60 @@ export function SettingsForm({
         title="Watchlist"
         description="Symbols Jev monitors for new trade entries."
       >
-        <WatchlistSettingsSection settings={settings} />
+        <WatchlistSettingsSection
+          settings={settings}
+          onDraftChange={handleWatchlistDraftChange}
+        />
       </SettingsSection>
 
-      <div className="sticky bottom-0 z-10 border-t border-zinc-800 bg-zinc-950/95 py-3 backdrop-blur">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-h-[1.25rem] space-y-1">
-            {saveSuccess && !saveError ? (
-              <p
-                className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm leading-snug text-emerald-200"
-                role="status"
-              >
-                <span className="font-medium text-emerald-100">Saved</span>
-                {" — "}
-                trader reloads these on the next settings sync (no restart).
-              </p>
+      {hasPendingChanges || saveError || (saveSuccess && !hasPendingChanges) ? (
+        <div className="sticky bottom-0 z-10 border-t border-zinc-800 bg-zinc-950/95 py-3 backdrop-blur">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0 flex-1 space-y-2">
+              {saveSuccess && !saveError && !hasPendingChanges ? (
+                <p
+                  className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm leading-snug text-emerald-200"
+                  role="status"
+                >
+                  <span className="font-medium text-emerald-100">Saved</span>
+                  {" — "}
+                  trader reloads these on the next settings sync (no restart).
+                </p>
+              ) : null}
+              {hasPendingChanges ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                    Unsaved changes
+                  </p>
+                  <ul className="max-h-40 space-y-1.5 overflow-y-auto text-sm text-zinc-300">
+                    {pendingChanges.map((change) => (
+                      <li
+                        key={change.key}
+                        className="rounded-md border border-zinc-800/80 bg-zinc-900/40 px-3 py-1.5"
+                      >
+                        <span className="font-medium text-zinc-200">{change.label}</span>
+                        <span className="text-zinc-500">
+                          {" "}
+                          {change.fromLabel} → {change.toLabel}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {profileSelectionError && !saveError && hasPendingChanges ? (
+                <p className="text-sm text-amber-400">{profileSelectionError}</p>
+              ) : null}
+              {saveError ? <p className="text-sm text-red-400">{saveError}</p> : null}
+            </div>
+            {hasPendingChanges ? (
+              <Button type="submit" disabled={pending} className="sm:shrink-0">
+                {pending ? "Saving…" : "Save settings"}
+              </Button>
             ) : null}
-            {profileSelectionError && !saveError && !saveSuccess && (
-              <p className="text-sm text-amber-400">{profileSelectionError}</p>
-            )}
-            {saveError && <p className="text-sm text-red-400">{saveError}</p>}
           </div>
-          <Button type="submit" disabled={pending} className="sm:shrink-0">
-            {pending ? "Saving…" : "Save settings"}
-          </Button>
         </div>
-      </div>
+      ) : null}
     </form>
   );
 }

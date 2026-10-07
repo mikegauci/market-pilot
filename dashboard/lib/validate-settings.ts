@@ -47,8 +47,13 @@ function parseOptionalRotationSessionPct(formData: FormData): number | null {
   return value;
 }
 
+export function settingsFieldLabel(name: string): string {
+  return labelFor(name);
+}
+
 function labelFor(name: string): string {
   const labels: Record<string, string> = {
+    risk_profile: "Risk profile",
     minimum_jev_confidence: "Min Jev confidence (%)",
     signal_record_threshold: "Signal record threshold (%)",
     risk_per_trade: "Risk per trade",

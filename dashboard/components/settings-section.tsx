@@ -136,14 +136,14 @@ export function SettingsField({
       )}
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-        <Label htmlFor={id} className="shrink-0 pt-2 sm:max-w-[55%]">
-          {label}
-        </Label>
-        <div className="w-full sm:max-w-[11rem] sm:shrink-0">{children}</div>
+        <div className="shrink-0 space-y-1 sm:max-w-[55%]">
+          <Label htmlFor={id}>{label}</Label>
+          <FieldDescription id={describedBy} title={descriptionTitle ?? description}>
+            {description}
+          </FieldDescription>
+        </div>
+        <div className="w-full sm:max-w-[11rem] sm:shrink-0 sm:pt-0">{children}</div>
       </div>
-      <FieldDescription id={describedBy} title={descriptionTitle ?? description}>
-        {description}
-      </FieldDescription>
       {fieldKey ? (
         <>
           <SettingsFieldChipRow fieldKey={fieldKey as SettingsFieldMetaKey} />

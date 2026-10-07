@@ -1,6 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  parseWatchlistFormDraft,
+  type WatchlistFormDraftSlice,
+} from "@/lib/settings-form-changes";
 import { EntryBlockedSymbols } from "@/components/entry-blocked-symbols";
 import { WatchlistPicker } from "@/components/watchlist-picker";
 import {
@@ -26,9 +30,10 @@ import {
 
 type Props = {
   settings: Settings;
+  onDraftChange?: (draft: WatchlistFormDraftSlice) => void;
 };
 
-export function WatchlistSettingsSection({ settings }: Props) {
+export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
   const [rotating, setRotating] = useState(Boolean(settings.watchlist_rotation_enabled));
   const [poolSymbols, setPoolSymbols] = useState(() =>
     normalizeWatchlistSymbols(settings.watchlist_pool ?? []),
@@ -36,6 +41,47 @@ export function WatchlistSettingsSection({ settings }: Props) {
   const [manualWatchlist, setManualWatchlist] = useState(() =>
     normalizeWatchlistSymbols(settings.watchlist ?? []),
   );
+  const [benchmarkSymbol, setBenchmarkSymbol] = useState(
+    () => (settings.benchmark_symbol ?? "").trim().toUpperCase(),
+  );
+  const [activeSize, setActiveSize] = useState(settings.watchlist_active_size ?? 12);
+  const [rotationIntervalMinutes, setRotationIntervalMinutes] = useState(
+    settings.watchlist_rotation_interval_minutes ?? 15,
+  );
+  const [maxSwaps, setMaxSwaps] = useState(settings.watchlist_max_swaps_per_rotation ?? 2);
+  const [rotationSessionPctRaw, setRotationSessionPctRaw] = useState(() =>
+    rotationSessionPctInputValue(settings.rotation_min_session_change_pct),
+  );
+
+  const watchlistFormDraft = useMemo(
+    () =>
+      parseWatchlistFormDraft({
+        rotating,
+        manualWatchlist,
+        poolSymbols,
+        benchmarkSymbol,
+        activeSize,
+        rotationIntervalMinutes,
+        maxSwaps,
+        rotationSessionPctRaw,
+        saved: settings,
+      }),
+    [
+      rotating,
+      manualWatchlist,
+      poolSymbols,
+      benchmarkSymbol,
+      activeSize,
+      rotationIntervalMinutes,
+      maxSwaps,
+      rotationSessionPctRaw,
+      settings,
+    ],
+  );
+
+  useEffect(() => {
+    onDraftChange?.(watchlistFormDraft);
+  }, [onDraftChange, watchlistFormDraft]);
 
   const previewSettings = useMemo(
     (): Settings => ({
@@ -62,7 +108,8 @@ export function WatchlistSettingsSection({ settings }: Props) {
           <Input
             id="benchmark_symbol"
             name="benchmark_symbol"
-            defaultValue={settings.benchmark_symbol ?? ""}
+            value={benchmarkSymbol}
+            onChange={(event) => setBenchmarkSymbol(event.target.value.toUpperCase())}
             placeholder="QQQ"
             className="max-w-[10rem] font-mono uppercase"
           />
@@ -99,7 +146,8 @@ export function WatchlistSettingsSection({ settings }: Props) {
                   type="number"
                   min={1}
                   max={20}
-                  defaultValue={settings.watchlist_active_size ?? 12}
+                  value={activeSize}
+                  onChange={(event) => setActiveSize(Number(event.target.value))}
                 />
               </div>
               <div className="space-y-1">
@@ -110,7 +158,10 @@ export function WatchlistSettingsSection({ settings }: Props) {
                   type="number"
                   min={5}
                   max={120}
-                  defaultValue={settings.watchlist_rotation_interval_minutes ?? 15}
+                  value={rotationIntervalMinutes}
+                  onChange={(event) =>
+                    setRotationIntervalMinutes(Number(event.target.value))
+                  }
                 />
               </div>
               <div className="space-y-1">
@@ -121,7 +172,8 @@ export function WatchlistSettingsSection({ settings }: Props) {
                   type="number"
                   min={1}
                   max={5}
-                  defaultValue={settings.watchlist_max_swaps_per_rotation ?? 2}
+                  value={maxSwaps}
+                  onChange={(event) => setMaxSwaps(Number(event.target.value))}
                 />
               </div>
               <div className="space-y-1 sm:col-span-3">
@@ -131,9 +183,8 @@ export function WatchlistSettingsSection({ settings }: Props) {
                 <Input
                   id="rotation_min_session_change_pct"
                   name="rotation_min_session_change_pct"
-                  defaultValue={rotationSessionPctInputValue(
-                    settings.rotation_min_session_change_pct,
-                  )}
+                  value={rotationSessionPctRaw}
+                  onChange={(event) => setRotationSessionPctRaw(event.target.value)}
                   placeholder="off"
                   className="max-w-[10rem] font-mono"
                 />
@@ -188,21 +239,21 @@ export function WatchlistSettingsSection({ settings }: Props) {
 
       {!rotating ? (
         <>
-          <input type="hidden" name="watchlist_active_size" value={settings.watchlist_active_size ?? 12} />
+          <input type="hidden" name="watchlist_active_size" value={activeSize} />
           <input
             type="hidden"
             name="watchlist_rotation_interval_minutes"
-            value={settings.watchlist_rotation_interval_minutes ?? 15}
+            value={rotationIntervalMinutes}
           />
           <input
             type="hidden"
             name="watchlist_max_swaps_per_rotation"
-            value={settings.watchlist_max_swaps_per_rotation ?? 2}
+            value={maxSwaps}
           />
           <input
             type="hidden"
             name="rotation_min_session_change_pct"
-            value={rotationSessionPctInputValue(settings.rotation_min_session_change_pct)}
+            value={rotationSessionPctRaw}
           />
         </>
       ) : null}

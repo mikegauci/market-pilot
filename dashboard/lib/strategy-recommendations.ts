@@ -45,11 +45,10 @@ export function getStopLossHints(stopLoss: number): StrategyHint[] {
   const recPct = formatStrategyPercent(rec);
 
   if (isNearStrategyPercent(stopLoss, rec)) {
-    hints.push({ tone: "ok", message: `Matches recommended ${recPct}.` });
     return hints;
   }
 
-  hints.push({ tone: "info", message: `Recommended: ${recPct}.` });
+  hints.push({ tone: "warn", message: `Recommended: ${recPct}.` });
 
   if (stopLoss < rec) {
     hints.push({
@@ -107,10 +106,8 @@ export function getTakeProfitHints(
     }
   }
 
-  if (isNearStrategyPercent(takeProfit, rec)) {
-    hints.push({ tone: "ok", message: `Matches recommended ${recPct}.` });
-  } else {
-    hints.push({ tone: "info", message: `Recommended: ${recPct}.` });
+  if (!isNearStrategyPercent(takeProfit, rec)) {
+    hints.push({ tone: "warn", message: `Recommended: ${recPct}.` });
     if (takeProfit > rec * 2) {
       hints.push({
         tone: "info",

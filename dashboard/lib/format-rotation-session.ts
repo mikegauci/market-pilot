@@ -16,3 +16,16 @@ export function rotationSessionPctInputValue(
   }
   return String(value);
 }
+
+/** Parse Settings rotation session % input (blank/off → null). */
+export function parseRotationSessionPctInput(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === "" || trimmed.toLowerCase() === "off") {
+    return null;
+  }
+  const value = Number(trimmed);
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  return value;
+}
