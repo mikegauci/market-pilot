@@ -7,10 +7,7 @@ import {
 } from "@/lib/settings-form-changes";
 import { EntryBlockedSymbols } from "@/components/entry-blocked-symbols";
 import { WatchlistPicker } from "@/components/watchlist-picker";
-import {
-  SettingsFieldChipRow,
-  SettingsFieldHelp,
-} from "@/components/settings-field-help";
+import { SettingsFieldHelp } from "@/components/settings-field-help";
 import {
   FieldDescription,
   SettingsSubsection,
@@ -198,7 +195,6 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
                   floor 0, rotation won&apos;t favor it. Now $100.10 (+0.1%) → OK. Open trades stay
                   on the list either way.
                 </FieldDescription>
-                <SettingsFieldChipRow fieldKey="rotation_min_session_change_pct" />
                 <SettingsFieldHelp fieldKey="rotation_min_session_change_pct" />
               </div>
             </div>

@@ -1,14 +1,12 @@
 import {
-  SettingsFieldChipRow,
+  SettingsFieldExample,
   SettingsFieldHelp,
 } from "@/components/settings-field-help";
 import { Label } from "@/components/ui/label";
-import type { SettingsFieldMetaKey } from "@/lib/settings-field-meta";
 import type { SettingDescriptionKey } from "@/lib/settings-form-descriptions";
+import { settingFieldExample } from "@/lib/settings-field-meta";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
-
-type SettingFieldKey = SettingDescriptionKey | SettingsFieldMetaKey;
 
 export function SettingsSection({
   id,
@@ -111,8 +109,8 @@ type SettingsFieldProps = {
   children: ReactNode;
   className?: string;
   fullWidth?: boolean;
-  /** Enables Learn more, example chips, and Strategy link when defined in settings-field-meta. */
-  fieldKey?: SettingFieldKey;
+  /** Inline example + Learn more when defined in settings-field-meta. */
+  fieldKey?: SettingDescriptionKey;
 };
 
 export function SettingsField({
@@ -141,15 +139,13 @@ export function SettingsField({
           <FieldDescription id={describedBy} title={descriptionTitle ?? description}>
             {description}
           </FieldDescription>
+          {fieldKey && settingFieldExample(fieldKey) ? (
+            <SettingsFieldExample fieldKey={fieldKey} />
+          ) : null}
         </div>
         <div className="w-full sm:max-w-[11rem] sm:shrink-0 sm:pt-0">{children}</div>
       </div>
-      {fieldKey ? (
-        <>
-          <SettingsFieldChipRow fieldKey={fieldKey as SettingsFieldMetaKey} />
-          <SettingsFieldHelp fieldKey={fieldKey} />
-        </>
-      ) : null}
+      {fieldKey ? <SettingsFieldHelp fieldKey={fieldKey} /> : null}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   type RiskProfile,
   type RiskRecommendationKey,
 } from "@/lib/risk-recommendations";
+import type { SettingDescriptionKey } from "@/lib/settings-form-descriptions";
 import type { StrategyHint } from "@/lib/strategy-recommendations";
 import { cn, formatCurrency } from "@/lib/utils";
 
@@ -31,6 +32,7 @@ export function StrategyHintLine({ hint }: { hint: StrategyHint }) {
 
 type RiskFieldProps = {
   id: RiskRecommendationKey;
+  fieldKey?: SettingDescriptionKey;
   label: string;
   description: string;
   descriptionFull: string;
@@ -43,6 +45,7 @@ type RiskFieldProps = {
 
 export function RiskField({
   id,
+  fieldKey,
   label,
   description,
   descriptionFull,
@@ -60,6 +63,7 @@ export function RiskField({
   return (
     <SettingsField
       id={id}
+      fieldKey={fieldKey}
       label={label}
       description={description}
       descriptionTitle={descriptionFull}
@@ -93,6 +97,7 @@ export function RiskField({
 
 type StrategyPercentFieldProps = {
   id: "stop_loss_percentage" | "take_profit_percentage";
+  fieldKey?: SettingDescriptionKey;
   label: string;
   description: string;
   descriptionFull: string;
@@ -104,6 +109,7 @@ type StrategyPercentFieldProps = {
 
 export function StrategyPercentField({
   id,
+  fieldKey,
   label,
   description,
   descriptionFull,
@@ -115,6 +121,7 @@ export function StrategyPercentField({
   return (
     <SettingsField
       id={id}
+      fieldKey={fieldKey ?? id}
       label={label}
       description={description}
       descriptionTitle={descriptionFull}

@@ -389,6 +389,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="signal_record_threshold"
+            fieldKey="signal_record_threshold"
             label="Signal record threshold (%)"
             description={SETTING_DESCRIPTIONS.signal_record_threshold}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.signal_record_threshold}
@@ -424,6 +425,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="confirmation_seconds"
+            fieldKey="confirmation_seconds"
             label="Confirmation seconds"
             description={SETTING_DESCRIPTIONS.confirmation_seconds}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.confirmation_seconds}
@@ -451,6 +453,7 @@ export function SettingsForm({
         <SettingsFieldGroup>
           <RiskField
             id="risk_per_trade"
+            fieldKey="risk_per_trade"
             label="Risk per trade"
             description={SETTING_DESCRIPTIONS.risk_per_trade}
             descriptionFull={SETTING_DESCRIPTIONS_FULL.risk_per_trade}
@@ -462,6 +465,7 @@ export function SettingsForm({
           />
           <RiskField
             id="max_position_size"
+            fieldKey="max_position_size"
             label="Max position size"
             description={SETTING_DESCRIPTIONS.max_position_size}
             descriptionFull={SETTING_DESCRIPTIONS_FULL.max_position_size}
@@ -473,6 +477,7 @@ export function SettingsForm({
           />
           <RiskField
             id="max_daily_loss"
+            fieldKey="max_daily_loss"
             label="Max daily loss"
             description={SETTING_DESCRIPTIONS.max_daily_loss}
             descriptionFull={SETTING_DESCRIPTIONS_FULL.max_daily_loss}
@@ -484,6 +489,7 @@ export function SettingsForm({
           />
           <SettingsField
             id="max_open_positions"
+            fieldKey="max_open_positions"
             label="Max open positions"
             description={SETTING_DESCRIPTIONS.max_open_positions}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.max_open_positions}
@@ -554,6 +560,7 @@ export function SettingsForm({
             <SettingsFieldGroup className="mt-3">
           <SettingsField
             id="profit_take_enabled"
+            fieldKey="profit_take_enabled"
             label="Early take profit"
             description={SETTING_DESCRIPTIONS.profit_take_enabled}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_enabled}
@@ -573,6 +580,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="profit_take_min_fraction"
+            fieldKey="profit_take_min_fraction"
             label="Early take profit min (% of target)"
             description={SETTING_DESCRIPTIONS.profit_take_min_fraction}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_min_fraction}
@@ -591,6 +599,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="profit_take_max_fraction"
+            fieldKey="profit_take_max_fraction"
             label="Early take profit max (% of target)"
             description={SETTING_DESCRIPTIONS.profit_take_max_fraction}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_max_fraction}
@@ -609,6 +618,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="profit_take_min_band_hits"
+            fieldKey="profit_take_min_band_hits"
             label="Early take profit band touches"
             description={SETTING_DESCRIPTIONS.profit_take_min_band_hits}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_min_band_hits}
@@ -627,6 +637,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="profit_take_band_window_cycles"
+            fieldKey="profit_take_band_window_cycles"
             label="Early take profit lookback (cycles)"
             description={SETTING_DESCRIPTIONS.profit_take_band_window_cycles}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_band_window_cycles}
@@ -645,6 +656,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="profit_take_jev_sell_threshold"
+            fieldKey="profit_take_jev_sell_threshold"
             label="Early take profit Jev SELL (%)"
             description={SETTING_DESCRIPTIONS.profit_take_jev_sell_threshold}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.profit_take_jev_sell_threshold}
@@ -676,6 +688,7 @@ export function SettingsForm({
             <SettingsFieldGroup className="mt-3">
           <SettingsField
             id="loss_cut_enabled"
+            fieldKey="loss_cut_enabled"
             label="Early loss cut"
             description={SETTING_DESCRIPTIONS.loss_cut_enabled}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.loss_cut_enabled}
@@ -695,6 +708,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="loss_cut_min_fraction"
+            fieldKey="loss_cut_min_fraction"
             label="Early loss cut min (% toward stop)"
             description={SETTING_DESCRIPTIONS.loss_cut_min_fraction}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.loss_cut_min_fraction}
@@ -713,6 +727,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="loss_cut_max_fraction"
+            fieldKey="loss_cut_max_fraction"
             label="Early loss cut max (% toward stop)"
             description={SETTING_DESCRIPTIONS.loss_cut_max_fraction}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.loss_cut_max_fraction}
@@ -731,6 +746,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="loss_cut_min_band_hits"
+            fieldKey="loss_cut_min_band_hits"
             label="Early loss cut band touches"
             description={SETTING_DESCRIPTIONS.loss_cut_min_band_hits}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.loss_cut_min_band_hits}
@@ -749,6 +765,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="loss_cut_band_window_cycles"
+            fieldKey="loss_cut_band_window_cycles"
             label="Early loss cut lookback (cycles)"
             description={SETTING_DESCRIPTIONS.loss_cut_band_window_cycles}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.loss_cut_band_window_cycles}
@@ -767,6 +784,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="loss_cut_jev_sell_threshold"
+            fieldKey="loss_cut_jev_sell_threshold"
             label="Early loss cut Jev SELL (%)"
             description={SETTING_DESCRIPTIONS.loss_cut_jev_sell_threshold}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.loss_cut_jev_sell_threshold}
@@ -817,6 +835,7 @@ export function SettingsForm({
           </SettingsField>
           <SettingsField
             id="min_hold_minutes"
+            fieldKey="min_hold_minutes"
             label="Min hold (minutes)"
             description={SETTING_DESCRIPTIONS.min_hold_minutes}
             descriptionTitle={SETTING_DESCRIPTIONS_FULL.min_hold_minutes}
