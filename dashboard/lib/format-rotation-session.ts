@@ -5,7 +5,7 @@ export function formatRotationSessionPct(
   if (value == null) {
     return "Off";
   }
-  return `≥ ${value.toFixed(2)}% vs RTH open`;
+  return `≥ ${value.toFixed(2)}% since open`;
 }
 
 export function rotationSessionPctInputValue(

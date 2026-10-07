@@ -178,8 +178,13 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
               </div>
               <div className="space-y-1 sm:col-span-3">
                 <Label htmlFor="rotation_min_session_change_pct">
-                  Session % floor vs 9:30 open
+                  Session % floor (since open)
                 </Label>
+                <FieldDescription title="Only applies while watchlist rotation is on.">
+                  Names below this % vs today&apos;s price when the market opened are not
+                  promoted onto the active list. Blank = off.{" "}
+                  <span className="text-zinc-500">0 = flat or green since open (default).</span>
+                </FieldDescription>
                 <Input
                   id="rotation_min_session_change_pct"
                   name="rotation_min_session_change_pct"
@@ -188,8 +193,10 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
                   placeholder="off"
                   className="max-w-[10rem] font-mono"
                 />
-                <FieldDescription title="Blank = off. 0 = only flat or green vs the RTH open.">
-                  Red-day names score poorly and can leave the active list (open trades stay).
+                <FieldDescription title="Illustration only — not live prices.">
+                  Example: stock opened at $100 when the market opened. Now $99.50 (−0.5%) → below
+                  floor 0, rotation won&apos;t favor it. Now $100.10 (+0.1%) → OK. Open trades stay
+                  on the list either way.
                 </FieldDescription>
                 <SettingsFieldChipRow fieldKey="rotation_min_session_change_pct" />
                 <SettingsFieldHelp fieldKey="rotation_min_session_change_pct" />

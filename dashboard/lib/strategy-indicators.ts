@@ -195,7 +195,7 @@ export const ROTATION_RULES: StrategyIndicator[] = [
   {
     name: "Session vs open",
     headline: "Red-day filter",
-    detail: "% change vs 9:30 NY open (5m bar anchor)",
+    detail: "% change vs price when the market opened",
     usedFor: "Demote names below the session % floor from active scan",
     plainEnglish:
       "Keeps symbols that are down on the day from staying on the hot list, even if 5-minute momentum looks OK.",

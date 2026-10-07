@@ -246,8 +246,8 @@ export function StrategyGuide({
         {!dense ? (
           <p className="text-[11px] leading-relaxed text-zinc-600">
             Intraday indicators use 1-minute bars aggregated from 5-minute IBKR history. EMA-20
-            is ~20 minutes of 1m closes. Session % for rotation anchors to the 9:30 NY open via
-            5-minute bars when available.
+            is ~20 minutes of 1m closes. Session % for rotation uses today&apos;s open price once
+            the market is open (5-minute bars when available).
           </p>
         ) : null}
       </div>

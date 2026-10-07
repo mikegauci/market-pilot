@@ -83,7 +83,7 @@ function formatDraftValue(
     case "rotation_min_session_change_pct": {
       const pct = value as number | null;
       if (pct == null) return "off";
-      return `${pct}% vs RTH open`;
+      return `${pct}% since open`;
     }
     case "max_hold_minutes":
     case "min_hold_minutes":

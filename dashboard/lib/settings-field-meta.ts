@@ -12,7 +12,7 @@ export const SETTING_FIELD_EXAMPLES = {
   reentry_cooldown_minutes: "45 → no new entry in the same symbol for 45 minutes after an exit.",
   max_entries_per_symbol_per_day: "3 → fourth entry attempt that day is blocked (max_entries_per_symbol).",
   rotation_min_session_change_pct:
-    "0 → only flat or green vs the 9:30 NY open; blank → rotation session gate off.",
+    "0 → flat or green since open; blank → ignore day color for rotation.",
   min_share_price: "20 → skip entries below $20/share.",
   min_dollar_volume: "250000 → skip when 5m dollar volume is below this average.",
 } as const;
@@ -28,7 +28,7 @@ export const SETTING_FIELD_CHIPS: Partial<
   min_volume_ratio: [{ label: "Skip: volume_too_low", tone: "skip" }],
   max_hold_minutes: [{ label: "0 = brackets + Jev SELL", tone: "neutral" }],
   confirmation_cycles: [{ label: "Repeat eligible BUY", tone: "neutral" }],
-  rotation_min_session_change_pct: [{ label: "0 = flat/green vs open", tone: "neutral" }],
+  rotation_min_session_change_pct: [{ label: "0 = flat/green since open", tone: "neutral" }],
 };
 
 /** Strategy page subsection anchors (see strategy-guide.tsx). */
