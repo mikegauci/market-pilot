@@ -174,6 +174,10 @@ class RiskSettings:
     reentry_cooldown_minutes: float = 45.0
     # Max new entries per symbol per US trading day. 0 = off.
     max_entries_per_symbol_per_day: int = 3
+    # Watchlist rotation: min session % vs RTH open. None = off, 0 = require >= 0%.
+    rotation_min_session_change_pct: Optional[float] = 0.0
+    # When False, rotation floor comes from env StrategyConfig (optional column not loaded).
+    rotation_session_pct_from_settings: bool = False
     confirmation_cycles: int = 2
     confirmation_seconds: float = 30.0
     watchlist_pool: List[str] = field(default_factory=list)

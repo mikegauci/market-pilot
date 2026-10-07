@@ -62,6 +62,13 @@ class SupabaseSettingsMixin:
         data.setdefault("loss_cut_jev_sell_threshold", 0.0)
 
     @staticmethod
+    def _parse_rotation_session_pct(data: dict) -> Optional[float]:
+        raw = data.get("rotation_min_session_change_pct")
+        if raw is None:
+            return None
+        return float(raw)
+
+    @staticmethod
     def _apply_rotation_defaults(data: dict) -> None:
         data.setdefault("watchlist_pool", [])
         data.setdefault("watchlist_active", [])
@@ -98,13 +105,23 @@ class SupabaseSettingsMixin:
             return None
 
     def _merge_optional_settings_columns(self, data: dict) -> None:
-        row = self._select_settings_row("max_entries_per_symbol_per_day")
-        if row is not None and row.get("max_entries_per_symbol_per_day") is not None:
+        row = self._select_settings_row(
+            "max_entries_per_symbol_per_day, rotation_min_session_change_pct"
+        )
+        if row is None:
+            data.setdefault("max_entries_per_symbol_per_day", 3)
+            return
+        if row.get("max_entries_per_symbol_per_day") is not None:
             data["max_entries_per_symbol_per_day"] = row[
                 "max_entries_per_symbol_per_day"
             ]
         else:
             data.setdefault("max_entries_per_symbol_per_day", 3)
+        if "rotation_min_session_change_pct" in row:
+            raw_rotation = row.get("rotation_min_session_change_pct")
+            data["rotation_min_session_change_pct"] = (
+                None if raw_rotation is None else float(raw_rotation)
+            )
 
     def _load_settings_row(self) -> dict:
         data = self._select_settings_row(
@@ -221,6 +238,14 @@ class SupabaseSettingsMixin:
             reentry_cooldown_minutes=float(data.get("reentry_cooldown_minutes", 45)),
             max_entries_per_symbol_per_day=int(
                 data.get("max_entries_per_symbol_per_day", 3)
+            ),
+            rotation_min_session_change_pct=(
+                SupabaseSettingsMixin._parse_rotation_session_pct(data)
+                if "rotation_min_session_change_pct" in data
+                else 0.0
+            ),
+            rotation_session_pct_from_settings=(
+                "rotation_min_session_change_pct" in data
             ),
             confirmation_cycles=int(data.get("confirmation_cycles", 2)),
             confirmation_seconds=float(int(data.get("confirmation_seconds", 30))),

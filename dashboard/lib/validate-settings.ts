@@ -33,6 +33,20 @@ function parseRequiredNumber(formData: FormData, name: string): number {
   return value;
 }
 
+function parseOptionalRotationSessionPct(formData: FormData): number | null {
+  const raw = String(formData.get("rotation_min_session_change_pct") ?? "").trim();
+  if (raw === "" || raw.toLowerCase() === "off") {
+    return null;
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < -5 || value > 5) {
+    throw new Error(
+      `${labelFor("rotation_min_session_change_pct")} must be from -5 to 5, or leave blank for off`,
+    );
+  }
+  return value;
+}
+
 function labelFor(name: string): string {
   const labels: Record<string, string> = {
     minimum_jev_confidence: "Min Jev confidence (%)",
@@ -57,6 +71,8 @@ function labelFor(name: string): string {
     loss_cut_band_window_cycles: "Early loss cut lookback (cycles)",
     loss_cut_jev_sell_threshold: "Early loss cut Jev SELL (%)",
     reentry_cooldown_minutes: "Re-entry cooldown (minutes)",
+    max_entries_per_symbol_per_day: "Max entries per symbol (day)",
+    rotation_min_session_change_pct: "Rotation session % floor",
     confirmation_cycles: "Confirmation cycles",
     confirmation_seconds: "Confirmation seconds",
     watchlist: "Watchlist",
@@ -85,6 +101,8 @@ export type ParsedSettings = {
   min_hold_minutes: number;
   jev_sell_exit_threshold: number;
   reentry_cooldown_minutes: number;
+  max_entries_per_symbol_per_day: number;
+  rotation_min_session_change_pct: number | null;
   confirmation_cycles: number;
   confirmation_seconds: number;
   min_volume_ratio: number;
@@ -163,6 +181,11 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     formData,
     "reentry_cooldown_minutes",
   );
+  const max_entries_per_symbol_per_day = parseRequiredNumber(
+    formData,
+    "max_entries_per_symbol_per_day",
+  );
+  const rotation_min_session_change_pct = parseOptionalRotationSessionPct(formData);
   const confirmation_cycles = parseRequiredNumber(formData, "confirmation_cycles");
   const confirmation_seconds = parseRequiredNumber(formData, "confirmation_seconds");
   const min_volume_ratio = parseRequiredNumber(formData, "min_volume_ratio");
@@ -314,6 +337,13 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   ) {
     throw new Error("Re-entry cooldown (minutes) must be a whole number from 0 to 480");
   }
+  if (
+    !Number.isInteger(max_entries_per_symbol_per_day) ||
+    max_entries_per_symbol_per_day < 0 ||
+    max_entries_per_symbol_per_day > 20
+  ) {
+    throw new Error("Max entries per symbol (day) must be a whole number from 0 to 20");
+  }
   if (!Number.isInteger(confirmation_cycles) || confirmation_cycles < 1 || confirmation_cycles > 10) {
     throw new Error("Confirmation cycles must be a whole number from 1 to 10");
   }
@@ -398,6 +428,8 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     min_hold_minutes,
     jev_sell_exit_threshold,
     reentry_cooldown_minutes,
+    max_entries_per_symbol_per_day,
+    rotation_min_session_change_pct,
     confirmation_cycles,
     confirmation_seconds,
     min_volume_ratio,

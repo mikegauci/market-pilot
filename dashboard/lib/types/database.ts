@@ -32,6 +32,10 @@ export type Settings = {
   jev_sell_exit_threshold: number;
   /** Block new entries in a symbol for this many minutes after an exit (0 = off). */
   reentry_cooldown_minutes: number;
+  /** Max new entries per symbol per US trading day (0 = off). */
+  max_entries_per_symbol_per_day: number;
+  /** Watchlist rotation: min session % vs RTH open (null = off, 0 = non-negative session). */
+  rotation_min_session_change_pct: number | null;
   /** Consecutive eligible Jev BUY eval cycles required before entry. */
   confirmation_cycles: number;
   /** Minimum seconds an eligible BUY must persist before entry (0 = cycle count only). */

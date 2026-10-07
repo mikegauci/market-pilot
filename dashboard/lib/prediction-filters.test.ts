@@ -24,6 +24,19 @@ describe("evaluateEntryFilters spread gate", () => {
     expect(spread?.pass).toBe(true);
   });
 
+  it("fail-closes EMA when price is missing but EMA is required", () => {
+    const checks = evaluateEntryFilters({ ema_20: 100 });
+    const ema = checks.find((row) => row.name === "EMA-20");
+    expect(ema?.pass).toBe(false);
+  });
+
+  it("shows warming detail when EMA is not ready", () => {
+    const checks = evaluateEntryFilters({ price: 100, ema_20: null });
+    const ema = checks.find((row) => row.name === "EMA-20");
+    expect(ema?.pass).toBe(false);
+    expect(ema?.detail).toContain("warming up");
+  });
+
   it("omits benchmark headwind row when benchmark is not configured", () => {
     const checks = evaluateEntryFilters(
       { price: 100, benchmark_change_5m: -0.5 },

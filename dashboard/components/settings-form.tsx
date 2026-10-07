@@ -112,6 +112,9 @@ export function SettingsForm({
   const [reentryCooldownMinutes, setReentryCooldownMinutes] = useState(
     settings.reentry_cooldown_minutes ?? 45,
   );
+  const [maxEntriesPerSymbol, setMaxEntriesPerSymbol] = useState(
+    settings.max_entries_per_symbol_per_day ?? 3,
+  );
   const [minVolumeRatio, setMinVolumeRatio] = useState(settings.min_volume_ratio ?? 0);
   const [minSharePrice, setMinSharePrice] = useState(settings.min_share_price ?? 20);
   const [minDollarVolume, setMinDollarVolume] = useState(
@@ -699,6 +702,24 @@ export function SettingsForm({
               integer
               value={reentryCooldownMinutes}
               onChange={setReentryCooldownMinutes}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="max_entries_per_symbol_per_day"
+            label="Max entries per symbol (day)"
+            description={SETTING_DESCRIPTIONS.max_entries_per_symbol_per_day}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.max_entries_per_symbol_per_day}
+          >
+            <SettingsNumberInput
+              id="max_entries_per_symbol_per_day"
+              name="max_entries_per_symbol_per_day"
+              step="1"
+              min={0}
+              max={20}
+              integer
+              value={maxEntriesPerSymbol}
+              onChange={setMaxEntriesPerSymbol}
               required
             />
           </SettingsField>

@@ -32,6 +32,8 @@ const baseFields = {
   min_hold_minutes: "15",
   jev_sell_exit_threshold: "95",
   reentry_cooldown_minutes: "45",
+  max_entries_per_symbol_per_day: "3",
+  rotation_min_session_change_pct: "0",
   confirmation_cycles: "2",
   confirmation_seconds: "30",
   min_volume_ratio: "0.5",
@@ -173,5 +175,12 @@ describe("parseSettingsForm exit tuning", () => {
         }),
       ),
     ).toThrow("Min hold (minutes) must be at or below max hold when max hold is on");
+  });
+
+  it("parses blank rotation session floor as off", () => {
+    const parsed = parseSettingsForm(
+      form({ ...baseFields, rotation_min_session_change_pct: "" }),
+    );
+    expect(parsed.rotation_min_session_change_pct).toBeNull();
   });
 });

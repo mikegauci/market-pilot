@@ -17,7 +17,10 @@ from runtime.loop.eval_cycle_state import EvalCycleScratch
 from runtime.state import TraderRuntimeState
 from runtime.timing import should_refresh
 from runtime.trader_ops import merge_watchlist_symbols, sync_watchlist_symbols
-from strategy.config import strategy_config_with_risk_overrides
+from strategy.config import (
+    rotation_dashboard_override,
+    strategy_config_with_risk_overrides,
+)
 from strategy.confirmation import ConfirmationTracker
 from strategy.profit_take_tracker import ProfitTakeBandTracker
 from watchlist.backfill import backfill_watchlist_symbols
@@ -97,6 +100,10 @@ def run_cycle_sync(
             jev_sell_exit_threshold=scratch.risk_settings.jev_sell_exit_threshold,
             confirmation_cycles=scratch.risk_settings.confirmation_cycles,
             confirmation_seconds=scratch.risk_settings.confirmation_seconds,
+            **rotation_dashboard_override(
+                from_settings=scratch.risk_settings.rotation_session_pct_from_settings,
+                value=scratch.risk_settings.rotation_min_session_change_pct,
+            ),
         )
         if (
             scratch.strategy_config.confirmation_cycles != prev_cycles

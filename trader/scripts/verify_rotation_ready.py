@@ -24,7 +24,10 @@ from market.bar_aggregator import MinuteBarStore  # noqa: E402
 from market.bars import BarStore  # noqa: E402
 from market.hours import is_us_regular_session_open  # noqa: E402
 from models.types import DataSource, Quote  # noqa: E402
-from strategy.config import strategy_config_with_risk_overrides  # noqa: E402
+from strategy.config import (  # noqa: E402
+    rotation_dashboard_override,
+    strategy_config_with_risk_overrides,
+)
 from watchlist.resolution import effective_benchmark  # noqa: E402
 from watchlist.rotation import rotate_active, score_candidate  # noqa: E402
 from watchlist.rotation_runtime import build_rotation_candidate  # noqa: E402
@@ -96,6 +99,10 @@ def simulate_scores(
         jev_sell_exit_threshold=risk.jev_sell_exit_threshold,
         confirmation_cycles=risk.confirmation_cycles,
         confirmation_seconds=risk.confirmation_seconds,
+        **rotation_dashboard_override(
+            from_settings=risk.rotation_session_pct_from_settings,
+            value=risk.rotation_min_session_change_pct,
+        ),
     )
 
     scores: dict[str, float] = {}

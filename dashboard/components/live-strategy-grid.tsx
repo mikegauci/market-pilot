@@ -1,13 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
 import { PredictionIndicatorSummary } from "@/components/prediction-indicators";
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
+import { formatRotationSessionPct } from "@/lib/format-rotation-session";
 import { useLatestPredictions } from "@/lib/latest-predictions-context";
 import { extractBenchmarkChange5m } from "@/lib/market-condition";
-import { filterSummaryFromSettings } from "@/lib/prediction-filters";
+import { evaluateEntryFilters, filterSummaryFromSettings } from "@/lib/prediction-filters";
 import { aggregateSkipReasons } from "@/lib/skip-reason-stats";
 import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
 import type { Prediction, Settings } from "@/lib/types/database";
@@ -44,6 +46,44 @@ export function LiveStrategyGrid({ predictions, settings }: Props) {
 
   return (
     <div className="space-y-4">
+      {settings.watchlist_rotation_enabled ? (
+        <Card>
+          <CardTitle>Watchlist rotation (live)</CardTitle>
+          <div className="mt-3 space-y-2 text-sm text-zinc-400">
+            <p>
+              Active size{" "}
+              <span className="tabular-nums text-zinc-200">
+                {settings.watchlist_active_size ?? 12}
+              </span>
+              {" · "}
+              Every{" "}
+              <span className="tabular-nums text-zinc-200">
+                {settings.watchlist_rotation_interval_minutes ?? 15}
+              </span>{" "}
+              min · Max{" "}
+              <span className="tabular-nums text-zinc-200">
+                {settings.watchlist_max_swaps_per_rotation ?? 2}
+              </span>{" "}
+              swaps
+            </p>
+            <p>
+              Session floor:{" "}
+              <span className="text-zinc-200">
+                {formatRotationSessionPct(settings.rotation_min_session_change_pct)}
+              </span>
+            </p>
+            {settings.watchlist_last_rotation_note ? (
+              <p className="text-xs text-zinc-500">
+                Last note: {settings.watchlist_last_rotation_note}
+              </p>
+            ) : null}
+            <Link href="/settings" className="text-xs text-emerald-500/80 hover:text-emerald-400">
+              Edit watchlist & rotation →
+            </Link>
+          </div>
+        </Card>
+      ) : null}
+
       {benchmarkEnabled ? (
         <Card>
           <CardTitle>Benchmark strip</CardTitle>
@@ -99,6 +139,8 @@ export function LiveStrategyGrid({ predictions, settings }: Props) {
           {watchlist.map((symbol) => {
             const pred = bySymbol.get(symbol.toUpperCase()) ?? bySymbol.get(symbol);
             const snap = pred?.market_snapshot;
+            const filterChecks = evaluateEntryFilters(snap, filterOptions);
+            const emaCheck = filterChecks.find((c) => c.name === "EMA-20");
 
             return (
               <Card key={symbol} className="p-4">
@@ -124,6 +166,25 @@ export function LiveStrategyGrid({ predictions, settings }: Props) {
                       <span>Vol {snap?.volume_ratio?.toFixed(2) ?? "—"}</span>
                       <span>5m {snap?.change_5m?.toFixed(2) ?? "—"}%</span>
                       <span>15m {snap?.change_15m?.toFixed(2) ?? "—"}%</span>
+                      <span
+                        className={cn(
+                          "col-span-2",
+                          emaCheck?.pass === false && "text-red-400/90",
+                          emaCheck?.pass === true && "text-emerald-400/90",
+                        )}
+                        title={emaCheck?.detail}
+                      >
+                        EMA-20{" "}
+                        {emaCheck?.pass === false
+                          ? emaCheck.detail.includes("warming")
+                            ? "warming up"
+                            : "fail"
+                          : emaCheck?.pass === true
+                            ? "pass"
+                            : emaCheck?.pass === null
+                              ? "n/a"
+                              : "—"}
+                      </span>
                     </div>
                     <div className="mt-2">
                       <PredictionIndicatorSummary

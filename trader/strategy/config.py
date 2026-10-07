@@ -47,6 +47,9 @@ class StrategyConfig:
     rotation_min_session_change_pct: Optional[float] = 0.0
 
 
+_ROTATION_OVERRIDE_UNSET = object()
+
+
 def strategy_config_with_risk_overrides(
     base: StrategyConfig,
     *,
@@ -56,6 +59,7 @@ def strategy_config_with_risk_overrides(
     jev_sell_exit_threshold: Optional[float] = None,
     confirmation_cycles: Optional[int] = None,
     confirmation_seconds: Optional[float] = None,
+    rotation_min_session_change_pct: Optional[float] | object = _ROTATION_OVERRIDE_UNSET,
 ) -> StrategyConfig:
     """Apply dashboard settings overrides onto env-based strategy config."""
     updates: dict = {
@@ -63,6 +67,8 @@ def strategy_config_with_risk_overrides(
         "min_share_price": min_share_price,
         "min_dollar_volume": min_dollar_volume,
     }
+    if rotation_min_session_change_pct is not _ROTATION_OVERRIDE_UNSET:
+        updates["rotation_min_session_change_pct"] = rotation_min_session_change_pct
     if jev_sell_exit_threshold is not None:
         updates["jev_sell_exit_threshold"] = jev_sell_exit_threshold
     if confirmation_cycles is not None:
@@ -70,3 +76,14 @@ def strategy_config_with_risk_overrides(
     if confirmation_seconds is not None:
         updates["confirmation_seconds"] = max(0.0, float(confirmation_seconds))
     return replace(base, **updates)
+
+
+def rotation_dashboard_override(
+    *,
+    from_settings: bool,
+    value: Optional[float],
+) -> dict[str, Optional[float]]:
+    """Apply Supabase rotation floor when the column was loaded; else keep env base."""
+    if not from_settings:
+        return {}
+    return {"rotation_min_session_change_pct": value}

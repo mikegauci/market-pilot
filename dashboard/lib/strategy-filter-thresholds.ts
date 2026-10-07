@@ -10,6 +10,9 @@ export const STRATEGY_FILTER_THRESHOLDS = {
   maxBenchmarkDrop5mPct: -0.12,
   minNewsSentiment: -0.3,
   requirePriceAboveEma20: true,
+  /** Default when settings row lacks column; dashboard Settings overrides. */
+  rotationMinSessionChangePct: 0 as number | null,
+  maxEntriesPerSymbolPerDay: 3,
   /** 0 = disabled; set STRATEGY_MIN_VOLUME_RATIO in trader .env to enable */
   minVolumeRatio: 0,
   /** Dashboard default; 0 = off */

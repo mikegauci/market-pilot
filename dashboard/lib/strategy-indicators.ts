@@ -1,3 +1,5 @@
+import type { StrategyDiagramType } from "@/lib/strategy-diagram-types";
+
 export type StrategyIndicator = {
   name: string;
   headline: string;
@@ -5,7 +7,7 @@ export type StrategyIndicator = {
   usedFor: string;
   plainEnglish: string;
   /** Optional diagram key for strategy-diagrams.tsx */
-  diagram?: "rsi" | "ema" | "volume";
+  diagram?: StrategyDiagramType;
   /** Optional external learn-more URL */
   learnMoreUrl?: string;
 };
@@ -108,11 +110,20 @@ export const HARD_FILTER_RULES: StrategyIndicator[] = [
   {
     name: "Below EMA-20",
     headline: "Trend not confirmed",
-    detail: "Price vs EMA-20 on 1-minute closes",
+    detail: "Price vs EMA-20 on 1-minute closes (~20 min window)",
     usedFor: "Block entry when price ≤ EMA-20",
     plainEnglish:
       "Price must sit above the medium-term trend line. Below EMA-20 means the short-term trend isn't confirmed.",
     diagram: "ema",
+  },
+  {
+    name: "EMA warming up",
+    headline: "Not enough bars yet",
+    detail: "EMA-20 needs ~20×1-minute bars after RTH open or restart",
+    usedFor: "Block entry until EMA-20 is computed (fail-closed)",
+    plainEnglish:
+      "Right after the open or a restart, the bot waits for enough 1-minute history before it trusts the EMA gate.",
+    diagram: "emaWarmup",
   },
   {
     name: "Benchmark headwind",
@@ -154,6 +165,59 @@ export const HARD_FILTER_RULES: StrategyIndicator[] = [
     plainEnglish:
       "Blocks trades when volume is unusually low versus the recent 1-minute average. Adjust in Settings.",
     diagram: "volume",
+  },
+];
+
+/** Applied in RiskManager after filters and Jev confirmation. */
+export const RISK_CAP_RULES: StrategyIndicator[] = [
+  {
+    name: "Re-entry cooldown",
+    headline: "Pause after exit",
+    detail: "Minutes after closing a symbol before a new entry",
+    usedFor: "Block entry when still inside cooldown window",
+    plainEnglish:
+      "Stops immediate re-chase in the same ticker after a stop or take-profit.",
+    diagram: "reentry",
+  },
+  {
+    name: "Max entries per symbol",
+    headline: "Daily entry budget",
+    detail: "New trades opened per symbol per US trading day",
+    usedFor: "Block entry after the daily cap (0 = off)",
+    plainEnglish:
+      "Limits how many times the bot can re-enter the same name in one session day — useful when stops repeat.",
+    diagram: "maxEntries",
+  },
+];
+
+/** Watchlist rotation scoring (when enabled in Settings). */
+export const ROTATION_RULES: StrategyIndicator[] = [
+  {
+    name: "Session vs open",
+    headline: "Red-day filter",
+    detail: "% change vs 9:30 NY open (5m bar anchor)",
+    usedFor: "Demote names below the session % floor from active scan",
+    plainEnglish:
+      "Keeps symbols that are down on the day from staying on the hot list, even if 5-minute momentum looks OK.",
+    diagram: "sessionOpen",
+  },
+  {
+    name: "Rotation pipeline",
+    headline: "Pool → active list",
+    detail: "Relative strength vs benchmark + volume/RSI tie-breakers",
+    usedFor: "Swap weak active names for stronger pool candidates",
+    plainEnglish:
+      "On a timer, the bot re-scores the pool and swaps a few names, but never drops symbols with open trades.",
+    diagram: "rotation",
+  },
+  {
+    name: "Red incumbents",
+    headline: "Drop weak actives",
+    detail: "Session-disqualified scores evict non-protected names",
+    usedFor: "Remove red-day incumbents before picking challengers",
+    plainEnglish:
+      "If an active symbol falls below the session floor, it can leave the list on the next rotation even if it was on the list before. Open trades stay protected.",
+    diagram: "sessionOpen",
   },
 ];
 

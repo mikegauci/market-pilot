@@ -47,7 +47,10 @@ from runtime.trader_ops import (
     sync_portfolio_state,
 )
 from strategy.confirmation import ConfirmationTracker
-from strategy.config import strategy_config_with_risk_overrides
+from strategy.config import (
+    rotation_dashboard_override,
+    strategy_config_with_risk_overrides,
+)
 from strategy.profit_take_tracker import ProfitTakeBandTracker
 from watchlist.resolution import effective_benchmark, resolve_runtime_watchlist
 
@@ -130,6 +133,10 @@ def run() -> int:
         jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
         confirmation_cycles=risk_settings.confirmation_cycles,
         confirmation_seconds=risk_settings.confirmation_seconds,
+        **rotation_dashboard_override(
+            from_settings=risk_settings.rotation_session_pct_from_settings,
+            value=risk_settings.rotation_min_session_change_pct,
+        ),
     )
     confirmation_tracker = ConfirmationTracker(
         strategy_config.confirmation_cycles,
@@ -145,7 +152,7 @@ def run() -> int:
         "Strategy filters: min confidence from settings, margin %.0f%%, "
         "confirmation %sx, max hold %.0fm (dashboard), min hold %.0fm, "
         "Jev SELL exit >= %.0f%%, min volume ratio %.2f, "
-        "min share price $%.2f (dashboard)",
+        "min share price $%.2f (dashboard), rotation session %% %s",
         strategy_config.min_buy_hold_margin * 100,
         strategy_config.confirmation_cycles,
         risk_settings.max_hold_minutes,
@@ -153,6 +160,9 @@ def run() -> int:
         strategy_config.jev_sell_exit_threshold * 100,
         risk_settings.min_volume_ratio,
         risk_settings.min_share_price,
+        "off"
+        if strategy_config.rotation_min_session_change_pct is None
+        else f">= {strategy_config.rotation_min_session_change_pct:.2f}",
     )
 
     ibkr = IBKRClient(

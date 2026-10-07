@@ -3,80 +3,33 @@ import { Card, CardTitle } from "@/components/ui/card";
 import {
   StrategyDiagram,
   TradeDecisionFlow,
+  type StrategyDiagramType,
 } from "@/components/strategy-diagrams";
+import { StrategyThresholdCards } from "@/components/strategy-threshold-cards";
 import {
   HARD_FILTER_RULES,
   JEV_INDICATORS,
+  RISK_CAP_RULES,
+  ROTATION_RULES,
   withBenchmarkSymbol,
   type StrategyIndicator,
 } from "@/lib/strategy-indicators";
-import { STRATEGY_FILTER_THRESHOLDS } from "@/lib/strategy-filter-thresholds";
+import type { Settings } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import { ExternalLink } from "lucide-react";
 
-type FilterThresholdsProps = {
-  benchmarkSymbol?: string;
-  minVolumeRatio?: number;
-  settingsLink?: boolean;
-};
-
-export function FilterThresholds({
-  benchmarkSymbol,
-  minVolumeRatio,
-  settingsLink = true,
-}: FilterThresholdsProps) {
-  const benchmark = benchmarkSymbol?.trim() || "off";
-  const volumeRatio = minVolumeRatio ?? STRATEGY_FILTER_THRESHOLDS.minVolumeRatio;
-
-  return (
-    <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/20 px-3 py-2.5">
-      <p className="text-xs font-medium text-zinc-300">Active filter thresholds</p>
-      <ul className="mt-2 space-y-1 text-xs text-zinc-400">
-        <li>RSI max: {STRATEGY_FILTER_THRESHOLDS.maxRsi}</li>
-        <li>
-          Spread max: {(STRATEGY_FILTER_THRESHOLDS.maxSpreadPct * 100).toFixed(2)}%
-        </li>
-        <li>
-          Price above EMA-20:{" "}
-          {STRATEGY_FILTER_THRESHOLDS.requirePriceAboveEma20 ? "required" : "off"}
-        </li>
-        <li>
-          {benchmark} 5m floor: {STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct}%
-        </li>
-        <li>News sentiment floor: {STRATEGY_FILTER_THRESHOLDS.minNewsSentiment}</li>
-        <li>
-          Min volume ratio:{" "}
-          {volumeRatio > 0 ? volumeRatio : "off"}
-        </li>
-      </ul>
-      <p className="mt-2 text-[11px] text-zinc-600">
-        RSI, spread, EMA-20, benchmark, and news thresholds use trader{" "}
-        <code className="text-zinc-500">.env</code> defaults.
-        {settingsLink ? (
-          <>
-            {" "}
-            Min volume ratio can be changed in{" "}
-            <Link href="/settings" className="text-emerald-500/80 hover:text-emerald-400">
-              Settings → Exits & entry filters
-            </Link>
-            .
-          </>
-        ) : (
-          " Min volume ratio is saved in Settings."
-        )}
-      </p>
-    </div>
-  );
-}
-
 function diagramVariant(
   item: StrategyIndicator,
-  section: "jev" | "filter",
+  section: "jev" | "filter" | "risk" | "rotation",
 ): "default" | "blocked" | "low" | undefined {
   if (section === "filter") {
     if (item.diagram === "rsi") return "default";
     if (item.diagram === "ema") return "blocked";
     if (item.diagram === "volume") return "low";
+    if (item.diagram === "emaWarmup") return "blocked";
+  }
+  if (section === "rotation" && item.diagram === "sessionOpen") {
+    return "blocked";
   }
   return "default";
 }
@@ -85,10 +38,12 @@ function IndicatorCard({
   item,
   section,
   dense = false,
+  maxEntrySlots,
 }: {
   item: StrategyIndicator;
-  section: "jev" | "filter";
+  section: "jev" | "filter" | "risk" | "rotation";
   dense?: boolean;
+  maxEntrySlots?: number;
 }) {
   if (dense) {
     return (
@@ -123,8 +78,9 @@ function IndicatorCard({
         {item.diagram ? (
           <div className="shrink-0 rounded-md border border-zinc-800/60 bg-zinc-950/40 p-2">
             <StrategyDiagram
-              type={item.diagram}
+              type={item.diagram as StrategyDiagramType}
               variant={diagramVariant(item, section)}
+              maxEntrySlots={maxEntrySlots}
             />
           </div>
         ) : null}
@@ -133,20 +89,28 @@ function IndicatorCard({
   );
 }
 
-export function IndicatorList({
+function IndicatorList({
   items,
   section,
   dense = false,
+  maxEntrySlots,
 }: {
   items: StrategyIndicator[];
-  section: "jev" | "filter";
+  section: "jev" | "filter" | "risk" | "rotation";
   dense?: boolean;
+  maxEntrySlots?: number;
 }) {
   if (dense) {
     return (
       <ul className="space-y-1.5">
         {items.map((item) => (
-          <IndicatorCard key={item.name} item={item} section={section} dense />
+          <IndicatorCard
+            key={item.name}
+            item={item}
+            section={section}
+            dense
+            maxEntrySlots={maxEntrySlots}
+          />
         ))}
       </ul>
     );
@@ -155,13 +119,20 @@ export function IndicatorList({
   return (
     <ul className="space-y-2.5">
       {items.map((item) => (
-        <IndicatorCard key={item.name} item={item} section={section} dense={false} />
+        <IndicatorCard
+          key={item.name}
+          item={item}
+          section={section}
+          dense={false}
+          maxEntrySlots={maxEntrySlots}
+        />
       ))}
     </ul>
   );
 }
 
 type StrategyGuideProps = {
+  settings?: Settings | null;
   benchmarkSymbol?: string;
   minVolumeRatio?: number;
   variant?: "full" | "reference";
@@ -170,15 +141,21 @@ type StrategyGuideProps = {
 };
 
 export function StrategyGuide({
+  settings,
   benchmarkSymbol,
-  minVolumeRatio,
+  minVolumeRatio: _minVolumeRatio,
   variant = "full",
   embedded = false,
   compact = false,
 }: StrategyGuideProps) {
-  const jevIndicators = withBenchmarkSymbol(JEV_INDICATORS, benchmarkSymbol);
-  const hardFilters = withBenchmarkSymbol(HARD_FILTER_RULES, benchmarkSymbol);
+  const benchmark =
+    benchmarkSymbol?.trim() || settings?.benchmark_symbol?.trim() || "";
+  const jevIndicators = withBenchmarkSymbol(JEV_INDICATORS, benchmark);
+  const hardFilters = withBenchmarkSymbol(HARD_FILTER_RULES, benchmark);
+  const riskCaps = RISK_CAP_RULES;
+  const rotationRules = ROTATION_RULES;
   const dense = variant === "reference";
+  const maxEntrySlots = settings?.max_entries_per_symbol_per_day ?? 3;
 
   if (compact) {
     return (
@@ -188,7 +165,8 @@ export function StrategyGuide({
           Jev reads: {jevIndicators.map((item) => item.headline).join(" · ")}
         </p>
         <p className="mt-1 text-[11px] text-zinc-600">
-          Safety checks after BUY: RSI, EMA-20, benchmark headwind (if set), spread, news.
+          Then entry filters, risk caps (cooldown, daily entries), and rotation session gate when
+          enabled.
         </p>
       </div>
     );
@@ -198,9 +176,9 @@ export function StrategyGuide({
     <>
       {!embedded ? (
         <>
-          <CardTitle>Indicators & filters</CardTitle>
+          <CardTitle>How the bot decides</CardTitle>
           <p className="mt-1 text-xs text-zinc-500">
-            Two layers: Jev synthesizes market context, then safety checks veto risky entries.
+            Five steps from live data to a trade or a logged skip reason on Predictions.
           </p>
         </>
       ) : null}
@@ -208,11 +186,12 @@ export function StrategyGuide({
       <div className={cn(!embedded && "mt-4", embedded && "space-y-4")}>
         {!dense && !embedded ? (
           <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/20 px-3 py-3">
-            <p className="text-xs font-medium text-zinc-300">How a trade is decided</p>
-            <div className="mt-3">
-              <TradeDecisionFlow />
-            </div>
+            <TradeDecisionFlow />
           </div>
+        ) : null}
+
+        {settings && !dense ? (
+          <StrategyThresholdCards settings={settings} />
         ) : null}
 
         <div>
@@ -226,24 +205,49 @@ export function StrategyGuide({
 
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-amber-500/80">
-            Safety checks (after Jev says BUY)
+            Entry filters (after Jev says BUY)
           </p>
           <div className="mt-2">
             <IndicatorList items={hardFilters} section="filter" dense={dense} />
           </div>
         </div>
 
-        <FilterThresholds
-          benchmarkSymbol={benchmarkSymbol}
-          minVolumeRatio={minVolumeRatio}
-          settingsLink={!embedded}
-        />
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-orange-500/80">
+            Risk caps
+          </p>
+          <div className="mt-2">
+            <IndicatorList
+              items={riskCaps}
+              section="risk"
+              dense={dense}
+              maxEntrySlots={maxEntrySlots > 0 ? maxEntrySlots : 3}
+            />
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-sky-500/80">
+            Watchlist rotation
+          </p>
+          <p className="mt-1 text-[11px] text-zinc-600">
+            {settings?.watchlist_rotation_enabled
+              ? "Rotation is on — session floor and swaps apply to the active list."
+              : "Turn on rotation under Settings → Watchlist to use these rules."}{" "}
+            <Link href="/settings" className="text-emerald-500/80 hover:text-emerald-400">
+              Settings
+            </Link>
+          </p>
+          <div className="mt-2">
+            <IndicatorList items={rotationRules} section="rotation" dense={dense} />
+          </div>
+        </div>
 
         {!dense ? (
           <p className="text-[11px] leading-relaxed text-zinc-600">
-            Intraday indicators use 1-minute bars aggregated from 5-minute IBKR history. Jev
-            also receives bid/ask and headline context with each prediction. EMA-9 is
-            Jev-only; EMA-20 is used by both Jev and the price &gt; EMA-20 gate.
+            Intraday indicators use 1-minute bars aggregated from 5-minute IBKR history. EMA-20
+            is ~20 minutes of 1m closes. Session % for rotation anchors to the 9:30 NY open via
+            5-minute bars when available.
           </p>
         ) : null}
       </div>
@@ -255,4 +259,22 @@ export function StrategyGuide({
   }
 
   return <Card>{body}</Card>;
+}
+
+/** @deprecated Use StrategyGuide with settings — kept for FilterThresholds export */
+export function FilterThresholds({
+  benchmarkSymbol,
+  minVolumeRatio,
+}: {
+  benchmarkSymbol?: string;
+  minVolumeRatio?: number;
+  settingsLink?: boolean;
+}) {
+  void benchmarkSymbol;
+  void minVolumeRatio;
+  return (
+    <p className="text-xs text-zinc-500">
+      Threshold cards appear when full settings are passed to StrategyGuide.
+    </p>
+  );
 }

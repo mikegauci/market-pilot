@@ -30,6 +30,8 @@ describe("normalizeSettings", () => {
     expect(normalized?.min_hold_minutes).toBe(15);
     expect(normalized?.jev_sell_exit_threshold).toBe(0.95);
     expect(normalized?.reentry_cooldown_minutes).toBe(45);
+    expect(normalized?.max_entries_per_symbol_per_day).toBe(3);
+    expect(normalized?.rotation_min_session_change_pct).toBe(0);
     expect(normalized?.profit_take_enabled).toBe(false);
     expect(normalized?.profit_take_min_fraction).toBe(0.7);
     expect(normalized?.profit_take_max_fraction).toBe(0.8);

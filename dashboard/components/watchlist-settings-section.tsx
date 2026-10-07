@@ -15,6 +15,7 @@ import {
   normalizeWatchlistSymbols,
   watchlistSymbolsHiddenValue,
 } from "@/lib/watchlist-symbols";
+import { rotationSessionPctInputValue } from "@/lib/format-rotation-session";
 
 type Props = {
   settings: Settings;
@@ -103,6 +104,23 @@ export function WatchlistSettingsSection({ settings }: Props) {
             max={5}
             defaultValue={settings.watchlist_max_swaps_per_rotation ?? 2}
           />
+        </div>
+        <div className="space-y-1 sm:col-span-3">
+          <Label htmlFor="rotation_min_session_change_pct">
+            Session % floor vs 9:30 open
+          </Label>
+          <Input
+            id="rotation_min_session_change_pct"
+            name="rotation_min_session_change_pct"
+            defaultValue={rotationSessionPctInputValue(
+              settings.rotation_min_session_change_pct,
+            )}
+            placeholder="off"
+            className="max-w-[10rem] font-mono"
+          />
+          <FieldDescription title="Used when rotation is on. Blank turns the red-day filter off. 0 keeps only flat or green vs the open.">
+            Names below this session change score poorly and can drop from the active list.
+          </FieldDescription>
         </div>
       </div>
       <FieldDescription title="Jev only checks the active list. The rest of the pool is watched for the next swap.">

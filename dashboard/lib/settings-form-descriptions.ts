@@ -50,6 +50,10 @@ export const SETTING_DESCRIPTIONS_FULL = {
     "Only soft-exit on a Jev SELL when sell probability reaches this % (and sell is dominant). Higher values let bracket take-profit work more often.",
   reentry_cooldown_minutes:
     "After exiting a symbol, block new entries in that symbol for this many minutes (0 = off). Reduces immediate re-chase after winners or stops.",
+  max_entries_per_symbol_per_day:
+    "Cap how many new trades the bot may open in the same symbol per US trading day (0 = off). Helps after repeated stop-outs.",
+  rotation_min_session_change_pct:
+    "When watchlist rotation is on, keep names off the active scan if session % vs the 9:30 NY open is below this floor. Blank = off. 0 = only green or flat vs open.",
   min_volume_ratio:
     "Block new entries when latest 1-min volume is below this fraction of the 10-bar average (0 = off). Example: 0.5 requires at least half the recent average volume.",
   min_share_price:
@@ -86,6 +90,8 @@ export const SETTING_DESCRIPTIONS = {
   min_hold_minutes: "No Jev SELL exit until N minutes (0 = off).",
   jev_sell_exit_threshold: "Min Jev SELL % required to soft-exit.",
   reentry_cooldown_minutes: "No re-entry in same symbol for N minutes (0 = off).",
+  max_entries_per_symbol_per_day: "Max new entries per symbol per day (0 = off).",
+  rotation_min_session_change_pct: "Rotation: min % vs RTH open (blank = off).",
   min_volume_ratio: "Block entries when volume is below this fraction of average (0 = off).",
   min_share_price: "Block entries below this USD price (0 = off).",
   min_dollar_volume: "Min avg $ volume per 5m bar for entries (0 = off).",

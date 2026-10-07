@@ -5,7 +5,11 @@ from datetime import datetime, timedelta, timezone
 
 from models.types import JevPrediction, MarketState, Quote, RiskSettings, TradeRecord, TradingMode
 from risk.manager import RiskManager
-from strategy.config import StrategyConfig, strategy_config_with_risk_overrides
+from strategy.config import (
+    StrategyConfig,
+    rotation_dashboard_override,
+    strategy_config_with_risk_overrides,
+)
 from strategy.confirmation import ConfirmationTracker
 from strategy.filters import check_correlation_cap, check_entry_filters
 from strategy.signals import (
@@ -286,6 +290,29 @@ class TestStrategyConfigOverrides(unittest.TestCase):
         )
         self.assertEqual(merged.confirmation_cycles, 1)
         self.assertEqual(merged.confirmation_seconds, 15.0)
+        self.assertEqual(merged.rotation_min_session_change_pct, 0.0)
+
+    def test_rotation_session_from_dashboard(self) -> None:
+        merged = strategy_config_with_risk_overrides(
+            StrategyConfig(rotation_min_session_change_pct=0.0),
+            min_volume_ratio=0.0,
+            rotation_min_session_change_pct=None,
+        )
+        self.assertIsNone(merged.rotation_min_session_change_pct)
+        merged_on = strategy_config_with_risk_overrides(
+            StrategyConfig(rotation_min_session_change_pct=None),
+            min_volume_ratio=0.0,
+            rotation_min_session_change_pct=0.0,
+        )
+        self.assertEqual(merged_on.rotation_min_session_change_pct, 0.0)
+
+    def test_rotation_override_skipped_when_not_from_settings(self) -> None:
+        merged = strategy_config_with_risk_overrides(
+            StrategyConfig(rotation_min_session_change_pct=0.0),
+            min_volume_ratio=0.0,
+            **rotation_dashboard_override(from_settings=False, value=None),
+        )
+        self.assertEqual(merged.rotation_min_session_change_pct, 0.0)
 
 
 class TestTimeExit(unittest.TestCase):

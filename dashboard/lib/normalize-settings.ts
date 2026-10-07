@@ -8,6 +8,8 @@ export type SettingsRow = Omit<
   | "min_hold_minutes"
   | "jev_sell_exit_threshold"
   | "reentry_cooldown_minutes"
+  | "max_entries_per_symbol_per_day"
+  | "rotation_min_session_change_pct"
   | "profit_take_enabled"
   | "profit_take_min_fraction"
   | "profit_take_max_fraction"
@@ -40,6 +42,8 @@ export type SettingsRow = Omit<
       | "min_hold_minutes"
       | "jev_sell_exit_threshold"
       | "reentry_cooldown_minutes"
+      | "max_entries_per_symbol_per_day"
+      | "rotation_min_session_change_pct"
       | "confirmation_cycles"
       | "confirmation_seconds"
       | "profit_take_enabled"
@@ -78,6 +82,11 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     min_hold_minutes: raw.min_hold_minutes ?? 15,
     jev_sell_exit_threshold: raw.jev_sell_exit_threshold ?? 0.95,
     reentry_cooldown_minutes: raw.reentry_cooldown_minutes ?? 45,
+    max_entries_per_symbol_per_day: raw.max_entries_per_symbol_per_day ?? 3,
+    rotation_min_session_change_pct:
+      raw.rotation_min_session_change_pct !== undefined
+        ? (raw.rotation_min_session_change_pct ?? null)
+        : 0,
     profit_take_enabled: raw.profit_take_enabled ?? false,
     profit_take_min_fraction: raw.profit_take_min_fraction ?? 0.7,
     profit_take_max_fraction: raw.profit_take_max_fraction ?? 0.8,
