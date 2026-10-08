@@ -75,26 +75,33 @@ The Phase 1 schema is already applied. Add your **service role key** to `trader/
 
 MCP is scoped to this project via [`.cursor/mcp.json`](.cursor/mcp.json).
 
-## Supabase Setup
+## Friends
 
-### Option A: Supabase CLI (recommended)
+Non-technical install steps are in [GETTING-STARTED.md](GETTING-STARTED.md). Each friend uses their own Supabase project, Vercel account, IBKR paper account, and API keys.
+
+You work on `main`. Friends only receive what you copy onto the `release` branch and publish:
 
 ```bash
-# Install CLI: https://supabase.com/docs/guides/cli/getting-started
-supabase login
-supabase link --project-ref YOUR_PROJECT_REF
-supabase db push
+node scripts/promote.mjs
+git push origin release
+git checkout release
+node scripts/make-release.mjs
+git checkout main
 ```
 
-### Option B: Manual SQL
+`make-release.mjs` publishes the number already in `VERSION` (the first release is `1.0.0`). It checks that the live database matches `supabase/migrations/` using `SUPABASE_DB_URL` from `trader/.env` (that file is not committed). Then it builds a zip and publishes a GitHub Release. Start tells friends a new version is available. They install it with Update.
 
-Run the migration file in the Supabase SQL editor:
+## Changing the database
 
-```text
-supabase/migrations/20250928000000_initial_schema.sql
-```
+1. Add a new file `supabase/migrations/YYYYMMDDHHMMSS_short_name.sql`. Do not edit a file after it has been released.
+2. Apply that same SQL to project `gbprapqifrvhylfazjvs` with the Supabase MCP.
+3. If a fresh database needs a new default row, update `supabase/seed.sql` with `ON CONFLICT DO NOTHING`.
 
-Copy your project URL and **service role key** (trader only — never expose in the dashboard client).
+`supabase/migrations-archive/` is the old partial history and is not applied. The current structure starts at `supabase/migrations/20261008000000_baseline.sql`.
+
+## Supabase Setup
+
+Friends get the schema from `supabase/migrations/` when they run Setup. Do not use `supabase db push` with the archive files.
 
 ## Environment Variables
 

@@ -1,26 +1,34 @@
 ---
-description: Apply Supabase schema changes via MCP, not local SQL migration files
+description: Apply Supabase schema changes through MCP and save each change as a migration file
 alwaysApply: true
 ---
 
 # Supabase database changes
 
-For this project, **all database/schema changes must be applied through the Supabase MCP** (`plugin-supabase-supabase`), not by adding files under `supabase/migrations/`.
+For this project, every database/schema change is two steps, done together:
+
+1. Write the SQL as a new timestamped file under `supabase/migrations/`.
+2. Apply that same SQL through the Supabase MCP (`plugin-supabase-supabase` or `project-0-market-pilot-supabase`) on project `gbprapqifrvhylfazjvs`.
+
+The files in `supabase/migrations/` are the record friends' databases are built and updated from. The live project stays the database you trade against.
 
 ## Workflow
 
 1. Read the Supabase skill before schema work.
-2. Inspect existing tables/policies with MCP (`list_tables`, `execute_sql`) before changing anything.
-3. Apply changes with MCP `apply_migration` or `execute_sql` on project `gbprapqifrvhylfazjvs`.
-4. Verify the change with a follow-up MCP query.
-5. **Do not create new `.sql` migration files** in the repo for these changes.
-
-## When updating application code
-
-- Update TypeScript/Python types and queries to match the live schema.
-- Document notable schema changes in commit messages or PR descriptions, not in new migration files.
+2. Inspect existing tables and policies with MCP (`list_tables`, `execute_sql`) before changing anything.
+3. Add `supabase/migrations/YYYYMMDDHHMMSS_short_name.sql` with the change. Use a new file every time.
+4. Apply that SQL with MCP `apply_migration` (preferred) or `execute_sql`.
+5. Verify with a follow-up MCP query.
+6. If the change adds rows the app expects on a fresh database (a new singleton, a new default watchlist value), update `supabase/seed.sql` with `INSERT ... ON CONFLICT DO NOTHING`.
 
 ## Do not
 
-- Add `supabase/migrations/*.sql` for new features or fixes.
-- Rely on local SQL files as the source of truth for production schema.
+- Edit a migration file after it has been released. Friends who already ran it will not see the edit. Put the fix in a new file.
+- Apply SQL to the live project without a matching migration file. The release drift check refuses to ship when they disagree.
+- Put secrets, account ids, or production row data in migration or seed files.
+- Treat `supabase/migrations-archive/` as current. Those files are the old partial history and are not applied.
+
+## When updating application code
+
+- Update TypeScript and Python types and queries to match the live schema.
+- Mention the new migration filename in the commit message.

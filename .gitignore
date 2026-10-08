@@ -49,6 +49,15 @@ __pycache__/
 supabase/.temp/
 supabase/.branches/
 
+# friend setup local state
+logs/
+backup/
+setup/node_modules/
+setup/.progress
+setup/.dashboard-url
+setup/.schema-dump.sql
+market-pilot-v*.zip
+
 # cursor agent skills (installed bundles under .agents/skills stay local unless listed below)
 .agents/*
 !.agents/skills/

@@ -10,7 +10,7 @@ A new `settings` column touches Supabase, trader, dashboard, and often README. M
 ## Before you start
 
 1. Load [supabase](../supabase/SKILL.md) and [supabase-postgres-best-practices](../supabase-postgres-best-practices/SKILL.md) for schema work.
-2. Read `.cursor/rules/supabase-mcp.mdc`: apply schema on project `gbprapqifrvhylfazjvs` via Supabase MCP (`apply_migration` or `execute_sql`). **Do not** add new files under `supabase/migrations/` for production schema.
+2. Read `.cursor/rules/supabase-mcp.mdc`: write the SQL as a new file under `supabase/migrations/`, then apply that same SQL on project `gbprapqifrvhylfazjvs` via Supabase MCP (`apply_migration` or `execute_sql`). Never edit a migration after it has shipped.
 3. Choose column type, `NOT NULL` + `DEFAULT`, and whether the value is risk-only, strategy-only, or both.
 
 ## Checklist
@@ -18,7 +18,7 @@ A new `settings` column touches Supabase, trader, dashboard, and often README. M
 Copy and track:
 
 ```text
-- [ ] Supabase: column added with DEFAULT (MCP), verified with execute_sql
+- [ ] Supabase: new `supabase/migrations/*.sql` file, same SQL applied via MCP, verified with execute_sql
 - [ ] trader/models/types.py — RiskSettings (and StrategySettings if applicable)
 - [ ] trader/database/supabase.py — get_risk_settings select string + RiskSettings(...) parse
 - [ ] trader/strategy/config.py — StrategyConfig + strategy_config_with_risk_overrides (if strategy-facing)
@@ -34,7 +34,7 @@ Copy and track:
 - [ ] preflight-checks skill
 ```
 
-## 1. Database (MCP)
+## 1. Database (migration file, then MCP)
 
 Example pattern:
 
@@ -45,7 +45,7 @@ ALTER TABLE settings
 
 Verify: `SELECT my_setting FROM settings WHERE id = 1;`
 
-If the dashboard reads/writes this column via anon + RLS, confirm existing `settings` policies still allow authenticated updates (no new migration file in repo).
+If the dashboard reads/writes this column via anon + RLS, confirm existing `settings` policies still allow authenticated updates. The column change belongs in a new migration file, applied to the live project with the same SQL.
 
 ## 2. Trader — risk settings
 
@@ -96,4 +96,5 @@ Run the **preflight-checks** skill (`trader` pytest + `dashboard` test, lint, bu
 
 - Column in DB but not in `get_risk_settings()` select → trader always uses Python default.
 - Type on `Settings` but missing `normalizeSettings` default → runtime undefined or build errors.
-- New migration file in repo instead of MCP → conflicts with team rule and live schema source of truth.
+- MCP change without a new migration file → friends' databases never get the column, and the release drift check fails.
+- Editing an already-released migration instead of adding a new file → friends who already ran it stay on the old definition.
