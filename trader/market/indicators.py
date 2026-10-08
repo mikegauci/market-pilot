@@ -212,6 +212,16 @@ def benchmark_change_from_five_min(
     return _change_pct_from_closes(closes, bars_back)
 
 
+def _live_change_pct(
+    minute_bars: Optional[MinuteBarAggregator],
+    minutes: int,
+) -> Optional[float]:
+    """Change over live ticks only; None until enough non-synthetic bars exist."""
+    if minute_bars is None:
+        return None
+    return _change_pct_from_closes(minute_bars.live_closes(), minutes)
+
+
 def build_market_state(
     quote: Quote,
     minute_bars: MinuteBarAggregator,
@@ -242,8 +252,11 @@ def build_market_state(
     if intraday is None:
         return None
 
+    live_benchmark_5m = _live_change_pct(benchmark_minute_bars, 5)
     if benchmark_change_5m_override is not None:
         benchmark_change_5m = benchmark_change_5m_override
+    elif live_benchmark_5m is not None:
+        benchmark_change_5m = live_benchmark_5m
     elif benchmark_intraday_bars:
         benchmark_change_5m = benchmark_change_from_five_min(benchmark_intraday_bars)
     elif benchmark_minute_bars is not None:

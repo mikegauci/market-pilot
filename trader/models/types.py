@@ -103,10 +103,6 @@ class MarketState:
     news_articles: Optional[List[Dict[str, Any]]] = None
     news_materiality_note: Optional[str] = None
     news_still_relevant_for_open: Optional[bool] = None
-    tape_sentiment: Optional[float] = None
-    tape_tags: Optional[List[str]] = None
-    tape_top_headline: Optional[str] = None
-    tape_fetched_at: Optional[str] = None
     ai_shadow_verdict: Optional[str] = None
     ai_shadow_note: Optional[str] = None
 

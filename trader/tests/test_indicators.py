@@ -124,6 +124,74 @@ class IndicatorTests(unittest.TestCase):
         assert state is not None
         self.assertEqual(state.symbol, "AAPL")
 
+    def test_benchmark_change_prefers_live_minute_bars_over_cached_five_min(self) -> None:
+        prior_session = datetime(2026, 1, 9, 19, 0, tzinfo=timezone.utc)
+        stale_benchmark = [
+            Bar(
+                symbol="QQQ",
+                bar_size="5 mins",
+                ts=prior_session + timedelta(minutes=5 * index),
+                open=500.0,
+                high=500.0,
+                low=500.0,
+                close=500.0 + index,
+                volume=10_000,
+            )
+            for index in range(12)
+        ]
+        symbol_agg = MinuteBarAggregator()
+        benchmark_agg = MinuteBarAggregator()
+        base = datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc)
+        for index in range(16):
+            ts = base + timedelta(minutes=index)
+            symbol_agg.record_point(ts, 100.0 + index, 1000)
+            benchmark_agg.record_point(ts, 600.0 - index, 1000)
+
+        quote = Quote(symbol="ADI", price=116.0, bid=115.9, ask=116.1, spread=0.2, volume=1000)
+        state = build_market_state(
+            quote,
+            symbol_agg,
+            benchmark_agg,
+            warmup_min_1m_bars=15,
+            benchmark_intraday_bars=stale_benchmark,
+        )
+        self.assertIsNotNone(state)
+        assert state is not None
+        self.assertIsNotNone(state.benchmark_change_5m)
+        self.assertLess(state.benchmark_change_5m, 0)
+        self.assertEqual(state.spy_change_5m, state.benchmark_change_5m)
+
+    def test_benchmark_change_falls_back_to_cached_five_min_before_live_tape(self) -> None:
+        base = datetime(2026, 1, 10, 14, 0, tzinfo=timezone.utc)
+        cached = [
+            Bar(
+                symbol="QQQ",
+                bar_size="5 mins",
+                ts=base + timedelta(minutes=5 * index),
+                open=500.0,
+                high=500.0,
+                low=500.0,
+                close=500.0 + index,
+                volume=10_000,
+            )
+            for index in range(16)
+        ]
+        symbol_agg = MinuteBarAggregator()
+        for index in range(16):
+            symbol_agg.record_point(base + timedelta(minutes=index), 100.0 + index, 1000)
+        benchmark_agg = MinuteBarAggregator()
+        quote = Quote(symbol="ADI", price=116.0, bid=115.9, ask=116.1, spread=0.2, volume=1000)
+        state = build_market_state(
+            quote,
+            symbol_agg,
+            benchmark_agg,
+            warmup_min_1m_bars=15,
+            benchmark_intraday_bars=cached,
+        )
+        self.assertIsNotNone(state)
+        assert state is not None
+        self.assertGreater(state.benchmark_change_5m, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

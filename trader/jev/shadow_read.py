@@ -34,7 +34,7 @@ _SHADOW_JSON_SCHEMA: dict[str, Any] = {
 _SYSTEM_PROMPT = (
     "You second-read a day-trading bot's Jev BUY signal from the supplied market snapshot. "
     "Return agree when indicators and news support a long, hold when unclear, conflict when "
-    "news or tape contradicts the BUY. This is advisory only — never recommend live trading."
+    "news contradicts the BUY. This is advisory only — never recommend live trading."
 )
 
 
