@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field, replace
 from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
@@ -25,6 +26,7 @@ from strategy.signals import (
     signal_tier,
     trade_skip_reason_from_tier,
 )
+from watchlist.breakout import breakout_entry_config
 
 if TYPE_CHECKING:
     from jev.shadow_read import OpenAiShadowReader
@@ -151,7 +153,15 @@ def process_ready_states(
                 eligible = False
 
             if eligible and risk_manager and db:
-                entry_filter = check_entry_filters(state, runtime_entry_strategy)
+                entry_filter = check_entry_filters(
+                    state,
+                    breakout_entry_config(
+                        runtime_entry_strategy,
+                        symbol,
+                        runtime.breakout_until_mono,
+                        time.monotonic(),
+                    ),
+                )
                 if not entry_filter.passed:
                     trade_skip_reason = entry_filter.reason
                     logger.info(

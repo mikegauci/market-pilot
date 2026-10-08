@@ -22,3 +22,4 @@ class TraderRuntimeState:
     last_ibkr_bracket_target_refresh_mono: float = 0.0
     cycle_elapsed_sec: list[float] = field(default_factory=list)
     minute_seed_attempt_mono: Dict[str, float] = field(default_factory=dict)
+    breakout_until_mono: Dict[str, float] = field(default_factory=dict)

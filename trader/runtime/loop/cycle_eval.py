@@ -32,6 +32,7 @@ from strategy.config import StrategyConfig
 from strategy.confirmation import ConfirmationTracker
 from strategy.filters import check_entry_filters
 from strategy.profit_take_tracker import ProfitTakeBandTracker
+from watchlist.breakout import breakout_entry_config
 from watchlist.resolution import effective_benchmark
 
 if TYPE_CHECKING:
@@ -164,7 +165,15 @@ def run_cycle_eval_and_exits_after_jev(
 
         state = enrich_market_state_with_news(state, news_service)
         if not is_open_position:
-            entry_filter = check_entry_filters(state, strategy_config)
+            entry_filter = check_entry_filters(
+                state,
+                breakout_entry_config(
+                    strategy_config,
+                    sym_upper,
+                    runtime.breakout_until_mono,
+                    time.monotonic(),
+                ),
+            )
             if not entry_filter.passed:
                 logger.info(
                     "Filter: skipped Jev for %s — %s",

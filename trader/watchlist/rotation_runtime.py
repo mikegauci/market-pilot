@@ -15,6 +15,7 @@ from runtime.eval_symbols import eval_allow_five_min_fallback
 from runtime.state import TraderRuntimeState
 from strategy.config import StrategyConfig
 from strategy.confirmation import ConfirmationTracker
+from watchlist.breakout import active_breakout_symbols
 from watchlist.resolution import entry_blocked_symbol_set
 from watchlist.rotation import (
     RotationCandidate,
@@ -164,7 +165,7 @@ def maybe_rotate_watchlist(
     protected = {
         symbol.upper()
         for symbol in list(open_symbols) + list(confirmation_tracker.confirming_symbols())
-    }
+    } | active_breakout_symbols(runtime.breakout_until_mono, now_mono)
     rotation_pool = [
         symbol
         for symbol in risk_settings.watchlist_pool

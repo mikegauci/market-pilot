@@ -79,6 +79,13 @@ class Settings(BaseSettings):
     strategy_news_block_tags: str = "downgrade,lawsuit,sec_investigation,guidance_cut,layoffs"
     strategy_block_on_earnings: bool = False
     strategy_rotation_min_session_change_pct: Optional[float] = 0.0
+    strategy_breakout_enabled: bool = True
+    strategy_breakout_lookback_minutes: int = 10
+    strategy_breakout_min_volume_ratio: float = 1.5
+    strategy_breakout_min_change_5m_pct: float = 0.15
+    strategy_breakout_max_promotions_per_cycle: int = 2
+    strategy_breakout_window_minutes: float = 10.0
+    strategy_breakout_max_rsi: float = 82.0
 
     news_enabled: bool = False
     finnhub_api_key: str = ""
@@ -308,6 +315,13 @@ class Settings(BaseSettings):
             ),
             block_on_earnings=self.strategy_block_on_earnings,
             rotation_min_session_change_pct=self.strategy_rotation_min_session_change_pct,
+            breakout_enabled=self.strategy_breakout_enabled,
+            breakout_lookback_minutes=self.strategy_breakout_lookback_minutes,
+            breakout_min_volume_ratio=self.strategy_breakout_min_volume_ratio,
+            breakout_min_change_5m_pct=self.strategy_breakout_min_change_5m_pct,
+            breakout_max_promotions_per_cycle=self.strategy_breakout_max_promotions_per_cycle,
+            breakout_window_minutes=self.strategy_breakout_window_minutes,
+            breakout_max_rsi=self.strategy_breakout_max_rsi,
         )
 
     @property

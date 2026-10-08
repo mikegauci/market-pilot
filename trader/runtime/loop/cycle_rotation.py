@@ -21,6 +21,7 @@ from runtime.trader_ops import merge_watchlist_symbols, sync_watchlist_symbols
 from strategy.config import StrategyConfig
 from strategy.confirmation import ConfirmationTracker
 from watchlist.backfill import backfill_watchlist_symbols
+from watchlist.breakout_runtime import maybe_promote_breakouts
 from watchlist.resolution import effective_benchmark, resolve_rotation_scan_watchlist
 from watchlist.rotation_runtime import maybe_rotate_watchlist
 
@@ -52,9 +53,8 @@ def run_cycle_rotation_and_bar_flush(
             if scratch.benchmark_symbol
             else None
         )
-        scratch.risk_settings, rotation_swapped_in = maybe_rotate_watchlist(
+        rotation_kwargs = dict(
             db=db,
-            risk_settings=scratch.risk_settings,
             minute_bars=minute_bars,
             bar_store=bar_store,
             quotes_by_symbol=scratch.quotes_by_symbol,
@@ -67,6 +67,17 @@ def run_cycle_rotation_and_bar_flush(
             if settings.data_source != DataSource.IBKR
             else is_us_regular_session_open(),
             strategy_config=strategy_config,
+        )
+        scratch.risk_settings, breakout_swapped_in = maybe_promote_breakouts(
+            risk_settings=scratch.risk_settings,
+            **rotation_kwargs,
+        )
+        scratch.risk_settings, rotation_swapped_in = maybe_rotate_watchlist(
+            risk_settings=scratch.risk_settings,
+            **rotation_kwargs,
+        )
+        rotation_swapped_in = list(
+            dict.fromkeys([*breakout_swapped_in, *rotation_swapped_in])
         )
         scratch.watchlist = resolve_rotation_scan_watchlist(scratch.risk_settings)
         if rotation_swapped_in:

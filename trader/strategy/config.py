@@ -47,6 +47,15 @@ class StrategyConfig:
     block_on_earnings: bool = False
     # None = off. When set (e.g. 0.0), rotation excludes names below this session % vs RTH open.
     rotation_min_session_change_pct: Optional[float] = 0.0
+    # Breakout trigger: pull a pool name into the active list the cycle it breaks out.
+    breakout_enabled: bool = True
+    breakout_lookback_minutes: int = 10
+    breakout_min_volume_ratio: float = 1.5
+    breakout_min_change_5m_pct: float = 0.15
+    breakout_max_promotions_per_cycle: int = 2
+    breakout_window_minutes: float = 10.0
+    # RSI cap used instead of max_rsi while a name is inside its breakout window.
+    breakout_max_rsi: float = 82.0
 
 
 _ROTATION_OVERRIDE_UNSET = object()
