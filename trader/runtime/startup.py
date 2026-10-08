@@ -9,9 +9,8 @@ from config import Settings
 from database.supabase import SupabaseRepository
 from market.bars import BarStore
 from models.types import RiskSettings
-from watchlist.backfill import backfill_watchlist_symbols
-from watchlist.resolution import effective_benchmark, resolve_trading_watchlist
-from watchlist.rotation import backfill_order
+from runtime.state import TraderRuntimeState
+from watchlist.backfill import run_phased_startup_backfill
 
 logger = logging.getLogger(__name__)
 
@@ -42,29 +41,17 @@ def run_ibkr_startup_backfill(
     bar_store: BarStore,
     ibkr: IBKRClient,
     risk_settings: RiskSettings,
+    runtime: TraderRuntimeState,
     on_progress: Optional[Callable[[object, int, int], None]] = None,
 ) -> None:
     """Watchlist bar backfill after IBKR connect."""
     open_symbols = [trade.symbol for trade in db.get_open_trades()]
-    benchmark = effective_benchmark(risk_settings)
-    if risk_settings.watchlist_rotation_enabled and risk_settings.watchlist_pool:
-        priority_symbols = backfill_order(
-            risk_settings.watchlist_active,
-            risk_settings.watchlist_pool,
-            benchmark,
-            open_symbols,
-        )
-    else:
-        priority_symbols = list(
-            dict.fromkeys(resolve_trading_watchlist(risk_settings, open_symbols))
-        )
-        if benchmark and benchmark not in priority_symbols:
-            priority_symbols.append(benchmark)
-    backfill_watchlist_symbols(
+    run_phased_startup_backfill(
         settings,
         bar_store,
         ibkr,
-        priority_symbols,
-        open_symbols=open_symbols,
+        risk_settings,
+        open_symbols,
+        runtime,
         on_progress=on_progress,
     )

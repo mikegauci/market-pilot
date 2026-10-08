@@ -330,6 +330,7 @@ def run() -> int:
                     bar_store=bar_store,
                     ibkr=ibkr,
                     risk_settings=risk_settings,
+                    runtime=runtime,
                     on_progress=_on_backfill_progress,
                 )
             open_symbols = [trade.symbol for trade in db.get_open_trades()]

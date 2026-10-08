@@ -75,6 +75,59 @@ class SupabaseBarsMixin:
             ).execute()
 
     @_db_synchronized
+    def get_latest_bar_ts(self, symbol: str, bar_size: str) -> Optional[datetime]:
+        try:
+            result = (
+                self.client.table("symbol_bars")
+                .select("ts")
+                .eq("symbol", symbol.upper())
+                .eq("bar_size", bar_size)
+                .order("ts", desc=True)
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            logger.warning(
+                "Could not read latest bar ts for %s %s: %s",
+                symbol,
+                bar_size,
+                exc,
+            )
+            return None
+        rows = result.data if result is not None else None
+        if not rows:
+            return None
+        ts = rows[0].get("ts")
+        if not ts:
+            return None
+        return _parse_timestamp(ts)
+
+    @_db_synchronized
+    def count_bars(self, symbol: str, bar_size: str) -> int:
+        try:
+            result = (
+                self.client.table("symbol_bars")
+                .select("ts", count="exact")
+                .eq("symbol", symbol.upper())
+                .eq("bar_size", bar_size)
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            logger.warning(
+                "Could not count bars for %s %s: %s",
+                symbol,
+                bar_size,
+                exc,
+            )
+            return 0
+        count = getattr(result, "count", None)
+        if count is not None:
+            return int(count)
+        rows = result.data if result is not None else None
+        return len(rows or [])
+
+    @_db_synchronized
     def get_last_fetched_at(self, symbol: str, bar_size: str) -> Optional[datetime]:
         try:
             result = (

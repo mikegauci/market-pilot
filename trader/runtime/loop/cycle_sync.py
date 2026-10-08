@@ -26,7 +26,7 @@ from strategy.config import (
 )
 from strategy.confirmation import ConfirmationTracker
 from strategy.profit_take_tracker import ProfitTakeBandTracker
-from watchlist.backfill import backfill_watchlist_symbols
+from watchlist.backfill import backfill_watchlist_symbols, drain_deferred_backfill_queue
 from watchlist.entry_blocks import apply_expired_entry_blocks
 from watchlist.resolution import (
     effective_benchmark,
@@ -205,6 +205,7 @@ def run_cycle_sync(
             min_bars=scratch.strategy_config.warmup_min_1m_bars,
             attempts=runtime.minute_seed_attempt_mono,
         )
+        drain_deferred_backfill_queue(settings, bar_store, ibkr, runtime)
     if risk_manager:
         risk_manager.update_settings(scratch.risk_settings)
         sync_risk_manager_capital(

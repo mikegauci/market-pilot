@@ -196,6 +196,16 @@ Tune the closed-market poll interval with `CLOSED_MARKET_EVAL_INTERVAL_SEC` (def
 
 Settings can hold a **candidate pool** and a smaller **active list**. When rotation is on, Jev only evaluates the active names (about 12). The bot refreshes that list every 15 minutes during the US session, swapping at most two names, and always keeps open positions. `benchmark_symbol` (QQQ) is subscribed for the headwind check and is never bought. Quote subscriptions cover the whole pool so a promoted name already has price history. The manual watchlist is used only when rotation is off.
 
+### IBKR bar backfill (startup)
+
+After IBKR connects, the trader backfills **daily** and **5-minute** history into Supabase for indicators and rotation. **Phased startup** keeps restarts fast:
+
+- **Critical startup** (blocking): open positions, the active watchlist, and the benchmark. Symbols with enough recent **stored** 5-minute bars skip IBKR even when historical-fetch metadata is old (live flushes count).
+- **Deferred pool** (background): stale inactive pool names queue and refresh **one symbol per eval cycle** without the 12s inter-symbol pacing delay.
+- **Immediate backfill** still runs when rotation or breakout promotes a new name mid-session.
+
+Logs use `Critical startup backfill`, `Fresh cache skip`, and `Deferred pool backfill` so you can see which path ran. Tune historical pacing with `BAR_BACKFILL_PACING_SEC` (default `12`).
+
 ### End-of-day flatten (day trading)
 
 IBKR bracket legs use **DAY** time-in-force and expire at the regular close. To avoid naked overnight longs, the trader:

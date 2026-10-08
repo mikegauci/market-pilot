@@ -8,6 +8,7 @@ from typing import Callable, Dict, List, Optional, Protocol, Sequence, Tuple
 
 from typing import TYPE_CHECKING
 
+from market.hours import is_us_regular_session_open, trading_calendar_date
 from models.types import Quote
 
 if TYPE_CHECKING:
@@ -19,6 +20,7 @@ BAR_SIZE_DAILY = "1 day"
 BAR_SIZE_INTRADAY = "5 mins"
 MIN_INTRADAY_BARS = 30
 INTRADAY_FRESHNESS = timedelta(hours=4)
+INTRADAY_LIVE_BAR_FRESHNESS = timedelta(minutes=30)
 OPEN_POSITION_INTRADAY_FRESHNESS = timedelta(minutes=5)
 
 
@@ -83,6 +85,10 @@ class BarRepository(Protocol):
     def get_last_fetched_at(self, symbol: str, bar_size: str) -> Optional[datetime]: ...
 
     def set_last_fetched_at(self, symbol: str, bar_size: str, fetched_at: datetime) -> None: ...
+
+    def get_latest_bar_ts(self, symbol: str, bar_size: str) -> Optional[datetime]: ...
+
+    def count_bars(self, symbol: str, bar_size: str) -> int: ...
 
 
 def _ensure_utc(ts: datetime) -> datetime:
@@ -266,6 +272,48 @@ class BarStore:
         last = _ensure_utc(last)
         return last.date() < now.date()
 
+    def intraday_bar_count(self, symbol: str) -> int:
+        symbol = symbol.upper()
+        count = self.repository.count_bars(symbol, BAR_SIZE_INTRADAY)
+        if count > 0:
+            return count
+        return len(self.get_intraday_bars(symbol))
+
+    def latest_intraday_bar_ts(self, symbol: str) -> Optional[datetime]:
+        symbol = symbol.upper()
+        latest = self.repository.get_latest_bar_ts(symbol, BAR_SIZE_INTRADAY)
+        if latest is not None:
+            return _ensure_utc(latest)
+        bars = self.get_intraday_bars(symbol)
+        if not bars:
+            return None
+        return _ensure_utc(max(bar.ts for bar in bars))
+
+    def intraday_cache_is_fresh(
+        self,
+        symbol: str,
+        now: Optional[datetime] = None,
+        *,
+        max_age: Optional[timedelta] = None,
+    ) -> bool:
+        """True when stored 5m bars are recent enough to skip an IBKR historical refetch."""
+        now = now or datetime.now(timezone.utc)
+        symbol = symbol.upper()
+        if self.intraday_bar_count(symbol) < MIN_INTRADAY_BARS:
+            return False
+        latest = self.latest_intraday_bar_ts(symbol)
+        if latest is None:
+            return False
+        bar_age = now - latest
+        if is_us_regular_session_open(now):
+            limit = max_age if max_age is not None else INTRADAY_LIVE_BAR_FRESHNESS
+            return bar_age < limit
+        latest_day = trading_calendar_date(latest)
+        if latest_day != trading_calendar_date(now):
+            return False
+        limit = max_age if max_age is not None else INTRADAY_FRESHNESS
+        return bar_age < limit
+
     def needs_intraday_refresh(
         self,
         symbol: str,
@@ -274,6 +322,8 @@ class BarStore:
         max_age: Optional[timedelta] = None,
     ) -> bool:
         now = now or datetime.now(timezone.utc)
+        if self.intraday_cache_is_fresh(symbol, now, max_age=max_age):
+            return False
         last = self.repository.get_last_fetched_at(symbol.upper(), BAR_SIZE_INTRADAY)
         if last is None:
             return True

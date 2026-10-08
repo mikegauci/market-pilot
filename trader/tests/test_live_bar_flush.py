@@ -45,6 +45,21 @@ class InMemoryBarRepo:
     def set_last_fetched_at(self, symbol: str, bar_size: str, fetched_at: datetime) -> None:
         self.meta[(symbol.upper(), bar_size)] = fetched_at
 
+    def get_latest_bar_ts(self, symbol: str, bar_size: str):
+        matches = [
+            bar.ts
+            for bar in self.bars
+            if bar.symbol == symbol.upper() and bar.bar_size == bar_size
+        ]
+        return max(matches) if matches else None
+
+    def count_bars(self, symbol: str, bar_size: str) -> int:
+        return sum(
+            1
+            for bar in self.bars
+            if bar.symbol == symbol.upper() and bar.bar_size == bar_size
+        )
+
 
 class RollupAndFlushTests(unittest.TestCase):
     def test_rollup_minute_bars_to_five_min(self) -> None:

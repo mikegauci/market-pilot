@@ -4,7 +4,14 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from market.bars import BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, BackfillSymbolResult, BarStore
+from market.bars import (
+    BAR_SIZE_DAILY,
+    BAR_SIZE_INTRADAY,
+    MIN_INTRADAY_BARS,
+    BackfillSymbolResult,
+    Bar,
+    BarStore,
+)
 
 
 class InMemoryBarRepo:
@@ -27,6 +34,21 @@ class InMemoryBarRepo:
 
     def set_last_fetched_at(self, symbol: str, bar_size: str, fetched_at: datetime) -> None:
         self.meta[(symbol.upper(), bar_size)] = fetched_at
+
+    def get_latest_bar_ts(self, symbol: str, bar_size: str):
+        matches = [
+            bar.ts
+            for bar in self.bars
+            if bar.symbol == symbol.upper() and bar.bar_size == bar_size
+        ]
+        return max(matches) if matches else None
+
+    def count_bars(self, symbol: str, bar_size: str) -> int:
+        return sum(
+            1
+            for bar in self.bars
+            if bar.symbol == symbol.upper() and bar.bar_size == bar_size
+        )
 
 
 class BarRefreshTests(unittest.TestCase):
@@ -64,6 +86,27 @@ class BarRefreshTests(unittest.TestCase):
 
         self.assertEqual(summary.refreshed, 2)
         sleep_mock.assert_called_once()
+
+    def test_intraday_cache_fresh_skips_stale_metadata(self) -> None:
+        repo = InMemoryBarRepo()
+        now = datetime(2026, 10, 8, 19, 0, tzinfo=timezone.utc)
+        repo.meta[("NVDA", BAR_SIZE_INTRADAY)] = now - timedelta(hours=8)
+        for index in range(MIN_INTRADAY_BARS):
+            repo.bars.append(
+                Bar(
+                    symbol="NVDA",
+                    bar_size=BAR_SIZE_INTRADAY,
+                    ts=now - timedelta(minutes=5 * (MIN_INTRADAY_BARS - index)),
+                    open=100.0,
+                    high=100.0,
+                    low=100.0,
+                    close=100.0,
+                    volume=1000,
+                )
+            )
+        store = BarStore(repo)
+        with patch("market.bars.is_us_regular_session_open", return_value=True):
+            self.assertFalse(store.needs_intraday_refresh("NVDA", now=now))
 
 
 if __name__ == "__main__":
