@@ -119,7 +119,7 @@ async function collectKeys() {
     try {
       databaseUrl = await promptValue({
         title: "Step 4 of 7. The database connection string",
-        body: "Open Database settings and copy the URI. Use the direct connection, or Session mode on port 5432. Not the transaction pooler on port 6543.\nReplace [YOUR-PASSWORD] with the database password you chose when you created the project.",
+        body: "Click Connect at the top of your Supabase project. Under Session pooler, copy the URI. It starts with postgresql://postgres. and uses port 5432.\nDo not use the Direct connection (most home internet cannot reach it) or the Transaction pooler on port 6543.\nReplace [YOUR-PASSWORD] with the database password you chose when you created the project.",
         url: dbPage,
         secret: true,
         envName: "SUPABASE_DB_URL",

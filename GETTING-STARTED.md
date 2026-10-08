@@ -19,7 +19,7 @@ Plan on 30 to 45 minutes the first time. After that, each trading day is: open I
 1. Sign up and create a new project. Pick a database password and save it.
 2. Wait until the project finishes starting.
 3. Open **Project Settings**, then **API**. You will need the project URL, the publishable (or anon) key, and the **service_role** key.
-4. Open **Project Settings**, then **Database**, and copy the connection string. Use the **direct** connection, or **Session** mode on port **5432**. Do not use the transaction pooler on port 6543.
+4. Click **Connect** at the top of the project. Under **Session pooler**, copy the connection string (port **5432**). Do not use the Direct connection, because most home internet cannot reach it, and do not use the Transaction pooler on port 6543.
 5. Open **Authentication**, then **Providers**, then **Email**, and turn off public sign-ups if that switch is there. Setup will also remind you to add your website address later.
 
 ## 2. Install IB Gateway
