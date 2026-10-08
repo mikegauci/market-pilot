@@ -57,6 +57,12 @@ def is_us_regular_session_open(now: datetime | None = None) -> bool:
     )
 
 
+def minutes_since_regular_open(now: datetime | None = None) -> float:
+    """Minutes since 9:30 ET today; negative before the open."""
+    when = _coerce_et(now)
+    return when.hour * 60 + when.minute + when.second / 60 - MARKET_OPEN_MINUTES
+
+
 def minutes_until_regular_close(now: datetime | None = None) -> float:
     """Minutes until 16:00 ET on a weekday session; negative after the close."""
     when = now if now is not None else datetime.now(tz=ET)

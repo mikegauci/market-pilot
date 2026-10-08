@@ -9,6 +9,7 @@ from database.supabase import SupabaseRepository
 from execution_mode import effective_execution_mode
 from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
+from market.minute_seed import seed_minute_history
 from market.mock import MockMarketProvider
 from models.types import DataSource
 from risk.manager import RiskManager
@@ -197,6 +198,13 @@ def run_cycle_sync(
         )
     if settings.data_source == DataSource.IBKR and ibkr.is_connected():
         ibkr.sync_watchlist_subscriptions(scratch.all_symbols)
+        seed_minute_history(
+            ibkr,
+            minute_bars,
+            [*scratch.watchlist, *open_symbols, benchmark_symbol],
+            min_bars=scratch.strategy_config.warmup_min_1m_bars,
+            attempts=runtime.minute_seed_attempt_mono,
+        )
     if risk_manager:
         risk_manager.update_settings(scratch.risk_settings)
         sync_risk_manager_capital(

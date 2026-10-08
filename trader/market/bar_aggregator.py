@@ -21,6 +21,9 @@ class MinuteBar:
     close: float
     volume: int
     synthetic: bool = False
+    # Real IBKR 1-min history: counts for price indicators, not for volume ratio
+    # (historical volume and live tick volume increments may use different units).
+    seeded: bool = False
 
 
 def _ensure_utc(ts: datetime) -> datetime:
@@ -73,6 +76,32 @@ class MinuteBarAggregator:
                             synthetic=True,
                         )
                     )
+
+    def bootstrap_from_minute_bars(self, bars: Sequence[Bar]) -> None:
+        """Replace placeholder history with real 1-min bars older than any live tick."""
+        with self._lock:
+            live = [bar for bar in self._bars if not bar.synthetic and not bar.seeded]
+            if live:
+                cutoff: Optional[datetime] = _ensure_utc(live[0].ts)
+            elif self._current is not None:
+                cutoff = _ensure_utc(self._current.ts)
+            else:
+                cutoff = None
+            history = [
+                MinuteBar(
+                    ts=_ensure_utc(bar.ts),
+                    open=bar.open,
+                    high=bar.high,
+                    low=bar.low,
+                    close=bar.close,
+                    volume=max(int(bar.volume), 0),
+                    seeded=True,
+                )
+                for bar in sorted(bars, key=lambda item: item.ts)
+                if cutoff is None or _ensure_utc(bar.ts) < cutoff
+            ]
+            self._bars.clear()
+            self._bars.extend(history + live)
 
     def _volume_increment(self, volume: int) -> int:
         """Convert IBKR cumulative session volume into per-tick increment."""
@@ -209,7 +238,9 @@ class MinuteBarAggregator:
 
     def live_volumes(self) -> List[int]:
         with self._lock:
-            volumes = [bar.volume for bar in self._bars if not bar.synthetic]
+            volumes = [
+                bar.volume for bar in self._bars if not bar.synthetic and not bar.seeded
+            ]
             if self._current is not None and not self._current.synthetic:
                 volumes.append(self._current.volume)
             return volumes

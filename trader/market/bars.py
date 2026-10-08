@@ -240,7 +240,7 @@ class BarStore:
         self._trend_cache.pop(symbol.upper(), None)
 
     def seed_minute_aggregator(self, aggregator: "MinuteBarAggregator", symbol: str) -> None:
-        if aggregator.bar_count() > 0:
+        if aggregator.live_bar_count() > 0:
             return
         bars = self.get_intraday_bars(symbol)
         if bars:
@@ -314,22 +314,24 @@ class BarStore:
         symbols: Sequence[str],
         minute_bars: "MinuteBarStore",
     ) -> int:
-        """Upsert live-only 5m bars for chart tip freshness (never marks historical fetch)."""
-        flushed = 0
-        for symbol in symbols:
-            if not symbol:
-                continue
-            key = symbol.upper()
-            aggregator = minute_bars.get(key)
+        """Upsert live-only 5m bars so the intraday cache tracks the session (never marks historical fetch)."""
+        pending: List[Bar] = []
+        flushed_symbols: List[str] = []
+        for symbol in dict.fromkeys(s.upper() for s in symbols if s):
+            aggregator = minute_bars.get(symbol)
             if not aggregator.has_live_ticks():
                 continue
-            five_min = live_five_min_bars_for_flush(key, aggregator)
+            five_min = live_five_min_bars_for_flush(symbol, aggregator)
             if not five_min:
                 continue
-            self.repository.upsert_bars(five_min)
-            self.invalidate_bar_cache(key, BAR_SIZE_INTRADAY)
-            flushed += 1
-        return flushed
+            pending.extend(five_min)
+            flushed_symbols.append(symbol)
+        if not pending:
+            return 0
+        self.repository.upsert_bars(pending)
+        for symbol in flushed_symbols:
+            self.invalidate_bar_cache(symbol, BAR_SIZE_INTRADAY)
+        return len(flushed_symbols)
 
     def backfill_symbol(
         self,

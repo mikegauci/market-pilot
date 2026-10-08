@@ -114,14 +114,13 @@ def run_cycle_rotation_and_bar_flush(
             settings.live_bar_flush_interval_sec,
         )
     ):
-        open_syms = list(
-            dict.fromkeys(trade.symbol for trade in risk_manager.open_trades)
+        flush_symbols = list(
+            dict.fromkeys(
+                [*scratch.all_symbols, *(trade.symbol for trade in risk_manager.open_trades)]
+            )
         )
-        if open_syms:
-            flushed = bar_store.flush_live_intraday_bars(open_syms, minute_bars)
+        if flush_symbols:
+            flushed = bar_store.flush_live_intraday_bars(flush_symbols, minute_bars)
             if flushed:
-                logger.debug(
-                    "Flushed live 5m bars for %s open position(s)",
-                    flushed,
-                )
+                logger.debug("Flushed live 5m bars for %s symbol(s)", flushed)
         scratch.last_live_bar_flush = now_mono
