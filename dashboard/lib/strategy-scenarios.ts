@@ -19,6 +19,21 @@ export type ChartFrame = {
   windowBand?: { fromIndex: number; toIndex: number; label: string };
   marker?: { index: number; label: string; tone: Tone };
   rsi?: { value: number; normalCap: number; breakoutCap: number | null; activeCap: number };
+  /** Dashed overlay; null entries are bars where the average can't be computed yet. */
+  ema?: { values: (number | null)[]; label: string };
+  markers?: { index: number; label: string; tone: Tone }[];
+  /** Colours one volume bar instead of the default spike amber. */
+  barTone?: { index: number; tone: Tone };
+};
+
+export type QuoteFrame = {
+  kind: "quote";
+  symbol: string;
+  bid: number;
+  ask: number;
+  /** Spread as a percent of price, e.g. 0.12 means 0.12%. */
+  spreadPct: number;
+  capPct: number;
 };
 
 export type ChipState =
@@ -46,7 +61,7 @@ export type ChecklistFrame = {
 };
 
 export type Tone = "good" | "bad" | "neutral";
-export type ScenarioFrame = ChartFrame | ChipsFrame | ChecklistFrame;
+export type ScenarioFrame = ChartFrame | ChipsFrame | ChecklistFrame | QuoteFrame;
 
 export type ScenarioStep = {
   time: string;
@@ -55,8 +70,22 @@ export type ScenarioStep = {
   frame: ScenarioFrame;
 };
 
+export type ScenarioId =
+  | "breakout"
+  | "steady"
+  | "full-list"
+  | "buy-flow"
+  | "volume_too_low"
+  | "price_below_ema20"
+  | "ema_warming_up"
+  | "max_entries_per_symbol"
+  | "reentry_cooldown"
+  | "spread_too_wide"
+  | "rsi_overbought"
+  | "benchmark_headwind";
+
 export type Scenario = {
-  id: "breakout" | "steady" | "full-list" | "buy-flow";
+  id: ScenarioId;
   title: string;
   summary: string;
   steps: ScenarioStep[];
@@ -70,7 +99,7 @@ const ACTIVE_SYMBOLS = [
   "CRM", "ADBE", "CSCO", "PEP", "WMT", "COST", "DIS", "PYPL", "INTC", "IBM",
 ];
 
-const VOLUME_WIGGLE = [0, 900, -600, 1500, 300, -900, 600, -300];
+export const VOLUME_WIGGLE = [0, 900, -600, 1500, 300, -900, 600, -300];
 const PRICE_WIGGLE = [0, 0.12, 0.05, 0.2, 0.1, 0.24, 0.14, 0.3, 0.18, 0.08];
 
 function clampInt(value: number | null | undefined, min: number, max: number, fallback: number) {
@@ -78,18 +107,18 @@ function clampInt(value: number | null | undefined, min: number, max: number, fa
   return Math.min(max, Math.max(min, n));
 }
 
-function clock(minutesAfterTen: number): string {
-  const total = 10 * 60 + minutesAfterTen;
+export function clock(minutesAfterStart: number, startMinutes = 10 * 60): string {
+  const total = startMinutes + minutesAfterStart;
   const h = Math.floor(total / 60);
   const m = total % 60;
   return `${h}:${String(m).padStart(2, "0")}`;
 }
 
-function usd(value: number): string {
+export function usd(value: number): string {
   return `$${value.toFixed(2)}`;
 }
 
-function signedPct(value: number, digits = 2): string {
+export function signedPct(value: number, digits = 2): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }
 
@@ -97,15 +126,15 @@ function wholePct(fraction: number): string {
   return `${Math.round(fraction * 100)}%`;
 }
 
-function round2(value: number): number {
+export function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function mean(values: number[]): number {
+export function mean(values: number[]): number {
   return values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
 }
 
-function changePct(prices: number[], index: number, minutes: number): number {
+export function changePct(prices: number[], index: number, minutes: number): number {
   const past = prices[Math.max(0, index - minutes)]!;
   return ((prices[index]! - past) / past) * 100;
 }

@@ -86,7 +86,7 @@ export default async function StrategyPage() {
         </LatestPredictionsProvider>
       )}
 
-      <StrategySkipGlossary />
+      <StrategySkipGlossary settings={settings} />
 
       <StrategyGuide settings={settings} benchmarkSymbol={settings?.benchmark_symbol ?? ""} />
     </div>

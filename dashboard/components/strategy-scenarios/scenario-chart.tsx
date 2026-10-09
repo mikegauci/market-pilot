@@ -84,27 +84,45 @@ export function ScenarioChart({ frame }: { frame: ChartFrame }) {
       <polyline points={points} fill="none" stroke="#e4e4e7" strokeWidth="1.6" strokeLinejoin="round" />
       <circle cx={x(cursor)} cy={y(prices[cursor]!)} r="2.5" fill="#e4e4e7" />
 
-      {frame.marker ? (
-        <g>
+      {frame.ema ? (
+        <polyline
+          points={frame.ema.values
+            .slice(0, cursor + 1)
+            .flatMap((v, i) => (v == null ? [] : [`${x(i).toFixed(1)},${y(v).toFixed(1)}`]))
+            .join(" ")}
+          fill="none"
+          stroke="#fbbf24"
+          strokeWidth="1.2"
+          strokeDasharray="3 2"
+        />
+      ) : null}
+      {frame.ema ? (
+        <text x={W - PAD_X} y={PRICE_TOP - 10} fill="#fbbf24" fontSize="8" textAnchor="end">
+          {frame.ema.label}
+        </text>
+      ) : null}
+
+      {[...(frame.marker ? [frame.marker] : []), ...(frame.markers ?? [])].map((m) => (
+        <g key={`${m.index}-${m.label}`}>
           <circle
-            cx={x(frame.marker.index)}
-            cy={y(prices[frame.marker.index]!)}
+            cx={x(m.index)}
+            cy={y(prices[m.index]!)}
             r="5"
             fill="none"
-            stroke={TONE_COLOR[frame.marker.tone]}
+            stroke={TONE_COLOR[m.tone]}
             strokeWidth="1.5"
           />
           <text
-            x={Math.min(W - PAD_X, x(frame.marker.index) + 8)}
-            y={y(prices[frame.marker.index]!) - 6}
-            fill={TONE_COLOR[frame.marker.tone]}
+            x={Math.min(W - PAD_X, x(m.index) + 8)}
+            y={y(prices[m.index]!) - 6}
+            fill={TONE_COLOR[m.tone]}
             fontSize="9"
-            textAnchor={x(frame.marker.index) > W * 0.7 ? "end" : "start"}
+            textAnchor={x(m.index) > W * 0.7 ? "end" : "start"}
           >
-            {frame.marker.label}
+            {m.label}
           </text>
         </g>
-      ) : null}
+      ))}
 
       {volumes.slice(0, cursor + 1).map((volume, i) => {
         const h = (volume / maxVolume) * (VOLUME_BOTTOM - VOLUME_TOP);
@@ -115,7 +133,13 @@ export function ScenarioChart({ frame }: { frame: ChartFrame }) {
             y={VOLUME_BOTTOM - h}
             width={barWidth}
             height={h}
-            fill={i === frame.spikeIndex ? "#f59e0b" : "#52525b"}
+            fill={
+              frame.barTone?.index === i
+                ? TONE_COLOR[frame.barTone.tone]
+                : i === frame.spikeIndex
+                  ? "#f59e0b"
+                  : "#52525b"
+            }
           />
         );
       })}

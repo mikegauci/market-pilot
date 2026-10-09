@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 import { ScenarioChart } from "@/components/strategy-scenarios/scenario-chart";
 import { ScenarioChecklist } from "@/components/strategy-scenarios/scenario-checklist";
+import { ScenarioQuote } from "@/components/strategy-scenarios/scenario-quote";
 import { ScenarioListChips } from "@/components/strategy-scenarios/scenario-list-chips";
 import {
   SCENARIO_DISCLAIMER,
@@ -20,10 +21,18 @@ function FrameView({ frame }: { frame: ScenarioFrame }) {
       return <ScenarioListChips frame={frame} />;
     case "checklist":
       return <ScenarioChecklist frame={frame} />;
+    case "quote":
+      return <ScenarioQuote frame={frame} />;
   }
 }
 
-export function ScenarioPlayer({ scenarios }: { scenarios: Scenario[] }) {
+export function ScenarioPlayer({
+  scenarios,
+  tabsLabel = "Scenarios",
+}: {
+  scenarios: Scenario[];
+  tabsLabel?: string;
+}) {
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const [stepIndex, setStepIndex] = useState(0);
   const scenario = scenarios[scenarioIndex];
@@ -52,7 +61,7 @@ export function ScenarioPlayer({ scenarios }: { scenarios: Scenario[] }) {
 
   return (
     <div className="space-y-4">
-      <div role="tablist" aria-label="Scenarios" className="flex flex-wrap gap-1.5">
+      <div role="tablist" aria-label={tabsLabel} className="flex flex-wrap gap-1.5">
         {scenarios.map((item, index) => (
           <button
             key={item.id}
