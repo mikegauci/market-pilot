@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import replace
 from typing import Callable, TYPE_CHECKING
 
 from config import Settings
@@ -21,6 +22,7 @@ from runtime.trader_ops import merge_watchlist_symbols, sync_watchlist_symbols
 from strategy.config import (
     rotation_dashboard_override,
     entry_ema_dashboard_override,
+    breakout_dashboard_override,
     entry_rsi_spread_dashboard_overrides,
     strategy_config_with_risk_overrides,
 )
@@ -95,27 +97,39 @@ def run_cycle_sync(
         scratch.risk_settings = db.get_risk_settings()
         prev_cycles = scratch.strategy_config.confirmation_cycles
         prev_seconds = scratch.strategy_config.confirmation_seconds
-        scratch.strategy_config = strategy_config_with_risk_overrides(
-            settings.strategy_config,
-            min_volume_ratio=scratch.risk_settings.min_volume_ratio,
-            min_share_price=scratch.risk_settings.min_share_price,
-            min_dollar_volume=scratch.risk_settings.min_dollar_volume,
-            jev_sell_exit_threshold=scratch.risk_settings.jev_sell_exit_threshold,
-            confirmation_cycles=scratch.risk_settings.confirmation_cycles,
-            confirmation_seconds=scratch.risk_settings.confirmation_seconds,
-            **rotation_dashboard_override(
-                from_settings=scratch.risk_settings.rotation_session_pct_from_settings,
-                value=scratch.risk_settings.rotation_min_session_change_pct,
+        scratch.strategy_config = replace(
+            strategy_config_with_risk_overrides(
+                settings.strategy_config,
+                min_volume_ratio=scratch.risk_settings.min_volume_ratio,
+                min_share_price=scratch.risk_settings.min_share_price,
+                min_dollar_volume=scratch.risk_settings.min_dollar_volume,
+                jev_sell_exit_threshold=scratch.risk_settings.jev_sell_exit_threshold,
+                confirmation_cycles=scratch.risk_settings.confirmation_cycles,
+                confirmation_seconds=scratch.risk_settings.confirmation_seconds,
+                **rotation_dashboard_override(
+                    from_settings=scratch.risk_settings.rotation_session_pct_from_settings,
+                    value=scratch.risk_settings.rotation_min_session_change_pct,
+                ),
+                **entry_ema_dashboard_override(
+                    from_settings=scratch.risk_settings.entry_ema_gate_from_settings,
+                    value=scratch.risk_settings.entry_ema_gate,
+                ),
+                **entry_rsi_spread_dashboard_overrides(
+                    max_rsi_from_settings=scratch.risk_settings.max_rsi_from_settings,
+                    max_rsi=scratch.risk_settings.max_rsi,
+                    max_spread_pct_from_settings=scratch.risk_settings.max_spread_pct_from_settings,
+                    max_spread_pct=scratch.risk_settings.max_spread_pct,
+                ),
             ),
-            **entry_ema_dashboard_override(
-                from_settings=scratch.risk_settings.entry_ema_gate_from_settings,
-                value=scratch.risk_settings.entry_ema_gate,
-            ),
-            **entry_rsi_spread_dashboard_overrides(
-                max_rsi_from_settings=scratch.risk_settings.max_rsi_from_settings,
-                max_rsi=scratch.risk_settings.max_rsi,
-                max_spread_pct_from_settings=scratch.risk_settings.max_spread_pct_from_settings,
-                max_spread_pct=scratch.risk_settings.max_spread_pct,
+            **breakout_dashboard_override(
+                from_settings=scratch.risk_settings.breakout_from_settings,
+                enabled=scratch.risk_settings.breakout_enabled,
+                lookback_minutes=scratch.risk_settings.breakout_lookback_minutes,
+                min_volume_ratio=scratch.risk_settings.breakout_min_volume_ratio,
+                min_change_5m_pct=scratch.risk_settings.breakout_min_change_5m_pct,
+                max_promotions_per_cycle=scratch.risk_settings.breakout_max_promotions_per_cycle,
+                window_minutes=scratch.risk_settings.breakout_window_minutes,
+                max_rsi=scratch.risk_settings.breakout_max_rsi,
             ),
         )
         if (

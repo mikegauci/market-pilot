@@ -21,6 +21,10 @@ import {
 } from "@/lib/effective-watchlist";
 import { rotationSessionPctInputValue } from "@/lib/format-rotation-session";
 import {
+  SETTING_DESCRIPTIONS,
+  SETTING_DESCRIPTIONS_FULL,
+} from "@/lib/settings-form-descriptions";
+import {
   normalizeWatchlistSymbols,
   watchlistSymbolsHiddenValue,
 } from "@/lib/watchlist-symbols";
@@ -49,6 +53,25 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
   const [rotationSessionPctRaw, setRotationSessionPctRaw] = useState(() =>
     rotationSessionPctInputValue(settings.rotation_min_session_change_pct),
   );
+  const [breakoutEnabled, setBreakoutEnabled] = useState(
+    Boolean(settings.breakout_enabled ?? true),
+  );
+  const [breakoutMaxRsi, setBreakoutMaxRsi] = useState(settings.breakout_max_rsi ?? 82);
+  const [breakoutWindowMinutes, setBreakoutWindowMinutes] = useState(
+    settings.breakout_window_minutes ?? 10,
+  );
+  const [breakoutMaxPromotions, setBreakoutMaxPromotions] = useState(
+    settings.breakout_max_promotions_per_cycle ?? 2,
+  );
+  const [breakoutLookbackMinutes, setBreakoutLookbackMinutes] = useState(
+    settings.breakout_lookback_minutes ?? 10,
+  );
+  const [breakoutMinVolumeRatio, setBreakoutMinVolumeRatio] = useState(
+    settings.breakout_min_volume_ratio ?? 1.5,
+  );
+  const [breakoutMinChange5mPct, setBreakoutMinChange5mPct] = useState(
+    settings.breakout_min_change_5m_pct ?? 0.15,
+  );
 
   const watchlistFormDraft = useMemo(
     () =>
@@ -61,6 +84,13 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
         rotationIntervalMinutes,
         maxSwaps,
         rotationSessionPctRaw,
+        breakoutEnabled,
+        breakoutMaxRsi,
+        breakoutWindowMinutes,
+        breakoutMaxPromotions,
+        breakoutLookbackMinutes,
+        breakoutMinVolumeRatio,
+        breakoutMinChange5mPct,
         saved: settings,
       }),
     [
@@ -72,6 +102,13 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
       rotationIntervalMinutes,
       maxSwaps,
       rotationSessionPctRaw,
+      breakoutEnabled,
+      breakoutMaxRsi,
+      breakoutWindowMinutes,
+      breakoutMaxPromotions,
+      breakoutLookbackMinutes,
+      breakoutMinVolumeRatio,
+      breakoutMinChange5mPct,
       settings,
     ],
   );
@@ -208,6 +245,195 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
             A challenger must beat the weakest active name. Open trades stay protected.
           </FieldDescription>
         </div>
+      </SettingsSubsection>
+
+      <SettingsSubsection
+        title="Breakout promotion"
+        description="Catch fast movers from the pool before the 15-minute rotation swap. Requires rotation on."
+      >
+        {rotating ? (
+          <div className="space-y-4">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
+              <input
+                type="checkbox"
+                name="breakout_enabled"
+                value="on"
+                checked={breakoutEnabled}
+                onChange={(event) => setBreakoutEnabled(event.target.checked)}
+                className="rounded border-zinc-700"
+              />
+              Promote pool symbols on 1-minute breakouts
+            </label>
+            {breakoutEnabled ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="breakout_max_rsi">Breakout max RSI</Label>
+                  <FieldDescription title={SETTING_DESCRIPTIONS_FULL.breakout_max_rsi}>
+                    {SETTING_DESCRIPTIONS.breakout_max_rsi}
+                  </FieldDescription>
+                  <Input
+                    id="breakout_max_rsi"
+                    name="breakout_max_rsi"
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={breakoutMaxRsi}
+                    onChange={(event) => setBreakoutMaxRsi(Number(event.target.value))}
+                    className="max-w-[10rem]"
+                  />
+                  <SettingsFieldHelp fieldKey="breakout_max_rsi" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="breakout_window_minutes">Breakout window (min)</Label>
+                  <FieldDescription title={SETTING_DESCRIPTIONS_FULL.breakout_window_minutes}>
+                    {SETTING_DESCRIPTIONS.breakout_window_minutes}
+                  </FieldDescription>
+                  <Input
+                    id="breakout_window_minutes"
+                    name="breakout_window_minutes"
+                    type="number"
+                    min={1}
+                    max={60}
+                    step={1}
+                    value={breakoutWindowMinutes}
+                    onChange={(event) =>
+                      setBreakoutWindowMinutes(Number(event.target.value))
+                    }
+                    className="max-w-[10rem]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="breakout_max_promotions_per_cycle">Max promotions / cycle</Label>
+                  <Input
+                    id="breakout_max_promotions_per_cycle"
+                    name="breakout_max_promotions_per_cycle"
+                    type="number"
+                    min={0}
+                    max={5}
+                    value={breakoutMaxPromotions}
+                    onChange={(event) =>
+                      setBreakoutMaxPromotions(Number(event.target.value))
+                    }
+                    className="max-w-[10rem]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="breakout_lookback_minutes">Lookback (1-min bars)</Label>
+                  <Input
+                    id="breakout_lookback_minutes"
+                    name="breakout_lookback_minutes"
+                    type="number"
+                    min={2}
+                    max={60}
+                    value={breakoutLookbackMinutes}
+                    onChange={(event) =>
+                      setBreakoutLookbackMinutes(Number(event.target.value))
+                    }
+                    className="max-w-[10rem]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="breakout_min_volume_ratio">Min volume ratio</Label>
+                  <Input
+                    id="breakout_min_volume_ratio"
+                    name="breakout_min_volume_ratio"
+                    type="number"
+                    min={0}
+                    max={10}
+                    step={0.1}
+                    value={breakoutMinVolumeRatio}
+                    onChange={(event) =>
+                      setBreakoutMinVolumeRatio(Number(event.target.value))
+                    }
+                    className="max-w-[10rem]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="breakout_min_change_5m_pct">Min 5m change (%)</Label>
+                  <Input
+                    id="breakout_min_change_5m_pct"
+                    name="breakout_min_change_5m_pct"
+                    type="number"
+                    min={0}
+                    max={5}
+                    step={0.01}
+                    value={breakoutMinChange5mPct}
+                    onChange={(event) =>
+                      setBreakoutMinChange5mPct(Number(event.target.value))
+                    }
+                    className="max-w-[10rem]"
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                <input type="hidden" name="breakout_max_rsi" value={breakoutMaxRsi} />
+                <input
+                  type="hidden"
+                  name="breakout_window_minutes"
+                  value={breakoutWindowMinutes}
+                />
+                <input
+                  type="hidden"
+                  name="breakout_max_promotions_per_cycle"
+                  value={breakoutMaxPromotions}
+                />
+                <input
+                  type="hidden"
+                  name="breakout_lookback_minutes"
+                  value={breakoutLookbackMinutes}
+                />
+                <input
+                  type="hidden"
+                  name="breakout_min_volume_ratio"
+                  value={breakoutMinVolumeRatio}
+                />
+                <input
+                  type="hidden"
+                  name="breakout_min_change_5m_pct"
+                  value={breakoutMinChange5mPct}
+                />
+              </>
+            )}
+          </div>
+        ) : (
+          <>
+            <p className="text-xs text-zinc-600">
+              Turn on rotation above to configure breakout promotion.
+            </p>
+            <input
+              type="hidden"
+              name="breakout_enabled"
+              value={settings.breakout_enabled ? "on" : ""}
+            />
+            <input type="hidden" name="breakout_max_rsi" value={settings.breakout_max_rsi ?? 82} />
+            <input
+              type="hidden"
+              name="breakout_window_minutes"
+              value={settings.breakout_window_minutes ?? 10}
+            />
+            <input
+              type="hidden"
+              name="breakout_max_promotions_per_cycle"
+              value={settings.breakout_max_promotions_per_cycle ?? 2}
+            />
+            <input
+              type="hidden"
+              name="breakout_lookback_minutes"
+              value={settings.breakout_lookback_minutes ?? 10}
+            />
+            <input
+              type="hidden"
+              name="breakout_min_volume_ratio"
+              value={settings.breakout_min_volume_ratio ?? 1.5}
+            />
+            <input
+              type="hidden"
+              name="breakout_min_change_5m_pct"
+              value={settings.breakout_min_change_5m_pct ?? 0.15}
+            />
+          </>
+        )}
       </SettingsSubsection>
 
       <SettingsSubsection title="Live preview" description="What the bot is scanning now (read-only until save).">

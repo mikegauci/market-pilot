@@ -29,4 +29,19 @@ describe("diffSettingsFormDraft", () => {
     const saved = settingsToFormDraft(settingsFixture());
     expect(diffSettingsFormDraft(saved, saved, "USD")).toHaveLength(0);
   });
+
+  it("tracks breakout-only changes", () => {
+    const saved = settingsToFormDraft(settingsFixture());
+    const draft = {
+      ...saved,
+      breakout_max_rsi: 85,
+      breakout_window_minutes: 15,
+    };
+
+    const changes = diffSettingsFormDraft(saved, draft, "USD");
+    expect(changes.map((row) => row.key)).toEqual([
+      "breakout_max_rsi",
+      "breakout_window_minutes",
+    ]);
+  });
 });

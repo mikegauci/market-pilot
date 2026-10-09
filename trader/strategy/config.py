@@ -132,3 +132,27 @@ def rotation_dashboard_override(
     if not from_settings:
         return {}
     return {"rotation_min_session_change_pct": value}
+
+
+def breakout_dashboard_override(
+    *,
+    from_settings: bool,
+    enabled: bool,
+    lookback_minutes: int,
+    min_volume_ratio: float,
+    min_change_5m_pct: float,
+    max_promotions_per_cycle: int,
+    window_minutes: float,
+    max_rsi: float,
+) -> dict[str, bool | int | float]:
+    if not from_settings:
+        return {}
+    return {
+        "breakout_enabled": bool(enabled),
+        "breakout_lookback_minutes": max(2, int(lookback_minutes)),
+        "breakout_min_volume_ratio": float(min_volume_ratio),
+        "breakout_min_change_5m_pct": float(min_change_5m_pct),
+        "breakout_max_promotions_per_cycle": max(0, int(max_promotions_per_cycle)),
+        "breakout_window_minutes": max(0.0, float(window_minutes)),
+        "breakout_max_rsi": float(max_rsi),
+    }

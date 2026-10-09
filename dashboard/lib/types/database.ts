@@ -68,6 +68,15 @@ export type Settings = {
   watchlist_active_size: number;
   watchlist_rotation_interval_minutes: number;
   watchlist_max_swaps_per_rotation: number;
+  /** Promote pool names on 1m breakouts (requires rotation). Jev BUY still required. */
+  breakout_enabled: boolean;
+  /** RSI cap for newly promoted symbols only (minutes after breakout). */
+  breakout_max_rsi: number;
+  breakout_window_minutes: number;
+  breakout_max_promotions_per_cycle: number;
+  breakout_lookback_minutes: number;
+  breakout_min_volume_ratio: number;
+  breakout_min_change_5m_pct: number;
   watchlist_last_rotation_note: string;
   watchlist_last_rotation_at?: string | null;
   /** Newest-first rotation / unblock events from the bot. */

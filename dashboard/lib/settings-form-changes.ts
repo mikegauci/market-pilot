@@ -69,6 +69,7 @@ function formatDraftValue(
     case "profit_take_enabled":
     case "loss_cut_enabled":
     case "watchlist_rotation_enabled":
+    case "breakout_enabled":
       return value ? "On" : "Off";
     case "risk_profile":
       return String(value).charAt(0).toUpperCase() + String(value).slice(1);
@@ -138,6 +139,13 @@ export function settingsToFormDraft(settings: Settings): SettingsFormDraft {
     watchlist_active_size: settings.watchlist_active_size ?? 12,
     watchlist_rotation_interval_minutes: settings.watchlist_rotation_interval_minutes ?? 15,
     watchlist_max_swaps_per_rotation: settings.watchlist_max_swaps_per_rotation ?? 2,
+    breakout_enabled: settings.breakout_enabled ?? true,
+    breakout_max_rsi: settings.breakout_max_rsi ?? 82,
+    breakout_window_minutes: settings.breakout_window_minutes ?? 10,
+    breakout_max_promotions_per_cycle: settings.breakout_max_promotions_per_cycle ?? 2,
+    breakout_lookback_minutes: settings.breakout_lookback_minutes ?? 10,
+    breakout_min_volume_ratio: settings.breakout_min_volume_ratio ?? 1.5,
+    breakout_min_change_5m_pct: settings.breakout_min_change_5m_pct ?? 0.15,
     profit_take_enabled: settings.profit_take_enabled ?? false,
     profit_take_min_fraction: settings.profit_take_min_fraction ?? 0.7,
     profit_take_max_fraction: settings.profit_take_max_fraction ?? 0.8,
@@ -163,6 +171,13 @@ export type WatchlistFormDraftSlice = Pick<
   | "watchlist_rotation_interval_minutes"
   | "watchlist_max_swaps_per_rotation"
   | "rotation_min_session_change_pct"
+  | "breakout_enabled"
+  | "breakout_max_rsi"
+  | "breakout_window_minutes"
+  | "breakout_max_promotions_per_cycle"
+  | "breakout_lookback_minutes"
+  | "breakout_min_volume_ratio"
+  | "breakout_min_change_5m_pct"
 >;
 
 export function watchlistDraftFromSettings(settings: Settings): WatchlistFormDraftSlice {
@@ -176,6 +191,13 @@ export function watchlistDraftFromSettings(settings: Settings): WatchlistFormDra
     watchlist_rotation_interval_minutes: draft.watchlist_rotation_interval_minutes,
     watchlist_max_swaps_per_rotation: draft.watchlist_max_swaps_per_rotation,
     rotation_min_session_change_pct: draft.rotation_min_session_change_pct,
+    breakout_enabled: draft.breakout_enabled,
+    breakout_max_rsi: draft.breakout_max_rsi,
+    breakout_window_minutes: draft.breakout_window_minutes,
+    breakout_max_promotions_per_cycle: draft.breakout_max_promotions_per_cycle,
+    breakout_lookback_minutes: draft.breakout_lookback_minutes,
+    breakout_min_volume_ratio: draft.breakout_min_volume_ratio,
+    breakout_min_change_5m_pct: draft.breakout_min_change_5m_pct,
   };
 }
 
@@ -188,6 +210,13 @@ export function parseWatchlistFormDraft(input: {
   rotationIntervalMinutes: number;
   maxSwaps: number;
   rotationSessionPctRaw: string;
+  breakoutEnabled: boolean;
+  breakoutMaxRsi: number;
+  breakoutWindowMinutes: number;
+  breakoutMaxPromotions: number;
+  breakoutLookbackMinutes: number;
+  breakoutMinVolumeRatio: number;
+  breakoutMinChange5mPct: number;
   saved: Settings;
 }): WatchlistFormDraftSlice {
   const savedDraft = settingsToFormDraft(input.saved);
@@ -201,6 +230,13 @@ export function parseWatchlistFormDraft(input: {
       watchlist_rotation_interval_minutes: savedDraft.watchlist_rotation_interval_minutes,
       watchlist_max_swaps_per_rotation: savedDraft.watchlist_max_swaps_per_rotation,
       rotation_min_session_change_pct: savedDraft.rotation_min_session_change_pct,
+      breakout_enabled: savedDraft.breakout_enabled,
+      breakout_max_rsi: savedDraft.breakout_max_rsi,
+      breakout_window_minutes: savedDraft.breakout_window_minutes,
+      breakout_max_promotions_per_cycle: savedDraft.breakout_max_promotions_per_cycle,
+      breakout_lookback_minutes: savedDraft.breakout_lookback_minutes,
+      breakout_min_volume_ratio: savedDraft.breakout_min_volume_ratio,
+      breakout_min_change_5m_pct: savedDraft.breakout_min_change_5m_pct,
     };
   }
 
@@ -213,6 +249,13 @@ export function parseWatchlistFormDraft(input: {
     watchlist_rotation_interval_minutes: input.rotationIntervalMinutes,
     watchlist_max_swaps_per_rotation: input.maxSwaps,
     rotation_min_session_change_pct: parseRotationSessionPctInput(input.rotationSessionPctRaw),
+    breakout_enabled: input.breakoutEnabled,
+    breakout_max_rsi: input.breakoutMaxRsi,
+    breakout_window_minutes: input.breakoutWindowMinutes,
+    breakout_max_promotions_per_cycle: input.breakoutMaxPromotions,
+    breakout_lookback_minutes: input.breakoutLookbackMinutes,
+    breakout_min_volume_ratio: input.breakoutMinVolumeRatio,
+    breakout_min_change_5m_pct: input.breakoutMinChange5mPct,
   };
 }
 
@@ -247,6 +290,13 @@ const DRAFT_KEYS = [
   "watchlist_active_size",
   "watchlist_rotation_interval_minutes",
   "watchlist_max_swaps_per_rotation",
+  "breakout_enabled",
+  "breakout_max_rsi",
+  "breakout_window_minutes",
+  "breakout_max_promotions_per_cycle",
+  "breakout_lookback_minutes",
+  "breakout_min_volume_ratio",
+  "breakout_min_change_5m_pct",
   "profit_take_enabled",
   "profit_take_min_fraction",
   "profit_take_max_fraction",

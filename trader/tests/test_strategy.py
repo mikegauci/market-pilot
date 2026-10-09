@@ -7,6 +7,7 @@ from models.types import JevPrediction, MarketState, Quote, RiskSettings, TradeR
 from risk.manager import RiskManager
 from strategy.config import (
     StrategyConfig,
+    breakout_dashboard_override,
     entry_rsi_spread_dashboard_overrides,
     rotation_dashboard_override,
     strategy_config_with_risk_overrides,
@@ -400,6 +401,48 @@ class EntryRsiSpreadDashboardOverridesTest(unittest.TestCase):
         )
         self.assertEqual(merged.max_rsi, 70.0)
         self.assertEqual(merged.max_spread_pct, 0.0015)
+
+
+class BreakoutDashboardOverridesTest(unittest.TestCase):
+    def test_applies_when_loaded_from_settings(self) -> None:
+        base = StrategyConfig(breakout_max_rsi=82.0, breakout_enabled=True)
+        from dataclasses import replace
+
+        merged = replace(
+            strategy_config_with_risk_overrides(base, min_volume_ratio=0.5),
+            **breakout_dashboard_override(
+                from_settings=True,
+                enabled=False,
+                lookback_minutes=12,
+                min_volume_ratio=2.0,
+                min_change_5m_pct=0.2,
+                max_promotions_per_cycle=1,
+                window_minutes=15.0,
+                max_rsi=85.0,
+            ),
+        )
+        self.assertFalse(merged.breakout_enabled)
+        self.assertEqual(merged.breakout_max_rsi, 85.0)
+        self.assertEqual(merged.breakout_lookback_minutes, 12)
+
+    def test_skips_when_not_loaded(self) -> None:
+        base = StrategyConfig(breakout_max_rsi=82.0)
+        from dataclasses import replace
+
+        merged = replace(
+            strategy_config_with_risk_overrides(base, min_volume_ratio=0.5),
+            **breakout_dashboard_override(
+                from_settings=False,
+                enabled=False,
+                lookback_minutes=12,
+                min_volume_ratio=2.0,
+                min_change_5m_pct=0.2,
+                max_promotions_per_cycle=1,
+                window_minutes=15.0,
+                max_rsi=85.0,
+            ),
+        )
+        self.assertEqual(merged.breakout_max_rsi, 82.0)
 
 
 if __name__ == "__main__":

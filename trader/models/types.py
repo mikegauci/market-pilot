@@ -180,6 +180,14 @@ class RiskSettings:
     max_rsi_from_settings: bool = False
     max_spread_pct: float = 0.0015
     max_spread_pct_from_settings: bool = False
+    breakout_enabled: bool = True
+    breakout_lookback_minutes: int = 10
+    breakout_min_volume_ratio: float = 1.5
+    breakout_min_change_5m_pct: float = 0.15
+    breakout_max_promotions_per_cycle: int = 2
+    breakout_window_minutes: float = 10.0
+    breakout_max_rsi: float = 82.0
+    breakout_from_settings: bool = False
     confirmation_cycles: int = 2
     confirmation_seconds: float = 30.0
     watchlist_pool: List[str] = field(default_factory=list)

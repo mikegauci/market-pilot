@@ -112,24 +112,76 @@ class SupabaseSettingsMixin:
         )
         if row is None:
             data.setdefault("max_entries_per_symbol_per_day", 3)
-            return
-        if row.get("max_entries_per_symbol_per_day") is not None:
-            data["max_entries_per_symbol_per_day"] = row[
-                "max_entries_per_symbol_per_day"
-            ]
         else:
-            data.setdefault("max_entries_per_symbol_per_day", 3)
-        if "rotation_min_session_change_pct" in row:
-            raw_rotation = row.get("rotation_min_session_change_pct")
-            data["rotation_min_session_change_pct"] = (
-                None if raw_rotation is None else float(raw_rotation)
+            if row.get("max_entries_per_symbol_per_day") is not None:
+                data["max_entries_per_symbol_per_day"] = row[
+                    "max_entries_per_symbol_per_day"
+                ]
+            else:
+                data.setdefault("max_entries_per_symbol_per_day", 3)
+            if "rotation_min_session_change_pct" in row:
+                raw_rotation = row.get("rotation_min_session_change_pct")
+                data["rotation_min_session_change_pct"] = (
+                    None if raw_rotation is None else float(raw_rotation)
+                )
+            if "entry_ema_gate" in row and row.get("entry_ema_gate") is not None:
+                data["entry_ema_gate"] = str(row["entry_ema_gate"]).strip().lower()
+            if "max_rsi" in row and row.get("max_rsi") is not None:
+                data["max_rsi"] = float(row["max_rsi"])
+            if "max_spread_pct" in row and row.get("max_spread_pct") is not None:
+                data["max_spread_pct"] = float(row["max_spread_pct"])
+
+        breakout_row = self._select_settings_row(
+            "breakout_enabled, breakout_max_rsi, breakout_window_minutes, "
+            "breakout_max_promotions_per_cycle, breakout_lookback_minutes, "
+            "breakout_min_volume_ratio, breakout_min_change_5m_pct"
+        )
+        if breakout_row is None:
+            return
+        if "breakout_enabled" in breakout_row:
+            data["breakout_enabled"] = bool(
+                breakout_row.get("breakout_enabled", True)
             )
-        if "entry_ema_gate" in row and row.get("entry_ema_gate") is not None:
-            data["entry_ema_gate"] = str(row["entry_ema_gate"]).strip().lower()
-        if "max_rsi" in row and row.get("max_rsi") is not None:
-            data["max_rsi"] = float(row["max_rsi"])
-        if "max_spread_pct" in row and row.get("max_spread_pct") is not None:
-            data["max_spread_pct"] = float(row["max_spread_pct"])
+        if (
+            "breakout_max_rsi" in breakout_row
+            and breakout_row.get("breakout_max_rsi") is not None
+        ):
+            data["breakout_max_rsi"] = float(breakout_row["breakout_max_rsi"])
+        if (
+            "breakout_window_minutes" in breakout_row
+            and breakout_row.get("breakout_window_minutes") is not None
+        ):
+            data["breakout_window_minutes"] = float(
+                breakout_row["breakout_window_minutes"]
+            )
+        if (
+            "breakout_max_promotions_per_cycle" in breakout_row
+            and breakout_row.get("breakout_max_promotions_per_cycle") is not None
+        ):
+            data["breakout_max_promotions_per_cycle"] = int(
+                breakout_row["breakout_max_promotions_per_cycle"]
+            )
+        if (
+            "breakout_lookback_minutes" in breakout_row
+            and breakout_row.get("breakout_lookback_minutes") is not None
+        ):
+            data["breakout_lookback_minutes"] = int(
+                breakout_row["breakout_lookback_minutes"]
+            )
+        if (
+            "breakout_min_volume_ratio" in breakout_row
+            and breakout_row.get("breakout_min_volume_ratio") is not None
+        ):
+            data["breakout_min_volume_ratio"] = float(
+                breakout_row["breakout_min_volume_ratio"]
+            )
+        if (
+            "breakout_min_change_5m_pct" in breakout_row
+            and breakout_row.get("breakout_min_change_5m_pct") is not None
+        ):
+            data["breakout_min_change_5m_pct"] = float(
+                breakout_row["breakout_min_change_5m_pct"]
+            )
 
     def _load_settings_row(self) -> dict:
         data = self._select_settings_row(
@@ -265,6 +317,16 @@ class SupabaseSettingsMixin:
             max_rsi_from_settings=("max_rsi" in data),
             max_spread_pct=float(data.get("max_spread_pct", 0.0015)),
             max_spread_pct_from_settings=("max_spread_pct" in data),
+            breakout_enabled=bool(data.get("breakout_enabled", True)),
+            breakout_lookback_minutes=int(data.get("breakout_lookback_minutes", 10)),
+            breakout_min_volume_ratio=float(data.get("breakout_min_volume_ratio", 1.5)),
+            breakout_min_change_5m_pct=float(data.get("breakout_min_change_5m_pct", 0.15)),
+            breakout_max_promotions_per_cycle=int(
+                data.get("breakout_max_promotions_per_cycle", 2)
+            ),
+            breakout_window_minutes=float(data.get("breakout_window_minutes", 10.0)),
+            breakout_max_rsi=float(data.get("breakout_max_rsi", 82.0)),
+            breakout_from_settings=("breakout_enabled" in data),
             confirmation_cycles=int(data.get("confirmation_cycles", 2)),
             confirmation_seconds=float(int(data.get("confirmation_seconds", 30))),
             min_volume_ratio=float(data.get("min_volume_ratio", 0.5)),

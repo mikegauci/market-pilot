@@ -44,6 +44,12 @@ const baseFields = {
   min_dollar_volume: "250000",
   watchlist: "AAPL, MSFT",
   benchmark_symbol: "",
+  breakout_max_rsi: "82",
+  breakout_window_minutes: "10",
+  breakout_max_promotions_per_cycle: "2",
+  breakout_lookback_minutes: "10",
+  breakout_min_volume_ratio: "1.5",
+  breakout_min_change_5m_pct: "0.15",
 };
 
 describe("parseSettingsForm risk_profile", () => {
@@ -149,6 +155,36 @@ describe("parseSettingsForm entry filters", () => {
   it("stores max spread as price fraction", () => {
     const parsed = parseSettingsForm(form({ ...baseFields, max_spread_pct: "0.2" }));
     expect(parsed.max_spread_pct).toBeCloseTo(0.002);
+  });
+});
+
+describe("parseSettingsForm breakout settings", () => {
+  it("allows breakout RSI at or below normal RSI when breakout is disabled", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        max_rsi: "85",
+        breakout_max_rsi: "82",
+      }),
+    );
+    expect(parsed.breakout_enabled).toBe(false);
+    expect(parsed.breakout_max_rsi).toBe(82);
+  });
+
+  it("requires breakout RSI above normal RSI when rotation and breakout are enabled", () => {
+    expect(() =>
+      parseSettingsForm(
+        form({
+          ...baseFields,
+          watchlist: "",
+          watchlist_rotation_enabled: "on",
+          watchlist_pool: "NVDA,AMD",
+          breakout_enabled: "on",
+          max_rsi: "82",
+          breakout_max_rsi: "82",
+        }),
+      ),
+    ).toThrow("Breakout max RSI must be higher than Max RSI");
   });
 });
 

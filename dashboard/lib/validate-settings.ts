@@ -106,6 +106,13 @@ function labelFor(name: string): string {
     entry_ema_gate: "Trend filter (EMA)",
     max_rsi: "Max RSI",
     max_spread_pct: "Max spread (%)",
+    breakout_enabled: "Breakout promotion",
+    breakout_max_rsi: "Breakout max RSI",
+    breakout_window_minutes: "Breakout window (minutes)",
+    breakout_max_promotions_per_cycle: "Breakout max promotions per cycle",
+    breakout_lookback_minutes: "Breakout lookback (minutes)",
+    breakout_min_volume_ratio: "Breakout min volume ratio",
+    breakout_min_change_5m_pct: "Breakout min 5m change (%)",
   };
   return labels[name] ?? name;
 }
@@ -141,6 +148,13 @@ export type ParsedSettings = {
   watchlist_active_size: number;
   watchlist_rotation_interval_minutes: number;
   watchlist_max_swaps_per_rotation: number;
+  breakout_enabled: boolean;
+  breakout_max_rsi: number;
+  breakout_window_minutes: number;
+  breakout_max_promotions_per_cycle: number;
+  breakout_lookback_minutes: number;
+  breakout_min_volume_ratio: number;
+  breakout_min_change_5m_pct: number;
   profit_take_enabled: boolean;
   profit_take_min_fraction: number;
   profit_take_max_fraction: number;
@@ -454,6 +468,80 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     throw new Error("Benchmark symbol is invalid");
   }
 
+  const breakout_enabled =
+    String(formData.get("breakout_enabled") ?? "") === "on";
+  const breakout_max_rsi = parseRequiredNumber(formData, "breakout_max_rsi");
+  const breakout_window_minutes = parseRequiredNumber(
+    formData,
+    "breakout_window_minutes",
+  );
+  const breakout_max_promotions_per_cycle = parseRequiredNumber(
+    formData,
+    "breakout_max_promotions_per_cycle",
+  );
+  const breakout_lookback_minutes = parseRequiredNumber(
+    formData,
+    "breakout_lookback_minutes",
+  );
+  const breakout_min_volume_ratio = parseRequiredNumber(
+    formData,
+    "breakout_min_volume_ratio",
+  );
+  const breakout_min_change_5m_pct = parseRequiredNumber(
+    formData,
+    "breakout_min_change_5m_pct",
+  );
+
+  if (!Number.isInteger(breakout_max_rsi) || breakout_max_rsi < 1 || breakout_max_rsi > 100) {
+    throw new Error(`${labelFor("breakout_max_rsi")} must be a whole number from 1 to 100`);
+  }
+  if (
+    watchlist_rotation_enabled &&
+    breakout_enabled &&
+    breakout_max_rsi <= max_rsi
+  ) {
+    throw new Error(
+      `${labelFor("breakout_max_rsi")} must be higher than ${labelFor("max_rsi")} (${max_rsi})`,
+    );
+  }
+  if (
+    !Number.isFinite(breakout_window_minutes) ||
+    breakout_window_minutes < 1 ||
+    breakout_window_minutes > 60
+  ) {
+    throw new Error(`${labelFor("breakout_window_minutes")} must be between 1 and 60`);
+  }
+  if (
+    !Number.isInteger(breakout_max_promotions_per_cycle) ||
+    breakout_max_promotions_per_cycle < 0 ||
+    breakout_max_promotions_per_cycle > 5
+  ) {
+    throw new Error(
+      `${labelFor("breakout_max_promotions_per_cycle")} must be a whole number from 0 to 5`,
+    );
+  }
+  if (
+    !Number.isInteger(breakout_lookback_minutes) ||
+    breakout_lookback_minutes < 2 ||
+    breakout_lookback_minutes > 60
+  ) {
+    throw new Error(`${labelFor("breakout_lookback_minutes")} must be between 2 and 60`);
+  }
+  if (
+    !Number.isFinite(breakout_min_volume_ratio) ||
+    breakout_min_volume_ratio < 0 ||
+    breakout_min_volume_ratio > 10
+  ) {
+    throw new Error(`${labelFor("breakout_min_volume_ratio")} must be between 0 and 10`);
+  }
+  if (
+    !Number.isFinite(breakout_min_change_5m_pct) ||
+    breakout_min_change_5m_pct < 0 ||
+    breakout_min_change_5m_pct > 5
+  ) {
+    throw new Error(`${labelFor("breakout_min_change_5m_pct")} must be between 0 and 5`);
+  }
+
   return {
     minimum_jev_confidence,
     signal_record_threshold,
@@ -485,6 +573,13 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     watchlist_active_size,
     watchlist_rotation_interval_minutes,
     watchlist_max_swaps_per_rotation,
+    breakout_enabled,
+    breakout_max_rsi,
+    breakout_window_minutes,
+    breakout_max_promotions_per_cycle,
+    breakout_lookback_minutes,
+    breakout_min_volume_ratio,
+    breakout_min_change_5m_pct,
     profit_take_enabled,
     profit_take_min_fraction,
     profit_take_max_fraction,

@@ -39,6 +39,13 @@ export type SettingsRow = Omit<
   | "watchlist_rotation_history"
   | "entry_blocked_symbols"
   | "entry_blocked_at"
+  | "breakout_enabled"
+  | "breakout_max_rsi"
+  | "breakout_window_minutes"
+  | "breakout_max_promotions_per_cycle"
+  | "breakout_lookback_minutes"
+  | "breakout_min_volume_ratio"
+  | "breakout_min_change_5m_pct"
 > &
   Partial<
     Pick<
@@ -77,6 +84,13 @@ export type SettingsRow = Omit<
       | "watchlist_rotation_history"
       | "entry_blocked_symbols"
       | "entry_blocked_at"
+      | "breakout_enabled"
+      | "breakout_max_rsi"
+      | "breakout_window_minutes"
+      | "breakout_max_promotions_per_cycle"
+      | "breakout_lookback_minutes"
+      | "breakout_min_volume_ratio"
+      | "breakout_min_change_5m_pct"
     >
   >;
 
@@ -123,6 +137,13 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     watchlist_active_size: raw.watchlist_active_size ?? 12,
     watchlist_rotation_interval_minutes: raw.watchlist_rotation_interval_minutes ?? 15,
     watchlist_max_swaps_per_rotation: raw.watchlist_max_swaps_per_rotation ?? 2,
+    breakout_enabled: raw.breakout_enabled ?? true,
+    breakout_max_rsi: raw.breakout_max_rsi ?? 82,
+    breakout_window_minutes: raw.breakout_window_minutes ?? 10,
+    breakout_max_promotions_per_cycle: raw.breakout_max_promotions_per_cycle ?? 2,
+    breakout_lookback_minutes: raw.breakout_lookback_minutes ?? 10,
+    breakout_min_volume_ratio: raw.breakout_min_volume_ratio ?? 1.5,
+    breakout_min_change_5m_pct: raw.breakout_min_change_5m_pct ?? 0.15,
     watchlist_last_rotation_note: raw.watchlist_last_rotation_note ?? "",
     watchlist_rotation_history: normalizeWatchlistRotationHistory(
       raw.watchlist_rotation_history,

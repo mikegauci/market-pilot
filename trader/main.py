@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import signal
 import sys
+from dataclasses import replace
 import threading
 import time
 from datetime import datetime, timezone
@@ -49,6 +50,7 @@ from strategy.confirmation import ConfirmationTracker
 from strategy.config import (
     rotation_dashboard_override,
     entry_ema_dashboard_override,
+    breakout_dashboard_override,
     entry_rsi_spread_dashboard_overrides,
     strategy_config_with_risk_overrides,
 )
@@ -126,27 +128,39 @@ def run() -> int:
             settings.strategy_config.warmup_min_1m_bars,
         )
 
-    strategy_config = strategy_config_with_risk_overrides(
-        settings.strategy_config,
-        min_volume_ratio=risk_settings.min_volume_ratio,
-        min_share_price=risk_settings.min_share_price,
-        min_dollar_volume=risk_settings.min_dollar_volume,
-        jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
-        confirmation_cycles=risk_settings.confirmation_cycles,
-        confirmation_seconds=risk_settings.confirmation_seconds,
-        **rotation_dashboard_override(
-            from_settings=risk_settings.rotation_session_pct_from_settings,
-            value=risk_settings.rotation_min_session_change_pct,
+    strategy_config = replace(
+        strategy_config_with_risk_overrides(
+            settings.strategy_config,
+            min_volume_ratio=risk_settings.min_volume_ratio,
+            min_share_price=risk_settings.min_share_price,
+            min_dollar_volume=risk_settings.min_dollar_volume,
+            jev_sell_exit_threshold=risk_settings.jev_sell_exit_threshold,
+            confirmation_cycles=risk_settings.confirmation_cycles,
+            confirmation_seconds=risk_settings.confirmation_seconds,
+            **rotation_dashboard_override(
+                from_settings=risk_settings.rotation_session_pct_from_settings,
+                value=risk_settings.rotation_min_session_change_pct,
+            ),
+            **entry_ema_dashboard_override(
+                from_settings=risk_settings.entry_ema_gate_from_settings,
+                value=risk_settings.entry_ema_gate,
+            ),
+            **entry_rsi_spread_dashboard_overrides(
+                max_rsi_from_settings=risk_settings.max_rsi_from_settings,
+                max_rsi=risk_settings.max_rsi,
+                max_spread_pct_from_settings=risk_settings.max_spread_pct_from_settings,
+                max_spread_pct=risk_settings.max_spread_pct,
+            ),
         ),
-        **entry_ema_dashboard_override(
-            from_settings=risk_settings.entry_ema_gate_from_settings,
-            value=risk_settings.entry_ema_gate,
-        ),
-        **entry_rsi_spread_dashboard_overrides(
-            max_rsi_from_settings=risk_settings.max_rsi_from_settings,
-            max_rsi=risk_settings.max_rsi,
-            max_spread_pct_from_settings=risk_settings.max_spread_pct_from_settings,
-            max_spread_pct=risk_settings.max_spread_pct,
+        **breakout_dashboard_override(
+            from_settings=risk_settings.breakout_from_settings,
+            enabled=risk_settings.breakout_enabled,
+            lookback_minutes=risk_settings.breakout_lookback_minutes,
+            min_volume_ratio=risk_settings.breakout_min_volume_ratio,
+            min_change_5m_pct=risk_settings.breakout_min_change_5m_pct,
+            max_promotions_per_cycle=risk_settings.breakout_max_promotions_per_cycle,
+            window_minutes=risk_settings.breakout_window_minutes,
+            max_rsi=risk_settings.breakout_max_rsi,
         ),
     )
     confirmation_tracker = ConfirmationTracker(
