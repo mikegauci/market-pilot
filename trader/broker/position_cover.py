@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Dict, Optional
 
 from models.types import ExecutionMode, Quote
+from database.command_queue import STALE_PROCESSING_SEC
 
 if TYPE_CHECKING:
     from broker.ibkr import IBKRClient
@@ -11,8 +12,6 @@ if TYPE_CHECKING:
     from risk.manager import RiskManager
 
 logger = logging.getLogger(__name__)
-
-STALE_PROCESSING_SEC = 120.0
 
 
 def process_position_cover_commands(

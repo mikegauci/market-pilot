@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Dict, Optional
 
 from broker.execution import build_ibkr_flat_closed_trade
 from models.types import ClosedTrade, ExecutionMode, OrderFill, Quote, TradeRecord
+from database.command_queue import STALE_PROCESSING_SEC
 
 if TYPE_CHECKING:
     from broker.ibkr import IBKRClient
@@ -14,7 +15,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-STALE_PROCESSING_SEC = 120.0
 DB_CLOSE_RETRIES = 2
 
 

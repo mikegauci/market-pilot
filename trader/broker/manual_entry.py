@@ -13,6 +13,7 @@ from market.indicators import build_market_state, compute_atr_pct
 from models.types import ExecutionMode, JevPrediction, Quote, TradingMode
 from runtime.eval_symbols import eval_allow_five_min_fallback
 from strategy.filters import check_correlation_cap
+from database.command_queue import STALE_PROCESSING_SEC
 
 if TYPE_CHECKING:
     from broker.ibkr import IBKRClient
@@ -23,7 +24,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-STALE_PROCESSING_SEC = 120.0
 TRANSIENT_ENTRY_REASONS = frozenset(
     {"entry_window_closed", "no_quote", "market_warming_up", "ibkr_not_connected"}
 )
