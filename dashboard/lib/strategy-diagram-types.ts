@@ -5,5 +5,6 @@ export type StrategyDiagramType =
   | "volume"
   | "sessionOpen"
   | "rotation"
+  | "breakout"
   | "reentry"
   | "maxEntries";

@@ -58,16 +58,18 @@ export function TradeDecisionFlow() {
   );
 }
 
-export function RsiGauge() {
+export function RsiGauge({ maxRsi = 70 }: { maxRsi?: number }) {
+  const cap = Math.min(100, Math.max(1, maxRsi)) * 2;
+  const warm = Math.max(0, cap - 42);
   return (
     <svg viewBox="0 0 200 70" className="h-16 w-full max-w-[200px]" aria-hidden>
-      <rect x="0" y="40" width="140" height="12" rx="2" fill="#27272a" />
-      <rect x="0" y="40" width="98" height="12" rx="2" fill="#065f46" opacity="0.6" />
-      <rect x="98" y="40" width="42" height="12" rx="2" fill="#854d0e" opacity="0.6" />
-      <rect x="140" y="40" width="60" height="12" rx="2" fill="#7f1d1d" opacity="0.6" />
-      <line x1="140" y1="34" x2="140" y2="58" stroke="#fbbf24" strokeWidth="1.5" />
-      <text x="140" y="28" textAnchor="middle" fill="#fbbf24" fontSize="9">
-        70
+      <rect x="0" y="40" width="200" height="12" rx="2" fill="#27272a" />
+      <rect x="0" y="40" width={warm} height="12" rx="2" fill="#065f46" opacity="0.6" />
+      <rect x={warm} y="40" width={cap - warm} height="12" rx="2" fill="#854d0e" opacity="0.6" />
+      <rect x={cap} y="40" width={200 - cap} height="12" rx="2" fill="#7f1d1d" opacity="0.6" />
+      <line x1={cap} y1="34" x2={cap} y2="58" stroke="#fbbf24" strokeWidth="1.5" />
+      <text x={cap} y="28" textAnchor="middle" fill="#fbbf24" fontSize="9">
+        {maxRsi}
       </text>
       <text x="0" y="62" fill="#71717a" fontSize="8">
         0
@@ -170,6 +172,34 @@ export function RotationPipelineDiagram() {
   );
 }
 
+export function BreakoutDiagram() {
+  return (
+    <svg viewBox="0 0 200 70" className="h-16 w-full max-w-[200px]" aria-hidden>
+      <rect x="10" y="14" width="110" height="36" fill="#38bdf8" opacity="0.06" />
+      <line x1="10" y1="30" x2="190" y2="30" stroke="#7dd3fc" strokeWidth="1" strokeDasharray="4 3" />
+      <text x="12" y="25" fill="#7dd3fc" fontSize="7">
+        Recent high
+      </text>
+      <polyline
+        points="10,40 30,36 50,42 70,34 90,39 110,35 130,18 150,15 170,13"
+        fill="none"
+        stroke="#e4e4e7"
+        strokeWidth="1.6"
+      />
+      <circle cx="130" cy="18" r="4" fill="none" stroke="#34d399" strokeWidth="1.5" />
+      {[10, 30, 50, 70, 90, 110].map((bx) => (
+        <rect key={bx} x={bx - 3} y="56" width="6" height="8" fill="#52525b" />
+      ))}
+      <rect x="127" y="48" width="6" height="16" fill="#f59e0b" />
+      <rect x="147" y="53" width="6" height="11" fill="#52525b" />
+      <rect x="167" y="54" width="6" height="10" fill="#52525b" />
+      <text x="140" y="44" fill="#fcd34d" fontSize="7">
+        Volume spike
+      </text>
+    </svg>
+  );
+}
+
 export function ReentryCooldownDiagram() {
   return (
     <svg viewBox="0 0 200 70" className="h-16 w-full max-w-[200px]" aria-hidden>
@@ -241,14 +271,16 @@ export function StrategyDiagram({
   type,
   variant,
   maxEntrySlots,
+  maxRsi,
 }: {
   type: StrategyDiagramType;
   variant?: "default" | "blocked" | "low";
   maxEntrySlots?: number;
+  maxRsi?: number;
 }) {
   switch (type) {
     case "rsi":
-      return <RsiGauge />;
+      return <RsiGauge maxRsi={maxRsi} />;
     case "ema":
       return <EmaTrendDiagram blocked={variant === "blocked"} />;
     case "emaWarmup":
@@ -259,6 +291,8 @@ export function StrategyDiagram({
       return <SessionVsOpenDiagram red={variant === "blocked"} />;
     case "rotation":
       return <RotationPipelineDiagram />;
+    case "breakout":
+      return <BreakoutDiagram />;
     case "reentry":
       return <ReentryCooldownDiagram />;
     case "maxEntries":

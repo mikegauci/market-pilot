@@ -211,6 +211,15 @@ export const ROTATION_RULES: StrategyIndicator[] = [
     diagram: "rotation",
   },
   {
+    name: "Breakout promotion",
+    headline: "Fast lane for surging names",
+    detail: "New recent high + volume spike + 5m move beating the benchmark",
+    usedFor: "Add a pool name to the active list between rotation scans",
+    plainEnglish:
+      "When a pool name suddenly surges, the bot adds it right away instead of waiting for the next scan. For a few minutes it gets a higher RSI cap and can't be swapped out. Jev still has to say BUY.",
+    diagram: "breakout",
+  },
+  {
     name: "Red incumbents",
     headline: "Drop weak actives",
     detail: "Session-disqualified scores evict non-protected names",

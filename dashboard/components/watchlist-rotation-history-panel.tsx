@@ -1,6 +1,6 @@
+import { ClientDateTime } from "@/components/client-date-time";
 import { SettingsCollapsible } from "@/components/settings-section";
 import {
-  formatHistoryWhen,
   formatSymbolList,
   latestRotationChange,
   type WatchlistRotationHistoryEntry,
@@ -61,7 +61,7 @@ export function WatchlistRotationHistoryPanel({ history, lastNote, lastAt }: Pro
     history.length > 1
       ? `${history.length} changes`
       : history.length === 1
-        ? formatHistoryWhen(history[0]!.at)
+        ? <ClientDateTime value={history[0]!.at} variant="short" />
         : undefined;
 
   return (
@@ -78,7 +78,8 @@ export function WatchlistRotationHistoryPanel({ history, lastNote, lastAt }: Pro
           <ul className="space-y-3">
             {history.map((entry) => (
               <li key={entry.at} className="space-y-0.5 border-b border-zinc-800/50 pb-2 last:border-0 last:pb-0">
-                <p className="text-[11px] font-medium text-zinc-500">{formatHistoryWhen(entry.at)}</p>
+                <p className="text-[11px] font-medium text-zinc-500"><ClientDateTime value={entry.at} variant="short" />
+                </p>
                 <ChangeLines entry={entry} />
               </li>
             ))}

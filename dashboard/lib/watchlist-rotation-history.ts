@@ -106,17 +106,6 @@ export function formatSymbolList(symbols: string[] | undefined): string | null {
   return symbols.join(", ");
 }
 
-export function formatHistoryWhen(iso: string): string {
-  const ms = Date.parse(iso);
-  if (!Number.isFinite(ms)) return iso;
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(ms);
-}
-
 export function latestRotationChange(
   history: WatchlistRotationHistoryEntry[],
   lastNote: string,

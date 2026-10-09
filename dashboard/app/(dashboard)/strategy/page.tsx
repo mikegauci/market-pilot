@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { LiveStrategyGrid } from "@/components/live-strategy-grid";
+import { ScenarioPlayer } from "@/components/strategy-scenarios/scenario-player";
+import { Card, CardTitle } from "@/components/ui/card";
 import { LatestPredictionsProvider } from "@/lib/latest-predictions-context";
 import { StrategyGuide } from "@/components/strategy-guide";
 import { StrategySkipGlossary } from "@/components/strategy-skip-glossary";
 import { TradeDecisionFlow } from "@/components/strategy-diagrams";
 import { getLatestPredictionsBySymbol, getSettings } from "@/lib/queries";
+import { buildScenarios } from "@/lib/strategy-scenarios";
 import { formatPercent } from "@/lib/utils";
 
 export default async function StrategyPage() {
@@ -61,6 +64,19 @@ export default async function StrategyPage() {
           </p>
         </div>
       </header>
+
+      {settings ? (
+        <Card>
+          <CardTitle>See it in action</CardTitle>
+          <p className="mt-1 text-xs text-zinc-500">
+            Step through worked examples of how your settings play out, from a breakout to a
+            trade or a skip.
+          </p>
+          <div className="mt-4">
+            <ScenarioPlayer scenarios={buildScenarios(settings)} />
+          </div>
+        </Card>
+      ) : null}
 
       {settings && (
         <LatestPredictionsProvider initial={latestPredictions}>

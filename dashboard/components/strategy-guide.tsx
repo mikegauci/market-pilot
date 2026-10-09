@@ -39,11 +39,13 @@ function IndicatorCard({
   section,
   dense = false,
   maxEntrySlots,
+  maxRsi,
 }: {
   item: StrategyIndicator;
   section: "jev" | "filter" | "risk" | "rotation";
   dense?: boolean;
   maxEntrySlots?: number;
+  maxRsi?: number;
 }) {
   if (dense) {
     return (
@@ -81,6 +83,7 @@ function IndicatorCard({
               type={item.diagram as StrategyDiagramType}
               variant={diagramVariant(item, section)}
               maxEntrySlots={maxEntrySlots}
+              maxRsi={maxRsi}
             />
           </div>
         ) : null}
@@ -94,11 +97,13 @@ function IndicatorList({
   section,
   dense = false,
   maxEntrySlots,
+  maxRsi,
 }: {
   items: StrategyIndicator[];
   section: "jev" | "filter" | "risk" | "rotation";
   dense?: boolean;
   maxEntrySlots?: number;
+  maxRsi?: number;
 }) {
   if (dense) {
     return (
@@ -125,6 +130,7 @@ function IndicatorList({
           section={section}
           dense={false}
           maxEntrySlots={maxEntrySlots}
+          maxRsi={maxRsi}
         />
       ))}
     </ul>
@@ -199,7 +205,12 @@ export function StrategyGuide({
             Signals Jev reads
           </p>
           <div className="mt-2">
-            <IndicatorList items={jevIndicators} section="jev" dense={dense} />
+            <IndicatorList
+              items={jevIndicators}
+              section="jev"
+              dense={dense}
+              maxRsi={settings?.max_rsi}
+            />
           </div>
         </div>
 
@@ -208,7 +219,12 @@ export function StrategyGuide({
             Entry filters (after Jev says BUY)
           </p>
           <div className="mt-2">
-            <IndicatorList items={hardFilters} section="filter" dense={dense} />
+            <IndicatorList
+              items={hardFilters}
+              section="filter"
+              dense={dense}
+              maxRsi={settings?.max_rsi}
+            />
           </div>
         </div>
 

@@ -132,6 +132,7 @@ export function StrategyThresholdCards({ settings }: { settings: Settings }) {
                   type={card.diagram}
                   variant={card.diagramVariant}
                   maxEntrySlots={card.maxEntrySlots}
+                  maxRsi={settings.max_rsi}
                 />
               </div>
             ) : null}

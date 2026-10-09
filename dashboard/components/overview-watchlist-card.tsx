@@ -23,7 +23,9 @@ import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
 import { WatchlistRotationHistoryPanel } from "@/components/watchlist-rotation-history-panel";
 import { formatCountdown } from "@/lib/entry-block-timing";
 import { useCountdownTo } from "@/lib/hooks/use-countdown-ms";
+import { useIsClient } from "@/lib/hooks/use-is-client";
 import { useNow } from "@/lib/hooks/use-now";
+import { formatTimeHms } from "@/lib/utils";
 import {
   activeBreakoutWindows,
   normalizeWatchlistRotationHistory,
@@ -152,7 +154,10 @@ export function OverviewWatchlistCard({
   );
 
   const breakoutWindowMinutes = settings.breakout_window_minutes ?? 10;
-  const hasBreakoutHistory = rotating && rotationHistory.some((entry) => entry.breakout);
+  const isClient = useIsClient();
+  // Countdowns and local times differ between server and browser, so only show them after hydration.
+  const hasBreakoutHistory =
+    isClient && rotating && rotationHistory.some((entry) => entry.breakout);
   const nowMs = useNow(hasBreakoutHistory);
   const breakoutUntilBySymbol = useMemo(
     () =>
@@ -170,10 +175,7 @@ export function OverviewWatchlistCard({
     const untilMs = breakoutUntilBySymbol.get(symbol.toUpperCase());
     if (untilMs == null) return null;
     const minutesLeft = Math.max(1, Math.ceil((untilMs - nowMs) / 60_000));
-    const untilLabel = new Intl.DateTimeFormat(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(untilMs);
+    const untilLabel = formatTimeHms(new Date(untilMs).toISOString()).slice(0, 5);
     const title = breakoutRsiCap
       ? `Added early by a breakout. Until ${untilLabel}, entries can use RSI up to ${breakoutRsiCap} and rotation won't swap it out.`
       : `Added early by a breakout. Rotation won't swap it out until ${untilLabel}.`;

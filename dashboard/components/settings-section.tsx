@@ -154,7 +154,7 @@ export function SettingsCollapsible({
 }: {
   summary: string;
   /** Shown after the title when collapsed (e.g. current on/off state). */
-  detail?: string;
+  detail?: ReactNode;
   children: ReactNode;
   defaultOpen?: boolean;
 }) {
