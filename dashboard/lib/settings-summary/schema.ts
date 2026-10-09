@@ -1,3 +1,5 @@
+import { isStringArray, parseJsonText } from "@/lib/openai/parse-json-text";
+
 export type SettingsAiSummary = {
   headline: string;
   jev_and_signals: string[];
@@ -38,10 +40,6 @@ function trimBullets(items: string[]): string[] {
     .slice(0, MAX_BULLETS);
 }
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
 export function parseSettingsAiSummary(value: unknown): SettingsAiSummary {
   if (!value || typeof value !== "object") {
     throw new Error("Settings summary must be a JSON object.");
@@ -77,15 +75,5 @@ export function parseSettingsAiSummary(value: unknown): SettingsAiSummary {
 }
 
 export function parseSettingsAiSummaryText(content: string): SettingsAiSummary {
-  const trimmed = content.trim();
-  if (!trimmed) {
-    throw new Error("OpenAI returned an empty settings summary.");
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(trimmed);
-  } catch {
-    throw new Error("OpenAI returned a settings summary we could not read. Try again.");
-  }
-  return parseSettingsAiSummary(parsed);
+  return parseJsonText(content, "settings summary", parseSettingsAiSummary);
 }

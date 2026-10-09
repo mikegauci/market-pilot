@@ -1,14 +1,12 @@
 import "server-only";
 
-import OpenAI from "openai";
-import { makeParseableTextFormat } from "openai/lib/parser";
+import { runStructured } from "@/lib/openai/structured.server";
 import type { MorningBriefPacket } from "@/lib/morning-brief/packet";
 import {
   MORNING_BRIEF_JSON_SCHEMA,
   parseMorningBriefText,
   type MorningBrief,
 } from "@/lib/morning-brief/schema";
-import { openAiBriefModel, requireOpenAiKey } from "@/lib/session-brief/openai.server";
 
 const SYSTEM_PROMPT = `You write a short morning note for a paper day-trading bot dashboard.
 
@@ -21,43 +19,17 @@ Rules:
 - caveats: at most 3. Advisory only. Never say to enable live trading or promise profit.
 - Keep headline under 20 words.`;
 
-const morningBriefTextFormat = makeParseableTextFormat(
-  {
-    type: "json_schema",
-    name: "morning_brief",
-    schema: MORNING_BRIEF_JSON_SCHEMA,
-    strict: true,
-  },
-  parseMorningBriefText,
-);
-
 export async function generateMorningBriefFromPacket(
   packet: MorningBriefPacket,
 ): Promise<{ brief: MorningBrief; model: string }> {
-  const client = new OpenAI({ apiKey: requireOpenAiKey() });
-  const model = openAiBriefModel();
-
-  const response = await client.responses.parse({
-    model,
-    max_output_tokens: 900,
-    input: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: JSON.stringify(packet) },
-    ],
-    text: {
-      format: morningBriefTextFormat,
-    },
+  const { output, model } = await runStructured({
+    name: "morning_brief",
+    schema: MORNING_BRIEF_JSON_SCHEMA,
+    parse: parseMorningBriefText,
+    system: SYSTEM_PROMPT,
+    packet,
+    maxOutputTokens: 900,
+    outputLabel: "a morning brief",
   });
-
-  if (response.error) {
-    throw new Error(response.error.message ?? "OpenAI request failed.");
-  }
-
-  const brief = response.output_parsed;
-  if (!brief) {
-    const status = "status" in response ? String(response.status) : "unknown";
-    throw new Error(`OpenAI did not return a morning brief (status: ${status}). Try again.`);
-  }
-
-  return { brief, model };
+  return { brief: output, model };
 }

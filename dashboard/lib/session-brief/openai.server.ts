@@ -1,7 +1,6 @@
 import "server-only";
 
-import OpenAI from "openai";
-import { makeParseableTextFormat } from "openai/lib/parser";
+import { runStructured } from "@/lib/openai/structured.server";
 import type { SessionBriefPacket } from "@/lib/session-brief/packet";
 import { parseBriefFromModelText } from "@/lib/session-brief/parse-brief-text";
 import {
@@ -24,59 +23,18 @@ Rules:
 - Use "tended to", "on average", and "sanity check" where appropriate.
 - Keep headline under 20 words. Limit what_happened to 3–5 bullets, suggestions to at most 3.`;
 
-const sessionBriefTextFormat = makeParseableTextFormat(
-  {
-    type: "json_schema",
-    name: "session_brief",
-    schema: SESSION_BRIEF_JSON_SCHEMA,
-    strict: true,
-  },
-  parseBriefFromModelText,
-);
-
-export function openAiBriefModel(): string {
-  return process.env.OPENAI_BRIEF_MODEL?.trim() || "gpt-4o-mini";
-}
-
-export function requireOpenAiKey(): string {
-  const key = process.env.OPENAI_API_KEY?.trim();
-  if (!key) {
-    throw new Error(
-      "OpenAI is not configured. Add OPENAI_API_KEY to the dashboard server environment.",
-    );
-  }
-  return key;
-}
-
 export async function generateSessionBriefFromPacket(
   packet: SessionBriefPacket,
 ): Promise<{ brief: SessionBrief; model: string }> {
-  const client = new OpenAI({ apiKey: requireOpenAiKey() });
-  const model = openAiBriefModel();
-
-  const response = await client.responses.parse({
-    model,
-    max_output_tokens: 2500,
-    input: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: JSON.stringify(packet) },
-    ],
-    text: {
-      format: sessionBriefTextFormat,
-    },
+  const { output, model } = await runStructured({
+    name: "session_brief",
+    schema: SESSION_BRIEF_JSON_SCHEMA,
+    parse: parseBriefFromModelText,
+    system: SYSTEM_PROMPT,
+    packet,
+    maxOutputTokens: 2500,
+    outputLabel: "a complete brief",
+    retryHint: "Try Regenerate.",
   });
-
-  if (response.error) {
-    throw new Error(response.error.message ?? "OpenAI request failed.");
-  }
-
-  const brief = response.output_parsed;
-  if (!brief) {
-    const status = "status" in response ? String(response.status) : "unknown";
-    throw new Error(
-      `OpenAI did not return a complete brief (status: ${status}). Try Regenerate.`,
-    );
-  }
-
-  return { brief, model };
+  return { brief: output, model };
 }

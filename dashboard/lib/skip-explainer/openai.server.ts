@@ -1,8 +1,6 @@
 import "server-only";
 
-import OpenAI from "openai";
-import { makeParseableTextFormat } from "openai/lib/parser";
-import { openAiBriefModel, requireOpenAiKey } from "@/lib/session-brief/openai.server";
+import { runStructured } from "@/lib/openai/structured.server";
 import type { SkipExplainPacket } from "@/lib/skip-explainer/packet";
 import {
   parseSkipExplanationText,
@@ -24,43 +22,17 @@ Rules:
 - gates.settings fields are the bot's current dashboard settings; they may differ from when this prediction was stored.
 - This is an explanation only. Do not promise profit or say to enable live trading.`;
 
-const skipExplanationTextFormat = makeParseableTextFormat(
-  {
-    type: "json_schema",
-    name: "skip_explanation",
-    schema: SKIP_EXPLANATION_JSON_SCHEMA,
-    strict: true,
-  },
-  parseSkipExplanationText,
-);
-
 export async function generateSkipExplanation(
   packet: SkipExplainPacket,
 ): Promise<{ explanation: SkipExplanation; model: string }> {
-  const client = new OpenAI({ apiKey: requireOpenAiKey() });
-  const model = openAiBriefModel();
-
-  const response = await client.responses.parse({
-    model,
-    max_output_tokens: 600,
-    input: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: JSON.stringify(packet) },
-    ],
-    text: {
-      format: skipExplanationTextFormat,
-    },
+  const { output, model } = await runStructured({
+    name: "skip_explanation",
+    schema: SKIP_EXPLANATION_JSON_SCHEMA,
+    parse: parseSkipExplanationText,
+    system: SYSTEM_PROMPT,
+    packet,
+    maxOutputTokens: 600,
+    outputLabel: "an explanation",
   });
-
-  if (response.error) {
-    throw new Error(response.error.message ?? "OpenAI request failed.");
-  }
-
-  const explanation = response.output_parsed;
-  if (!explanation) {
-    const status = "status" in response ? String(response.status) : "unknown";
-    throw new Error(`OpenAI did not return an explanation (status: ${status}). Try again.`);
-  }
-
-  return { explanation, model };
+  return { explanation: output, model };
 }

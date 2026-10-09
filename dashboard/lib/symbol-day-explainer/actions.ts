@@ -1,17 +1,11 @@
 "use server";
 
-import {
-  checkOpenAiActionCooldown,
-  OPENAI_COOLDOWN_MS,
-} from "@/lib/openai-action-cooldown";
+import { OPENAI_COOLDOWN_MS } from "@/lib/openai-action-cooldown";
+import { withAiAction } from "@/lib/openai/with-ai-action.server";
 import { buildSymbolDayExplainPacket } from "@/lib/symbol-day-explainer/packet";
 import { generateSymbolDayExplanation } from "@/lib/symbol-day-explainer/openai.server";
 import type { SymbolDayExplanation } from "@/lib/symbol-day-explainer/schema";
-import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
 import { ANALYTICS_SKIP_PREDICTION_COLUMNS } from "@/lib/analytics-data";
-import { canDashboardWrite } from "@/lib/dashboard-role";
-import { readOnlyActionError } from "@/lib/require-dashboard-write.server";
-import { createClient } from "@/lib/supabase/server";
 import type { Prediction } from "@/lib/types/database";
 
 export type ExplainSymbolDayResult =
@@ -29,67 +23,39 @@ export async function explainSymbolTradingDay(input: {
     return { ok: false, error: "Pick a symbol." };
   }
 
-  try {
-    requireOpenAiKey();
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "OpenAI is not configured.",
-    };
-  }
+  return withAiAction<ExplainSymbolDayResult>(
+    {
+      signInMessage: "Sign in to explain symbol activity.",
+      cooldown: { key: `symbol-day:${symbol}`, ms: OPENAI_COOLDOWN_MS.symbolDayExplain },
+    },
+    async ({ supabase }) => {
+      const { data: rows, error } = await supabase
+        .from("predictions")
+        .select(ANALYTICS_SKIP_PREDICTION_COLUMNS)
+        .eq("symbol", symbol)
+        .gte("timestamp", input.sessionStartIso)
+        .order("timestamp", { ascending: false })
+        .limit(400);
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return { ok: false, error: "Sign in to explain symbol activity." };
-  }
-  if (!canDashboardWrite(user)) {
-    return readOnlyActionError();
-  }
+      if (error) {
+        return { ok: false, error: error.message };
+      }
 
-  const cooldownError = checkOpenAiActionCooldown(
-    user.id,
-    `symbol-day:${symbol}`,
-    OPENAI_COOLDOWN_MS.symbolDayExplain,
+      const predictions = (rows ?? []) as Prediction[];
+      if (predictions.length === 0) {
+        return { ok: false, error: "No predictions for this symbol in the session window." };
+      }
+
+      const packet = buildSymbolDayExplainPacket(
+        symbol,
+        predictions,
+        input.sessionStartIso,
+        input.recordThreshold,
+        input.minConfidence,
+      );
+
+      const result = await generateSymbolDayExplanation(packet);
+      return { ok: true, explanation: result.explanation };
+    },
   );
-  if (cooldownError) {
-    return { ok: false, error: cooldownError };
-  }
-
-  const { data: rows, error } = await supabase
-    .from("predictions")
-    .select(ANALYTICS_SKIP_PREDICTION_COLUMNS)
-    .eq("symbol", symbol)
-    .gte("timestamp", input.sessionStartIso)
-    .order("timestamp", { ascending: false })
-    .limit(400);
-
-  if (error) {
-    return { ok: false, error: error.message };
-  }
-
-  const predictions = (rows ?? []) as Prediction[];
-  if (predictions.length === 0) {
-    return { ok: false, error: "No predictions for this symbol in the session window." };
-  }
-
-  const packet = buildSymbolDayExplainPacket(
-    symbol,
-    predictions,
-    input.sessionStartIso,
-    input.recordThreshold,
-    input.minConfidence,
-  );
-
-  try {
-    const result = await generateSymbolDayExplanation(packet);
-    return { ok: true, explanation: result.explanation };
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "OpenAI request failed.",
-    };
-  }
 }

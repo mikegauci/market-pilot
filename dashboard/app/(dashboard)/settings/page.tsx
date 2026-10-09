@@ -18,7 +18,7 @@ export default async function SettingsPage() {
     return <p className="text-zinc-500">Settings not found.</p>;
   }
 
-  const { currentEquity, baselineEquity } = resolveSettingsEquities(
+  const { baselineEquity } = resolveSettingsEquities(
     settings,
     portfolio?.equity,
   );

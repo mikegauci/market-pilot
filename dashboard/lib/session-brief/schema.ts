@@ -1,3 +1,5 @@
+import { isStringArray } from "@/lib/openai/parse-json-text";
+
 export type SessionBriefSuggestion = {
   setting: string;
   direction: "raise" | "lower" | "keep";
@@ -75,10 +77,6 @@ export const SESSION_BRIEF_JSON_SCHEMA = {
     "caveats",
   ],
 } as const;
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
 
 function isEntryBlockers(value: unknown): value is SessionBriefEntryBlocker[] {
   if (!Array.isArray(value)) return false;

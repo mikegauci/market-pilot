@@ -1,3 +1,5 @@
+import { parseJsonText } from "@/lib/openai/parse-json-text";
+
 export type SymbolDayExplanation = {
   headline: string;
   summary: string;
@@ -40,15 +42,5 @@ export function parseSymbolDayExplanation(value: unknown): SymbolDayExplanation 
 }
 
 export function parseSymbolDayExplanationText(content: string): SymbolDayExplanation {
-  const trimmed = content.trim();
-  if (!trimmed) {
-    throw new Error("OpenAI returned an empty symbol summary.");
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(trimmed);
-  } catch {
-    throw new Error("OpenAI returned a symbol summary we could not read. Try again.");
-  }
-  return parseSymbolDayExplanation(parsed);
+  return parseJsonText(content, "symbol summary", parseSymbolDayExplanation);
 }

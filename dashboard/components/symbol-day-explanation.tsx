@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { useReadOnly } from "@/components/read-only-provider";
-import { explainSymbolTradingDay } from "@/lib/symbol-day-explainer/actions";
-import type { SymbolDayExplanation } from "@/lib/symbol-day-explainer/schema";
+import { useServerResult } from "@/lib/hooks/use-server-result";
+import {
+  explainSymbolTradingDay,
+  type ExplainSymbolDayResult,
+} from "@/lib/symbol-day-explainer/actions";
 import type { Prediction } from "@/lib/types/database";
 
 type Props = {
@@ -32,27 +35,20 @@ export function SymbolDayExplanation({
   }, [predictions, sessionStartIso]);
 
   const [symbol, setSymbol] = useState(symbols[0] ?? "");
-  const [pending, startTransition] = useTransition();
-  const [explanation, setExplanation] = useState<SymbolDayExplanation | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { pending, result, error, run, reset } = useServerResult<ExplainSymbolDayResult>();
+  const explanation = result?.explanation ?? null;
 
   function onExplain() {
     if (!symbol) return;
-    setError(null);
-    setExplanation(null);
-    startTransition(async () => {
-      const result = await explainSymbolTradingDay({
+    reset();
+    run(() =>
+      explainSymbolTradingDay({
         symbol,
         sessionStartIso,
         recordThreshold,
         minConfidence,
-      });
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setExplanation(result.explanation);
-    });
+      }),
+    );
   }
 
   if (symbols.length === 0 || readOnly) {
@@ -70,8 +66,7 @@ export function SymbolDayExplanation({
           value={symbol}
           onChange={(event) => {
             setSymbol(event.target.value);
-            setExplanation(null);
-            setError(null);
+            reset();
           }}
           className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-zinc-200"
         >

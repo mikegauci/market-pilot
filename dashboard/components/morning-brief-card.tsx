@@ -1,31 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useServerResult } from "@/lib/hooks/use-server-result";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { useReadOnly } from "@/components/read-only-provider";
-import { generateMorningBrief } from "@/lib/morning-brief/actions";
-import type { MorningBrief } from "@/lib/morning-brief/schema";
+import { generateMorningBrief, type GenerateMorningBriefResult } from "@/lib/morning-brief/actions";
 import { formatDateTime } from "@/lib/utils";
 
 export function MorningBriefCard() {
   const readOnly = useReadOnly();
-  const [pending, startTransition] = useTransition();
-  const [brief, setBrief] = useState<MorningBrief | null>(null);
-  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { pending, result, error, run } = useServerResult<GenerateMorningBriefResult>();
+  const brief = result?.brief ?? null;
+  const generatedAt = result?.generatedAt ?? null;
 
   function onGenerate() {
-    setError(null);
-    startTransition(async () => {
-      const result = await generateMorningBrief();
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setBrief(result.brief);
-      setGeneratedAt(result.generatedAt);
-    });
+    run(() => generateMorningBrief());
   }
 
   return (

@@ -1,8 +1,6 @@
 import "server-only";
 
-import OpenAI from "openai";
-import { makeParseableTextFormat } from "openai/lib/parser";
-import { openAiBriefModel, requireOpenAiKey } from "@/lib/session-brief/openai.server";
+import { runStructured } from "@/lib/openai/structured.server";
 import type { SymbolDayExplainPacket } from "@/lib/symbol-day-explainer/packet";
 import {
   parseSymbolDayExplanationText,
@@ -18,40 +16,17 @@ Rules:
 - main_blockers: up to 3 short bullets naming the top skip themes (use labels provided).
 - Do not invent trades or skip reasons. Advisory only.`;
 
-const symbolDayExplanationTextFormat = makeParseableTextFormat(
-  {
-    type: "json_schema",
-    name: "symbol_day_explanation",
-    schema: SYMBOL_DAY_EXPLANATION_JSON_SCHEMA,
-    strict: true,
-  },
-  parseSymbolDayExplanationText,
-);
-
 export async function generateSymbolDayExplanation(
   packet: SymbolDayExplainPacket,
 ): Promise<{ explanation: SymbolDayExplanation; model: string }> {
-  const client = new OpenAI({ apiKey: requireOpenAiKey() });
-  const model = openAiBriefModel();
-
-  const response = await client.responses.parse({
-    model,
-    max_output_tokens: 700,
-    input: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: JSON.stringify(packet) },
-    ],
-    text: { format: symbolDayExplanationTextFormat },
+  const { output, model } = await runStructured({
+    name: "symbol_day_explanation",
+    schema: SYMBOL_DAY_EXPLANATION_JSON_SCHEMA,
+    parse: parseSymbolDayExplanationText,
+    system: SYSTEM_PROMPT,
+    packet,
+    maxOutputTokens: 700,
+    outputLabel: "a symbol summary",
   });
-
-  if (response.error) {
-    throw new Error(response.error.message ?? "OpenAI request failed.");
-  }
-
-  const explanation = response.output_parsed;
-  if (!explanation) {
-    throw new Error("OpenAI did not return a symbol summary. Try again.");
-  }
-
-  return { explanation, model };
+  return { explanation: output, model };
 }

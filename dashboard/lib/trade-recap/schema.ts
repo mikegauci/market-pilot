@@ -1,3 +1,5 @@
+import { parseJsonText } from "@/lib/openai/parse-json-text";
+
 export type TradeRecap = {
   headline: string;
   entry_story: string;
@@ -36,15 +38,5 @@ export function parseTradeRecap(value: unknown): TradeRecap {
 }
 
 export function parseTradeRecapText(content: string): TradeRecap {
-  const trimmed = content.trim();
-  if (!trimmed) {
-    throw new Error("OpenAI returned an empty trade recap.");
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(trimmed);
-  } catch {
-    throw new Error("OpenAI returned a trade recap we could not read. Try again.");
-  }
-  return parseTradeRecap(parsed);
+  return parseJsonText(content, "trade recap", parseTradeRecap);
 }

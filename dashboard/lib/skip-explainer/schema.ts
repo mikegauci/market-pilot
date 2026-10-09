@@ -1,3 +1,5 @@
+import { parseJsonText } from "@/lib/openai/parse-json-text";
+
 export type SkipCloseness = "near_miss" | "hard_block" | "not_a_signal";
 
 export type SkipExplanation = {
@@ -48,15 +50,5 @@ export function parseSkipExplanation(value: unknown): SkipExplanation {
 }
 
 export function parseSkipExplanationText(content: string): SkipExplanation {
-  const trimmed = content.trim();
-  if (!trimmed) {
-    throw new Error("OpenAI returned an empty explanation.");
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(trimmed);
-  } catch {
-    throw new Error("OpenAI returned an explanation we could not read. Try again.");
-  }
-  return parseSkipExplanation(parsed);
+  return parseJsonText(content, "explanation", parseSkipExplanation);
 }

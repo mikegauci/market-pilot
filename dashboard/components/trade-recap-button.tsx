@@ -1,11 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { AiExplainToggle } from "@/components/ai-explain-toggle";
 import { TradeRecapRichText } from "@/components/trade-recap-rich-text";
-import { useReadOnly } from "@/components/read-only-provider";
 import { explainTradeRecap } from "@/lib/trade-recap/actions";
 import { recapHeadlineClass } from "@/lib/trade-recap/rich-text";
-import type { TradeRecap } from "@/lib/trade-recap/schema";
 import { cn } from "@/lib/utils";
 
 type TradeRecapButtonProps = {
@@ -21,50 +19,15 @@ export function TradeRecapButton({
   entryPrice = 0,
   exitPrice = null,
 }: TradeRecapButtonProps) {
-  const readOnly = useReadOnly();
-  const tone =
-    entryPrice > 0
-      ? { netPnl, entryPrice, exitPrice }
-      : undefined;
-  const [pending, startTransition] = useTransition();
-  const [recap, setRecap] = useState<TradeRecap | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-
-  function onRecap() {
-    if (recap) {
-      setOpen((current) => !current);
-      return;
-    }
-    setError(null);
-    setOpen(true);
-    startTransition(async () => {
-      const result = await explainTradeRecap(tradeId);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setRecap(result.recap);
-    });
-  }
-
-  if (readOnly) {
-    return null;
-  }
+  const tone = entryPrice > 0 ? { netPnl, entryPrice, exitPrice } : undefined;
 
   return (
-    <div className="mt-1">
-      <button
-        type="button"
-        onClick={onRecap}
-        disabled={pending}
-        className="text-xs text-zinc-400 underline decoration-zinc-700 underline-offset-2 hover:text-zinc-200 disabled:opacity-50"
-      >
-        {pending ? "Recapping…" : open && recap ? "Hide recap" : "Recap"}
-      </button>
-      {open && error ? <p className="mt-1 text-xs text-red-400">{error}</p> : null}
-      {open && recap ? (
-        <div className="mt-2 max-w-md space-y-2 rounded-md border border-zinc-800 bg-zinc-950/80 p-2.5 text-xs leading-relaxed text-zinc-300">
+    <AiExplainToggle
+      action={() => explainTradeRecap(tradeId)}
+      labels={{ show: "Recap", hide: "Hide recap", pending: "Recapping…" }}
+      panelClassName="max-w-md space-y-2 p-2.5"
+      render={({ recap }) => (
+        <>
           <p className={cn(recapHeadlineClass(netPnl))}>
             <TradeRecapRichText text={recap.headline} tone={tone} />
           </p>
@@ -78,8 +41,8 @@ export function TradeRecapButton({
             <TradeRecapRichText text={recap.verdict} tone={tone} />
           </p>
           <p className="text-zinc-500">Recap only. Exit settings may have changed since this trade.</p>
-        </div>
-      ) : null}
-    </div>
+        </>
+      )}
+    />
   );
 }

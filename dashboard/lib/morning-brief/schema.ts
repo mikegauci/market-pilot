@@ -1,3 +1,5 @@
+import { isStringArray, parseJsonText } from "@/lib/openai/parse-json-text";
+
 export type MorningBriefName = {
   symbol: string;
   note: string;
@@ -32,10 +34,6 @@ export const MORNING_BRIEF_JSON_SCHEMA = {
   },
   required: ["headline", "names_to_watch", "picky_today", "caveats"],
 } as const;
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
 
 function isNames(value: unknown): value is MorningBriefName[] {
   if (!Array.isArray(value)) return false;
@@ -87,15 +85,5 @@ export function constrainMorningBrief(
 }
 
 export function parseMorningBriefText(content: string): MorningBrief {
-  const trimmed = content.trim();
-  if (!trimmed) {
-    throw new Error("OpenAI returned an empty morning brief.");
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(trimmed);
-  } catch {
-    throw new Error("OpenAI returned a morning brief we could not read. Try again.");
-  }
-  return parseMorningBrief(parsed);
+  return parseJsonText(content, "morning brief", parseMorningBrief);
 }

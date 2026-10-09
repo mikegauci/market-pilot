@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useServerResult } from "@/lib/hooks/use-server-result";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { useReadOnly } from "@/components/read-only-provider";
-import { generateSettingsAiSummary } from "@/lib/settings-summary/actions";
+import { generateSettingsAiSummary, type GenerateSettingsAiSummaryResult } from "@/lib/settings-summary/actions";
 import type { SettingsAiSummary } from "@/lib/settings-summary/schema";
 import { formatDateTime } from "@/lib/utils";
 
@@ -56,22 +56,12 @@ function SummarySection({
 
 export function SettingsAiSummaryCard() {
   const readOnly = useReadOnly();
-  const [pending, startTransition] = useTransition();
-  const [summary, setSummary] = useState<SettingsAiSummary | null>(null);
-  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { pending, result, error, run } = useServerResult<GenerateSettingsAiSummaryResult>();
+  const summary = result?.summary ?? null;
+  const generatedAt = result?.generatedAt ?? null;
 
   function onGenerate() {
-    setError(null);
-    startTransition(async () => {
-      const result = await generateSettingsAiSummary();
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setSummary(result.summary);
-      setGeneratedAt(result.generatedAt);
-    });
+    run(() => generateSettingsAiSummary());
   }
 
   return (
