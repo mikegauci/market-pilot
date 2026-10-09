@@ -408,12 +408,18 @@ class SupabaseSettingsMixin:
         self.client.table("settings").update(payload).eq("id", 1).execute()
 
     @_db_synchronized
+    def get_watchlist_rotation_history(self) -> list:
+        row = self._select_settings_row("watchlist_rotation_history")
+        history = (row or {}).get("watchlist_rotation_history")
+        return history if isinstance(history, list) else []
+
     def save_watchlist_rotation(
         self,
         active: List[str],
         note: str,
         *,
         history_entry: Optional[dict] = None,
+        touch_rotation_at: bool = True,
     ) -> None:
         """Persist the bot-owned active list. Does not touch the manual watchlist or pool."""
         from watchlist.rotation_history import prepend_rotation_history
@@ -421,9 +427,11 @@ class SupabaseSettingsMixin:
         payload: dict = {
             "watchlist_active": [symbol.upper() for symbol in active],
             "watchlist_last_rotation_note": note[:240],
-            "watchlist_last_rotation_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+        if touch_rotation_at:
+            # The dashboard counts down to the next rotation from this timestamp.
+            payload["watchlist_last_rotation_at"] = datetime.now(timezone.utc).isoformat()
         if history_entry is not None:
             existing: object = []
             try:

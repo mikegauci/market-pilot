@@ -47,6 +47,7 @@ from runtime.trader_ops import (
     sync_portfolio_state,
 )
 from strategy.confirmation import ConfirmationTracker
+from watchlist.breakout_runtime import restore_breakout_windows
 from strategy.config import (
     rotation_dashboard_override,
     entry_ema_dashboard_override,
@@ -103,6 +104,13 @@ def run() -> int:
         return 1
 
     risk_settings = db.get_risk_settings()
+    restored_breakouts = restore_breakout_windows(
+        runtime,
+        db.get_watchlist_rotation_history(),
+        now_mono=time.monotonic(),
+    )
+    if restored_breakouts:
+        logger.info("Restored breakout windows: %s", ", ".join(restored_breakouts))
     watchlist = resolve_runtime_watchlist(
         risk_settings,
         env_fallback=settings.watchlist_symbols,

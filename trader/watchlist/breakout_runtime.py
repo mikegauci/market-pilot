@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import Dict, Optional, Sequence
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional, Sequence
 
 from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
@@ -169,8 +170,18 @@ def maybe_promote_breakouts(
         history_entry = rotation_swap_history_entry(swapped_in, swapped_out)
         if history_entry is not None:
             history_entry["detail"] = "breakout"
+            # Wall-clock end of the window so the dashboard and a restarted trader agree.
+            history_entry["breakout_until"] = (
+                datetime.now(timezone.utc) + timedelta(seconds=window_sec)
+            ).isoformat()
         try:
-            db.save_watchlist_rotation(active, note, history_entry=history_entry)
+            # Breakouts do not reset the rotation timer, so leave its timestamp alone.
+            db.save_watchlist_rotation(
+                active,
+                note,
+                history_entry=history_entry,
+                touch_rotation_at=False,
+            )
         except Exception as exc:
             logger.warning("Could not save breakout promotion: %s", exc)
     return (
@@ -181,3 +192,38 @@ def maybe_promote_breakouts(
         ),
         swapped_in,
     )
+
+
+def restore_breakout_windows(
+    runtime: TraderRuntimeState,
+    history: Any,
+    *,
+    now_mono: float,
+    now_wall: Optional[datetime] = None,
+) -> list[str]:
+    """Rebuild in-memory breakout windows from saved history after a restart."""
+    if not isinstance(history, list):
+        return []
+    now_wall = now_wall or datetime.now(timezone.utc)
+    restored: list[str] = []
+    for entry in history:
+        if not isinstance(entry, dict) or entry.get("detail") != "breakout":
+            continue
+        raw_until = entry.get("breakout_until")
+        if not isinstance(raw_until, str):
+            continue
+        try:
+            until = datetime.fromisoformat(raw_until)
+        except ValueError:
+            continue
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+        remaining = (until - now_wall).total_seconds()
+        if remaining <= 0:
+            continue
+        for raw in entry.get("added") or []:
+            symbol = str(raw).strip().upper()
+            if symbol and symbol not in runtime.breakout_until_mono:
+                runtime.breakout_until_mono[symbol] = now_mono + remaining
+                restored.append(symbol)
+    return restored

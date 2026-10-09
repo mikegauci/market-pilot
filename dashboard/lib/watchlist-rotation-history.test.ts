@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  activeBreakoutWindows,
+  normalizeWatchlistRotationHistory,
   latestRotationChange,
   parseWatchlistRotationNote,
   prependWatchlistRotationHistory,
@@ -60,5 +62,36 @@ describe("prependWatchlistRotationHistory", () => {
     });
     expect(next).toHaveLength(30);
     expect(next[0]?.detail).toBe("new");
+  });
+});
+
+describe("breakout history", () => {
+  const history = normalizeWatchlistRotationHistory([
+    {
+      at: "2026-10-09T13:55:00Z",
+      added: ["qcom"],
+      removed: ["XYZ"],
+      detail: "breakout",
+      breakout_until: "2026-10-09T14:05:00Z",
+    },
+    { at: "2026-10-09T13:50:00Z", added: ["AMD"], detail: "breakout" },
+    { at: "2026-10-09T13:45:00Z", added: ["META"], removed: ["IBM"] },
+  ]);
+
+  it("flags breakout entries and keeps the window end", () => {
+    expect(history[0]).toMatchObject({
+      breakout: true,
+      breakoutUntil: "2026-10-09T14:05:00Z",
+      added: ["QCOM"],
+    });
+    expect(history[2]?.breakout).toBeUndefined();
+  });
+
+  it("lists symbols still inside their window, falling back to at + window minutes", () => {
+    const now = Date.parse("2026-10-09T13:58:00Z");
+    const windows = activeBreakoutWindows(history, now, 10);
+    expect([...windows.keys()]).toEqual(["QCOM", "AMD"]);
+    expect(windows.get("AMD")).toBe(Date.parse("2026-10-09T14:00:00Z"));
+    expect(activeBreakoutWindows(history, Date.parse("2026-10-09T14:06:00Z"), 10).size).toBe(0);
   });
 });

@@ -11,7 +11,7 @@ from runtime.state import TraderRuntimeState
 from strategy.config import StrategyConfig
 from strategy.confirmation import ConfirmationTracker
 from watchlist.breakout import breakout_entry_config, detect_breakout
-from watchlist.breakout_runtime import maybe_promote_breakouts
+from watchlist.breakout_runtime import maybe_promote_breakouts, restore_breakout_windows
 
 START = datetime(2026, 10, 8, 18, 0, tzinfo=timezone.utc)
 
@@ -175,6 +175,14 @@ class PromoteBreakoutsTests(unittest.TestCase):
         self.assertTrue(updated.watchlist_last_rotation_note.startswith("breakout added QCOM"))
         self.assertEqual(runtime.breakout_until_mono["QCOM"], 1_000.0 + 600.0)
         db.save_watchlist_rotation.assert_called_once()
+        kwargs = db.save_watchlist_rotation.call_args.kwargs
+        self.assertFalse(kwargs["touch_rotation_at"])
+        entry = kwargs["history_entry"]
+        self.assertEqual(entry["detail"], "breakout")
+        until = datetime.fromisoformat(entry["breakout_until"])
+        self.assertAlmostEqual(
+            (until - datetime.fromisoformat(entry["at"])).total_seconds(), 600.0, delta=5
+        )
 
     def test_open_positions_are_not_swapped_out(self) -> None:
         updated, added, _, _ = self._run(_risk(), open_symbols=["AAA", "BBB"])
@@ -218,6 +226,30 @@ class PromoteBreakoutsTests(unittest.TestCase):
         self.assertIs(updated, risk)
         self.assertEqual(added, [])
         db.save_watchlist_rotation.assert_not_called()
+
+
+class RestoreBreakoutWindowsTests(unittest.TestCase):
+    def test_restores_only_unexpired_breakout_windows(self) -> None:
+        now = datetime(2026, 10, 9, 14, 0, tzinfo=timezone.utc)
+        history = [
+            {
+                "at": "2026-10-09T13:55:00+00:00",
+                "added": ["QCOM"],
+                "detail": "breakout",
+                "breakout_until": "2026-10-09T14:05:00+00:00",
+            },
+            {
+                "at": "2026-10-09T13:40:00+00:00",
+                "added": ["AMD"],
+                "detail": "breakout",
+                "breakout_until": "2026-10-09T13:50:00+00:00",
+            },
+            {"at": "2026-10-09T13:58:00+00:00", "added": ["META"]},
+        ]
+        runtime = TraderRuntimeState()
+        restored = restore_breakout_windows(runtime, history, now_mono=500.0, now_wall=now)
+        self.assertEqual(restored, ["QCOM"])
+        self.assertEqual(runtime.breakout_until_mono, {"QCOM": 800.0})
 
 
 if __name__ == "__main__":

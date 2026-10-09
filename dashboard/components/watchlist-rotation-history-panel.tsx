@@ -9,6 +9,23 @@ import {
 function ChangeLines({ entry }: { entry: WatchlistRotationHistoryEntry }) {
   const added = formatSymbolList(entry.added);
   const removed = formatSymbolList(entry.removed);
+  if (entry.breakout) {
+    return (
+      <div className="space-y-0.5 text-xs text-zinc-400">
+        <p>
+          <span className="mr-1.5 rounded bg-amber-500/15 px-1 py-px text-[10px] font-medium text-amber-300">
+            Breakout
+          </span>
+          <span className="text-zinc-500">Added early:</span> {added ?? "—"}
+        </p>
+        {removed ? (
+          <p>
+            <span className="text-zinc-500">Removed:</span> {removed}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
   if (entry.detail && !added && !removed) {
     return <p className="text-xs text-zinc-400">{entry.detail}</p>;
   }

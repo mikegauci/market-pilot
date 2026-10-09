@@ -23,7 +23,11 @@ import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
 import { WatchlistRotationHistoryPanel } from "@/components/watchlist-rotation-history-panel";
 import { formatCountdown } from "@/lib/entry-block-timing";
 import { useCountdownTo } from "@/lib/hooks/use-countdown-ms";
-import { normalizeWatchlistRotationHistory } from "@/lib/watchlist-rotation-history";
+import { useNow } from "@/lib/hooks/use-now";
+import {
+  activeBreakoutWindows,
+  normalizeWatchlistRotationHistory,
+} from "@/lib/watchlist-rotation-history";
 
 type Props = {
   settings: Settings;
@@ -147,6 +151,42 @@ export function OverviewWatchlistCard({
     [settings.watchlist_rotation_history],
   );
 
+  const breakoutWindowMinutes = settings.breakout_window_minutes ?? 10;
+  const hasBreakoutHistory = rotating && rotationHistory.some((entry) => entry.breakout);
+  const nowMs = useNow(hasBreakoutHistory);
+  const breakoutUntilBySymbol = useMemo(
+    () =>
+      hasBreakoutHistory
+        ? activeBreakoutWindows(rotationHistory, nowMs, breakoutWindowMinutes)
+        : new Map<string, number>(),
+    [hasBreakoutHistory, rotationHistory, nowMs, breakoutWindowMinutes],
+  );
+  const breakoutRsiCap =
+    (settings.breakout_max_rsi ?? 82) > (settings.max_rsi ?? 70)
+      ? settings.breakout_max_rsi
+      : null;
+
+  function breakoutBadge(symbol: string) {
+    const untilMs = breakoutUntilBySymbol.get(symbol.toUpperCase());
+    if (untilMs == null) return null;
+    const minutesLeft = Math.max(1, Math.ceil((untilMs - nowMs) / 60_000));
+    const untilLabel = new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(untilMs);
+    const title = breakoutRsiCap
+      ? `Added early by a breakout. Until ${untilLabel}, entries can use RSI up to ${breakoutRsiCap} and rotation won't swap it out.`
+      : `Added early by a breakout. Rotation won't swap it out until ${untilLabel}.`;
+    return (
+      <span
+        title={title}
+        className="rounded bg-amber-500/15 px-1 font-sans text-[10px] font-medium text-amber-300"
+      >
+        Breakout {minutesLeft}m
+      </span>
+    );
+  }
+
   const nextRotationAtMs = useMemo(() => {
     const last = settings.watchlist_last_rotation_at;
     if (!last) return null;
@@ -226,6 +266,7 @@ export function OverviewWatchlistCard({
               trailing={
                 rotating ? (
                   <span className="inline-flex items-center gap-0.5">
+                    {breakoutBadge(symbol)}
                     <ManualBuyButton
                       symbol={symbol}
                       traderOnline={traderOnline}

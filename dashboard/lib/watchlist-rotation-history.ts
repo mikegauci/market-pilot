@@ -4,6 +4,10 @@ export type WatchlistRotationHistoryEntry = {
   removed?: string[];
   /** Non-swap events (unblock, trim blocked, etc.) */
   detail?: string;
+  /** Swap made by a breakout promotion rather than the scheduled rotation. */
+  breakout?: boolean;
+  /** When the breakout window ends (ISO). Older entries may not have it. */
+  breakoutUntil?: string;
 };
 
 const MAX_HISTORY = 30;
@@ -31,6 +35,12 @@ export function normalizeWatchlistRotationHistory(
     }
     if (typeof row.detail === "string" && row.detail.trim()) {
       entry.detail = row.detail.trim();
+    }
+    if (entry.detail === "breakout") {
+      entry.breakout = true;
+      if (typeof row.breakout_until === "string" && row.breakout_until.trim()) {
+        entry.breakoutUntil = row.breakout_until.trim();
+      }
     }
     if (entry.added?.length || entry.removed?.length || entry.detail) {
       out.push(entry);
@@ -117,4 +127,28 @@ export function latestRotationChange(
   if (!parsed) return null;
   const at = lastAt?.trim() || new Date(0).toISOString();
   return { at, ...parsed };
+}
+
+/**
+ * Symbols still inside a breakout window, mapped to when the window ends (ms).
+ * Entries saved before the trader recorded `breakout_until` fall back to `at + windowMinutes`.
+ */
+export function activeBreakoutWindows(
+  history: WatchlistRotationHistoryEntry[],
+  nowMs: number,
+  windowMinutes: number,
+): Map<string, number> {
+  const windows = new Map<string, number>();
+  for (const entry of history) {
+    if (!entry.breakout || !entry.added?.length) continue;
+    const untilMs = entry.breakoutUntil
+      ? Date.parse(entry.breakoutUntil)
+      : Date.parse(entry.at) + windowMinutes * 60_000;
+    if (!Number.isFinite(untilMs) || untilMs <= nowMs) continue;
+    for (const symbol of entry.added) {
+      const key = symbol.toUpperCase();
+      if (!windows.has(key)) windows.set(key, untilMs);
+    }
+  }
+  return windows;
 }

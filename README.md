@@ -196,6 +196,8 @@ Tune the closed-market poll interval with `CLOSED_MARKET_EVAL_INTERVAL_SEC` (def
 
 Settings can hold a **candidate pool** and a smaller **active list**. When rotation is on, Jev only evaluates the active names (about 12). The bot refreshes that list every 15 minutes during the US session, swapping at most two names, and always keeps open positions. `benchmark_symbol` (QQQ) is subscribed for the headwind check and is never bought. Quote subscriptions cover the whole pool so a promoted name already has price history. The manual watchlist is used only when rotation is off.
 
+Breakout promotions show up on the Overview active list as an amber **Breakout Nm** tag while the name is inside its window (hover for the RSI cap and end time), and as **Breakout · Added early** in the change history. The trader saves each window's end time in the rotation history, so a restart keeps open windows, and breakouts don't reset the next-rotation countdown.
+
 ### IBKR bar backfill (startup)
 
 After IBKR connects, the trader backfills **daily** and **5-minute** history into Supabase for indicators and rotation. **Phased startup** keeps restarts fast:
