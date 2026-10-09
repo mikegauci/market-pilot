@@ -1,15 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { CommandConfirmDialog, useCommandConfirm } from "@/components/command-confirm-dialog";
 import { useReadOnly } from "@/components/read-only-provider";
 import { requestCoverShort } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
@@ -32,29 +23,19 @@ export function CoverShortButton({
   errorMessage,
 }: Props) {
   const readOnly = useReadOnly();
-  const [isPending, startTransition] = useTransition();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const coverQty = Math.abs(Math.trunc(quantity));
+  const confirm = useCommandConfirm(
+    () => requestCoverShort(symbol, coverQty),
+    "Failed to request cover",
+  );
+  const { isPending } = confirm;
 
   if (readOnly) {
     return null;
   }
 
-  const coverQty = Math.abs(Math.trunc(quantity));
   const disabled = !traderOnline || pending || isPending || coverQty < 1;
   const label = pending || isPending ? "Covering…" : failed ? "Retry cover" : "Cover short";
-
-  function handleConfirm() {
-    setActionError(null);
-    startTransition(async () => {
-      try {
-        await requestCoverShort(symbol, coverQty);
-        setDialogOpen(false);
-      } catch (err) {
-        setActionError(err instanceof Error ? err.message : "Failed to request cover");
-      }
-    });
-  }
 
   return (
     <div className="flex flex-col items-start gap-1">
@@ -62,8 +43,7 @@ export function CoverShortButton({
         type="button"
         onClick={() => {
           if (disabled) return;
-          setActionError(null);
-          setDialogOpen(true);
+          confirm.openDialog();
         }}
         disabled={disabled}
         title={
@@ -80,22 +60,20 @@ export function CoverShortButton({
       {failed && errorMessage ? (
         <span className="text-xs text-red-400">{errorMessage}</span>
       ) : null}
-      {actionError ? <span className="text-xs text-red-400">{actionError}</span> : null}
 
-      <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Cover {symbol} short?</AlertDialogTitle>
-          <AlertDialogDescription>
+      <CommandConfirmDialog
+        state={confirm}
+        title={`Cover ${symbol} short?`}
+        description={
+          <>
             The trader will submit a market buy for {coverQty} share
-            {coverQty === 1 ? "" : "s"} to flatten this untracked short at IBKR. This is not
-            a bot trade — it only fixes broker exposure.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={handleConfirm}>Cover short</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialog>
+            {coverQty === 1 ? "" : "s"} to flatten this untracked short at IBKR. This is not a
+            bot trade — it only fixes broker exposure.
+          </>
+        }
+        confirmLabel="Cover short"
+        pendingLabel="Covering…"
+      />
     </div>
   );
 }

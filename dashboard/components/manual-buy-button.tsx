@@ -1,17 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { CommandConfirmDialog, useCommandConfirm } from "@/components/command-confirm-dialog";
 import { useReadOnly } from "@/components/read-only-provider";
 import { requestManualBuy } from "@/lib/actions";
+
 type Props = {
   symbol: string;
   traderOnline: boolean;
@@ -30,9 +22,11 @@ export function ManualBuyButton({
   errorMessage,
 }: Props) {
   const readOnly = useReadOnly();
-  const [isPending, startTransition] = useTransition();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const confirm = useCommandConfirm(
+    () => requestManualBuy(symbol),
+    "Failed to request buy",
+  );
+  const { isPending } = confirm;
 
   if (readOnly) {
     return null;
@@ -49,18 +43,6 @@ export function ManualBuyButton({
           ? "Already in a position"
           : "Manual buy (risk limits apply)";
 
-  function handleConfirm() {
-    setActionError(null);
-    startTransition(async () => {
-      try {
-        await requestManualBuy(symbol);
-        setDialogOpen(false);
-      } catch (err) {
-        setActionError(err instanceof Error ? err.message : "Failed to request buy");
-      }
-    });
-  }
-
   return (
     <>
       <button
@@ -68,8 +50,7 @@ export function ManualBuyButton({
         disabled={disabled}
         onClick={() => {
           if (disabled) return;
-          setActionError(null);
-          setDialogOpen(true);
+          confirm.openDialog();
         }}
         className="rounded px-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-emerald-300 disabled:opacity-40"
         aria-label={
@@ -87,27 +68,14 @@ export function ManualBuyButton({
         <span className="sr-only">{errorMessage}</span>
       ) : null}
 
-      <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen} dismissible={!isPending}>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Buy {symbol}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            The trader sizes from your risk settings (max position, open slots, daily loss,
-            correlation cap, buying power). Jev and strategy filters are skipped. Live trading
-            requires auto-trading to be on.
-          </AlertDialogDescription>
-          {actionError ? <p className="text-sm text-red-400">{actionError}</p> : null}
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={handleConfirm}
-            disabled={isPending}
-            className="bg-emerald-800 hover:bg-emerald-700"
-          >
-            {isPending ? "Sending…" : "Confirm buy"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialog>
+      <CommandConfirmDialog
+        state={confirm}
+        title={`Buy ${symbol}?`}
+        description="The trader sizes from your risk settings (max position, open slots, daily loss, correlation cap, buying power). Jev and strategy filters are skipped. Live trading requires auto-trading to be on."
+        confirmLabel="Confirm buy"
+        pendingLabel="Sending…"
+        confirmClassName="bg-emerald-800 hover:bg-emerald-700"
+      />
     </>
   );
 }

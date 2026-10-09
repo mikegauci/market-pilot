@@ -11,10 +11,12 @@ import {
   stampEntryBlockedAt,
 } from "@/lib/entry-blocked-symbols";
 import { seedActiveWatchlistFromPool } from "@/lib/seed-active-watchlist";
-import { assertDashboardWriteFromSession } from "@/lib/require-dashboard-write.server";
+import { requireDashboardWriteClient } from "@/lib/require-dashboard-write.server";
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
 import { normalizeSettings } from "@/lib/normalize-settings";
 import { parseSettingsForm, parseWatchlistSymbols } from "@/lib/validate-settings";
+
+type DashboardSupabase = Awaited<ReturnType<typeof requireDashboardWriteClient>>;
 
 function revalidateEntryBlockPaths() {
   revalidatePath("/settings");
@@ -22,9 +24,75 @@ function revalidateEntryBlockPaths() {
   revalidatePath("/strategy");
 }
 
+function revalidateTradePaths() {
+  revalidatePath("/");
+  revalidatePath("/trades");
+}
+
+/** Insert a manual command row unless one for the same target is still pending or processing. */
+async function enqueueCommand(
+  supabase: DashboardSupabase,
+  table: "entry_commands" | "trade_commands" | "position_commands",
+  match: { column: "symbol" | "trade_id"; value: string },
+  row: Record<string, unknown>,
+  duplicateMessage: string,
+) {
+  const { data: existing } = await supabase
+    .from(table)
+    .select("id")
+    .eq(match.column, match.value)
+    .in("status", ["pending", "processing"])
+    .maybeSingle();
+
+  if (existing) {
+    throw new Error(duplicateMessage);
+  }
+
+  const { error } = await supabase.from(table).insert({ ...row, reason: "manual_dashboard" });
+  if (error) throw new Error(error.message);
+}
+
+function withoutSymbol(list: string[] | null, symbol: string): string[] {
+  return (list ?? []).map((item) => item.toUpperCase()).filter((item) => item && item !== symbol);
+}
+
+async function setShutdownRequested(requested: boolean) {
+  const supabase = await requireDashboardWriteClient();
+  const { data: status, error: readError } = await supabase
+    .from("bot_status")
+    .select("last_heartbeat, shutdown_requested")
+    .eq("id", 1)
+    .single();
+  if (readError || !status) {
+    throw new Error(readError?.message ?? "Could not read bot status");
+  }
+  const online = isTraderOnline(status.last_heartbeat);
+  if (requested) {
+    if (!online) {
+      throw new Error(
+        "Trader is offline — stop the process in your terminal (Ctrl+C), or start it first to use Stop engine",
+      );
+    }
+    if (status.shutdown_requested) return;
+  } else {
+    if (!status.shutdown_requested) return;
+    if (online) {
+      throw new Error("Engine is still stopping — wait for it to go offline");
+    }
+  }
+  const { error } = await supabase
+    .from("bot_status")
+    .update({
+      shutdown_requested: requested,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", 1);
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}
+
 export async function updateSettings(formData: FormData) {
-  const supabase = await createClient();
-  await assertDashboardWriteFromSession(supabase);
+  const supabase = await requireDashboardWriteClient();
   const parsed = parseSettingsForm(formData);
   const equityForBaseline = await resolveCurrentEquity();
 
@@ -39,15 +107,12 @@ export async function updateSettings(formData: FormData) {
 
   const { error } = await supabase.from("settings").update(payload).eq("id", 1);
   if (error) throw new Error(error.message);
-  revalidatePath("/settings");
-  revalidatePath("/");
-  revalidatePath("/strategy");
+  revalidateEntryBlockPaths();
 }
 
 export async function blockSymbolFromEntries(symbol: string) {
   const [normalized] = parseWatchlistSymbols([symbol]);
-  const supabase = await createClient();
-  await assertDashboardWriteFromSession(supabase);
+  const supabase = await requireDashboardWriteClient();
 
   const { data: settings, error: readError } = await supabase
     .from("settings")
@@ -78,9 +143,7 @@ export async function blockSymbolFromEntries(symbol: string) {
   };
 
   if (settings.watchlist_rotation_enabled) {
-    let nextActive = (settings.watchlist_active as string[] | null ?? [])
-      .map((item) => item.toUpperCase())
-      .filter((item) => item && item !== normalized);
+    let nextActive = withoutSymbol(settings.watchlist_active as string[] | null, normalized);
     if (nextActive.length === 0) {
       nextActive = seedActiveWatchlistFromPool(
         (settings.watchlist_pool as string[] | null) ?? [],
@@ -90,9 +153,7 @@ export async function blockSymbolFromEntries(symbol: string) {
     }
     payload.watchlist_active = nextActive;
   } else {
-    const nextWatchlist = (settings.watchlist as string[] | null ?? [])
-      .map((item) => item.toUpperCase())
-      .filter((item) => item && item !== normalized);
+    const nextWatchlist = withoutSymbol(settings.watchlist as string[] | null, normalized);
     if (nextWatchlist.length < 1) {
       throw new Error("Keep at least one symbol on the watchlist.");
     }
@@ -106,8 +167,7 @@ export async function blockSymbolFromEntries(symbol: string) {
 
 export async function unblockSymbolFromEntries(symbol: string) {
   const [normalized] = parseWatchlistSymbols([symbol]);
-  const supabase = await createClient();
-  await assertDashboardWriteFromSession(supabase);
+  const supabase = await requireDashboardWriteClient();
 
   const { data: settings, error: readError } = await supabase
     .from("settings")
@@ -142,92 +202,36 @@ export async function unblockSymbolFromEntries(symbol: string) {
 
 export async function updateWatchlist(symbols: string[]) {
   const watchlist = parseWatchlistSymbols(symbols);
-  const supabase = await createClient();
-  await assertDashboardWriteFromSession(supabase);
+  const supabase = await requireDashboardWriteClient();
 
   const { error } = await supabase
     .from("settings")
     .update({ watchlist, updated_at: new Date().toISOString() })
     .eq("id", 1);
   if (error) throw new Error(error.message);
-  revalidatePath("/settings");
-  revalidatePath("/");
-  revalidatePath("/strategy");
+  revalidateEntryBlockPaths();
 }
 
 export async function setAutoTradingEnabled(enabled: boolean) {
-  const supabase = await createClient();
-  await assertDashboardWriteFromSession(supabase);
+  const supabase = await requireDashboardWriteClient();
   const { error } = await supabase
     .from("bot_status")
     .update({ enabled, updated_at: new Date().toISOString() })
     .eq("id", 1);
   if (error) throw new Error(error.message);
-  revalidatePath("/");
-  revalidatePath("/trades");
+  revalidateTradePaths();
 }
 
 export async function requestTraderShutdown() {
-  const supabase = await createClient();
-  await assertDashboardWriteFromSession(supabase);
-  const { data: status, error: readError } = await supabase
-    .from("bot_status")
-    .select("last_heartbeat, shutdown_requested")
-    .eq("id", 1)
-    .single();
-  if (readError || !status) {
-    throw new Error(readError?.message ?? "Could not read bot status");
-  }
-  if (!isTraderOnline(status.last_heartbeat)) {
-    throw new Error(
-      "Trader is offline — stop the process in your terminal (Ctrl+C), or start it first to use Stop engine",
-    );
-  }
-  if (status.shutdown_requested) {
-    return;
-  }
-  const { error } = await supabase
-    .from("bot_status")
-    .update({
-      shutdown_requested: true,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", 1);
-  if (error) throw new Error(error.message);
-  revalidatePath("/");
+  await setShutdownRequested(true);
 }
 
 export async function cancelTraderShutdown() {
-  const supabase = await createClient();
-  await assertDashboardWriteFromSession(supabase);
-  const { data: status, error: readError } = await supabase
-    .from("bot_status")
-    .select("last_heartbeat, shutdown_requested")
-    .eq("id", 1)
-    .single();
-  if (readError || !status) {
-    throw new Error(readError?.message ?? "Could not read bot status");
-  }
-  if (!status.shutdown_requested) {
-    return;
-  }
-  if (isTraderOnline(status.last_heartbeat)) {
-    throw new Error("Engine is still stopping — wait for it to go offline");
-  }
-  const { error } = await supabase
-    .from("bot_status")
-    .update({
-      shutdown_requested: false,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", 1);
-  if (error) throw new Error(error.message);
-  revalidatePath("/");
+  await setShutdownRequested(false);
 }
 
 export async function requestManualBuy(symbol: string) {
-  const supabase = await createClient();
-  await assertDashboardWriteFromSession(supabase);
+  const supabase = await requireDashboardWriteClient();
   const normalized = symbol.trim().toUpperCase();
   if (!normalized) {
     throw new Error("Symbol is required");
@@ -250,32 +254,18 @@ export async function requestManualBuy(symbol: string) {
     throw new Error(`${normalized} is not on your active watchlist`);
   }
 
-  const { data: existing } = await supabase
-    .from("entry_commands")
-    .select("id")
-    .eq("symbol", normalized)
-    .in("status", ["pending", "processing"])
-    .maybeSingle();
-
-  if (existing) {
-    throw new Error("Buy already requested for this symbol");
-  }
-
-  const { error } = await supabase.from("entry_commands").insert({
-    symbol: normalized,
-    command: "buy",
-    reason: "manual_dashboard",
-  });
-
-  if (error) throw new Error(error.message);
-
-  revalidatePath("/");
-  revalidatePath("/trades");
+  await enqueueCommand(
+    supabase,
+    "entry_commands",
+    { column: "symbol", value: normalized },
+    { symbol: normalized, command: "buy" },
+    "Buy already requested for this symbol",
+  );
+  revalidateTradePaths();
 }
 
 export async function requestClosePosition(tradeId: string) {
-  const supabase = await createClient();
-  await assertDashboardWriteFromSession(supabase);
+  const supabase = await requireDashboardWriteClient();
 
   const { data: trade, error: tradeError } = await supabase
     .from("trades")
@@ -290,32 +280,18 @@ export async function requestClosePosition(tradeId: string) {
     throw new Error("Trade is not open");
   }
 
-  const { data: existing } = await supabase
-    .from("trade_commands")
-    .select("id")
-    .eq("trade_id", tradeId)
-    .in("status", ["pending", "processing"])
-    .maybeSingle();
-
-  if (existing) {
-    throw new Error("Close already requested for this trade");
-  }
-
-  const { error } = await supabase.from("trade_commands").insert({
-    trade_id: tradeId,
-    command: "close",
-    reason: "manual_dashboard",
-  });
-
-  if (error) throw new Error(error.message);
-
-  revalidatePath("/");
-  revalidatePath("/trades");
+  await enqueueCommand(
+    supabase,
+    "trade_commands",
+    { column: "trade_id", value: tradeId },
+    { trade_id: tradeId, command: "close" },
+    "Close already requested for this trade",
+  );
+  revalidateTradePaths();
 }
 
 export async function requestCoverShort(symbol: string, quantity: number) {
-  const supabase = await createClient();
-  await assertDashboardWriteFromSession(supabase);
+  const supabase = await requireDashboardWriteClient();
   const normalized = symbol.trim().toUpperCase();
   const qty = Math.trunc(quantity);
 
@@ -326,26 +302,13 @@ export async function requestCoverShort(symbol: string, quantity: number) {
     throw new Error("Cover quantity must be at least 1 share");
   }
 
-  const { data: existing } = await supabase
-    .from("position_commands")
-    .select("id")
-    .eq("symbol", normalized)
-    .in("status", ["pending", "processing"])
-    .maybeSingle();
-
-  if (existing) {
-    throw new Error("Cover already requested for this symbol");
-  }
-
-  const { error } = await supabase.from("position_commands").insert({
-    symbol: normalized,
-    quantity: qty,
-    command: "cover_short",
-    reason: "manual_dashboard",
-  });
-
-  if (error) throw new Error(error.message);
-
+  await enqueueCommand(
+    supabase,
+    "position_commands",
+    { column: "symbol", value: normalized },
+    { symbol: normalized, quantity: qty, command: "cover_short" },
+    "Cover already requested for this symbol",
+  );
   revalidatePath("/");
 }
 
