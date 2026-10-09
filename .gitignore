@@ -75,3 +75,6 @@ market-pilot-v*.zip
 !.agents/skills/evaluate-prediction-strategy/
 !.agents/skills/evaluate-prediction-strategy/**
 skills-lock.json
+
+# Local MCP config (contains access token)
+.mcp.json
