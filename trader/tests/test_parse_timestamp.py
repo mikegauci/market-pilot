@@ -28,5 +28,23 @@ class TestParseTimestamp(unittest.TestCase):
         self.assertIs(_parse_timestamp(dt), dt)
 
 
+class FiveDigitFractionCallersTest(unittest.TestCase):
+    RAW = "2026-09-28T14:02:50.99074+00:00"
+
+    def test_heartbeat_parse(self) -> None:
+        from runtime.shutdown_control import _parse_heartbeat_iso
+
+        parsed = _parse_heartbeat_iso(self.RAW)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.microsecond, 990740)
+
+    def test_entry_blocked_at_parse(self) -> None:
+        from watchlist.entry_blocks import _parse_blocked_at
+
+        parsed = _parse_blocked_at({"aapl": self.RAW})
+        self.assertEqual(parsed["AAPL"].microsecond, 990740)
+
+
+
 if __name__ == "__main__":
     unittest.main()

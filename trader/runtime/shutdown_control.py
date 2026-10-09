@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
+from models.timestamps import parse_iso_timestamp
+
 
 # Keep in sync with dashboard/lib/trader-status.ts HEARTBEAT_STALE_SEC.
 HEARTBEAT_STALE_SEC = 30
@@ -18,14 +20,10 @@ class StartupShutdownAction(str, Enum):
 def _parse_heartbeat_iso(last_heartbeat: Optional[str]) -> Optional[datetime]:
     if not last_heartbeat:
         return None
-    raw = last_heartbeat.replace("Z", "+00:00")
     try:
-        parsed = datetime.fromisoformat(raw)
+        return parse_iso_timestamp(last_heartbeat)
     except ValueError:
         return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed
 
 
 def heartbeat_age_sec(

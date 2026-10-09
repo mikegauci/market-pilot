@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
+from models.timestamps import parse_iso_timestamp
 from models.types import RiskSettings
 from watchlist.resolution import entry_blocked_symbol_set
 
@@ -18,13 +19,9 @@ def _parse_blocked_at(raw: object) -> Dict[str, datetime]:
         if not symbol or value is None:
             continue
         try:
-            text = str(value).replace("Z", "+00:00")
-            stamped = datetime.fromisoformat(text)
+            parsed[symbol] = parse_iso_timestamp(value)
         except ValueError:
             continue
-        if stamped.tzinfo is None:
-            stamped = stamped.replace(tzinfo=timezone.utc)
-        parsed[symbol] = stamped
     return parsed
 
 

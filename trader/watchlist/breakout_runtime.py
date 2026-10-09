@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional, Sequence
 from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
 from market.session import session_change_pct_for_rotation
+from models.timestamps import parse_iso_timestamp
 from models.types import Quote, RiskSettings
 from runtime.state import TraderRuntimeState
 from strategy.config import StrategyConfig
@@ -213,11 +214,9 @@ def restore_breakout_windows(
         if not isinstance(raw_until, str):
             continue
         try:
-            until = datetime.fromisoformat(raw_until)
+            until = parse_iso_timestamp(raw_until)
         except ValueError:
             continue
-        if until.tzinfo is None:
-            until = until.replace(tzinfo=timezone.utc)
         remaining = (until - now_wall).total_seconds()
         if remaining <= 0:
             continue

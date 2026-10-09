@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -16,6 +15,7 @@ from risk.recommendations import should_advance_baseline
 from market.bars import BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, Bar
 from market.hours import trading_day_start_utc
 from strategy.exits import normalize_profit_take_fractions
+from models.timestamps import normalize_iso_timestamp, parse_iso_timestamp
 from models.types import (
     AccountSummary,
     BotControl,
@@ -112,18 +112,7 @@ def _build_supabase_http_client() -> httpx.Client:
 
 
 # Postgres may return variable fractional digits (e.g. .99074); Python 3.9 needs 6.
-_ISO_FRACTION = re.compile(r"\.(\d+)([+-])")
-
-
-def _normalize_iso_timestamp(text: str) -> str:
-    text = text.replace("Z", "+00:00")
-
-    def repl(match: re.Match[str]) -> str:
-        frac = match.group(1)
-        tz_sep = match.group(2)
-        return f".{frac[:6]:0<6}{tz_sep}"
-
-    return _ISO_FRACTION.sub(repl, text, count=1)
+_normalize_iso_timestamp = normalize_iso_timestamp
 
 
 def _ensure_utc_iso(value: datetime) -> str:
@@ -131,12 +120,7 @@ def _ensure_utc_iso(value: datetime) -> str:
     return parsed.astimezone(timezone.utc).isoformat()
 
 
-def _parse_timestamp(value: object) -> datetime:
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    text = _normalize_iso_timestamp(str(value))
-    parsed = datetime.fromisoformat(text)
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+_parse_timestamp = parse_iso_timestamp
 
 
 def _trade_from_row(row: dict) -> TradeRecord:
