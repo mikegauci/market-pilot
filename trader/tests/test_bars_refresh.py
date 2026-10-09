@@ -75,7 +75,7 @@ class BarRefreshTests(unittest.TestCase):
         repo = InMemoryBarRepo()
         store = BarStore(repo, backfill_pacing_sec=1.0)
 
-        def fake_backfill(symbol: str, fetcher: object, *, force: bool = False):
+        def fake_backfill(symbol: str, fetcher: object, *, force: bool = False, intraday_max_age=None):
             if symbol == "AMD":
                 return BackfillSymbolResult(symbol, "skipped_fresh")
             return BackfillSymbolResult(symbol, "refreshed")

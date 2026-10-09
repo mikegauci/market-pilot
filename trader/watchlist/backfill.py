@@ -67,6 +67,7 @@ def backfill_watchlist_symbols(
         ibkr,
         pacing_sec=settings.bar_backfill_pacing_sec,
         on_progress=on_progress,
+        open_symbols=open_priority,
     )
     logger.info(
         "Watchlist bar backfill complete — refreshed %s/%s symbol(s)",
@@ -152,6 +153,7 @@ def run_phased_startup_backfill(
         ibkr,
         pacing_sec=settings.bar_backfill_pacing_sec,
         on_progress=on_progress,
+        open_symbols=open_symbols,
     )
     logger.info(
         "Critical startup backfill complete — refreshed %s/%s symbol(s)",

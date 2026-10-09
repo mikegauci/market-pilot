@@ -413,8 +413,13 @@ class BarStore:
         fetcher: object,
         *,
         force: bool = False,
+        intraday_max_age: Optional[timedelta] = None,
     ) -> BackfillSymbolResult:
-        """Fetch missing bar sizes from IBKR and persist."""
+        """Fetch missing bar sizes from IBKR and persist.
+
+        ``intraday_max_age`` must match the freshness the caller used to pick the symbol
+        (e.g. ``OPEN_POSITION_INTRADAY_FRESHNESS``), or a stale open position is skipped here.
+        """
         from broker.ibkr import IBKRClient
 
         symbol = symbol.upper()
@@ -430,7 +435,9 @@ class BarStore:
 
         now = datetime.now(timezone.utc)
         needs_daily = force or self.needs_daily_refresh(symbol, now)
-        needs_intraday = force or self.needs_intraday_refresh(symbol, now)
+        needs_intraday = force or self.needs_intraday_refresh(
+            symbol, now, max_age=intraday_max_age
+        )
         if not needs_daily and not needs_intraday:
             return BackfillSymbolResult(symbol, "skipped_fresh", message="Cache still fresh")
 
@@ -507,13 +514,22 @@ class BarStore:
         force: bool = False,
         pacing_sec: Optional[float] = None,
         on_progress: Optional[Callable[[BackfillSymbolResult, int, int], None]] = None,
+        open_symbols: Sequence[str] = (),
     ) -> BackfillSummary:
-        """Paced backfill for many symbols."""
+        """Paced backfill for many symbols. ``open_symbols`` use the tighter open-position intraday freshness."""
+        open_set = {s.upper() for s in open_symbols if s}
         delay = pacing_sec if pacing_sec is not None else self.backfill_pacing_sec
         results: List[BackfillSymbolResult] = []
         total = len(symbols)
         for index, symbol in enumerate(symbols):
-            result = self.backfill_symbol(symbol, fetcher, force=force)
+            result = self.backfill_symbol(
+                symbol,
+                fetcher,
+                force=force,
+                intraday_max_age=(
+                    OPEN_POSITION_INTRADAY_FRESHNESS if symbol.upper() in open_set else None
+                ),
+            )
             results.append(result)
             if on_progress is not None:
                 on_progress(result, index + 1, total)

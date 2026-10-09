@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from broker.ibkr import IBKRClient
-from market.bars import BAR_SIZE_DAILY, BAR_SIZE_INTRADAY, Bar, BarStore
+from market.bars import (
+    BAR_SIZE_DAILY,
+    BAR_SIZE_INTRADAY,
+    OPEN_POSITION_INTRADAY_FRESHNESS,
+    Bar,
+    BarStore,
+)
 
 
 class FakeIBKR(IBKRClient):
@@ -95,6 +101,29 @@ class BackfillMetadataTests(unittest.TestCase):
         self.assertEqual(result.status, "refreshed")
         self.assertIn(("NU", BAR_SIZE_DAILY), repo.meta)
         self.assertIn(("NU", BAR_SIZE_INTRADAY), repo.meta)
+
+    def test_open_position_freshness_is_used_when_fetching(self) -> None:
+        """An open-position symbol picked as stale (>5m) must not be re-skipped by the 30m default."""
+        repo = InMemoryBarRepo()
+        store = BarStore(repo, backfill_pacing_sec=0)
+        now = datetime.now(timezone.utc)
+        ten_min_ago = now - timedelta(minutes=10)
+        repo.upsert_bars(
+            [
+                Bar("NU", BAR_SIZE_DAILY, now, 10, 10, 10, 10, 100),
+                Bar("NU", BAR_SIZE_INTRADAY, ten_min_ago, 10, 10, 10, 10, 100),
+            ]
+        )
+        repo.set_last_fetched_at("NU", BAR_SIZE_DAILY, now)
+        repo.set_last_fetched_at("NU", BAR_SIZE_INTRADAY, ten_min_ago)
+
+        self.assertTrue(
+            store.needs_backfill("NU", intraday_max_age=OPEN_POSITION_INTRADAY_FRESHNESS)
+        )
+        fetcher = FakeIBKR([[Bar("NU", BAR_SIZE_INTRADAY, now, 10, 10, 10, 10, 100)]])
+        summary = store.backfill_universe(["NU"], fetcher, pacing_sec=0, open_symbols=["NU"])
+
+        self.assertEqual(summary.results[0].status, "refreshed")
 
     def test_unqualified_symbol_does_not_crash(self) -> None:
         repo = InMemoryBarRepo()
