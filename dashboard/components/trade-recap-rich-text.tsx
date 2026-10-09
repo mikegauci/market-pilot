@@ -16,14 +16,16 @@ export function TradeRecapRichText({
   tone?: TradeRecapTone;
 }) {
   const parts = text.split(RECAP_TOKEN_PATTERN);
-  let offset = 0;
+  const offsets = parts.reduce<number[]>(
+    (acc, part, index) => [...acc, index === 0 ? 0 : acc[index - 1] + parts[index - 1].length],
+    [],
+  );
 
   return (
     <>
       {parts.map((part, index) => {
         if (!part) return null;
-        const before = text.slice(0, offset);
-        offset += part.length;
+        const before = text.slice(0, offsets[index]);
         const style = styleRecapToken(part, before, tone);
         const className = recapTokenClassName(style);
         if (className) {

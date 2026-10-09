@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const getClaims = vi.fn();
+const getUser = vi.fn();
 
 vi.mock("@supabase/ssr", () => ({
   createServerClient: vi.fn(() => ({
-    auth: { getClaims },
+    auth: { getUser },
   })),
 }));
 
@@ -13,11 +13,11 @@ import { updateSession } from "@/lib/supabase/middleware";
 
 describe("updateSession", () => {
   beforeEach(() => {
-    getClaims.mockReset();
+    getUser.mockReset();
   });
 
   it("redirects unauthenticated users away from app routes", async () => {
-    getClaims.mockResolvedValue({ data: null });
+    getUser.mockResolvedValue({ data: { user: null } });
 
     const request = new NextRequest("http://localhost:3000/settings");
     const response = await updateSession(request);
@@ -28,7 +28,7 @@ describe("updateSession", () => {
   });
 
   it("allows unauthenticated access to login", async () => {
-    getClaims.mockResolvedValue({ data: null });
+    getUser.mockResolvedValue({ data: { user: null } });
 
     const request = new NextRequest("http://localhost:3000/login");
     const response = await updateSession(request);
@@ -37,8 +37,8 @@ describe("updateSession", () => {
   });
 
   it("redirects signed-in users away from login", async () => {
-    getClaims.mockResolvedValue({
-      data: { claims: { sub: "user-1", email: "a@example.com" } },
+    getUser.mockResolvedValue({
+      data: { user: { id: "user-1", email: "a@example.com" } },
     });
 
     const request = new NextRequest("http://localhost:3000/login");

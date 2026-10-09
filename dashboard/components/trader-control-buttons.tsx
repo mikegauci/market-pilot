@@ -20,11 +20,14 @@ import {
 import { getDisplayStatus, isStopRequestStale } from "@/lib/trader-status";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useNowTick } from "@/lib/hooks/use-now-tick";
 
 export function TraderControlButtons({ className }: { className?: string }) {
   const readOnly = useReadOnly();
   const status = useLiveBotStatus();
-  const display = getDisplayStatus(status);
+  // bot_status stops changing when the trader goes down, so tick to let the heartbeat age out.
+  const now = useNowTick();
+  const display = getDisplayStatus(status, now);
   const [isPending, startTransition] = useTransition();
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -35,7 +38,7 @@ export function TraderControlButtons({ className }: { className?: string }) {
 
   const traderOnline = display.traderOnline;
   const stopRequested = Boolean(status.shutdown_requested);
-  const stopStale = isStopRequestStale(status);
+  const stopStale = isStopRequestStale(status, now);
   const stopping = stopRequested && traderOnline;
   const autoTradingOn = status.enabled;
 

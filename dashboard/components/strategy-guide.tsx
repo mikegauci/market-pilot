@@ -149,7 +149,6 @@ type StrategyGuideProps = {
 export function StrategyGuide({
   settings,
   benchmarkSymbol,
-  minVolumeRatio: _minVolumeRatio,
   variant = "full",
   embedded = false,
   compact = false,

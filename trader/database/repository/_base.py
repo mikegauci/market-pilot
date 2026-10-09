@@ -26,6 +26,7 @@ class SupabaseRepositoryBase:
         self._cached_risk_sync_equity: Optional[float] = None
         self._cached_risk_sync_account_id: Optional[str] = None
         self._profile_capital_cache: Dict[str, float] = {}
+        self._last_reclaim_mono: Dict[str, float] = {}
         self._known_position_symbols: Optional[set[str]] = None
         self._legacy_untagged_cache: Dict[str, bool] = {}
 

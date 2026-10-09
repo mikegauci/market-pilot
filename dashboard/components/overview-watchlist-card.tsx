@@ -16,6 +16,7 @@ import type { EntryCommand } from "@/lib/types/database";
 import { mergeEntryBlockedSymbols } from "@/lib/entry-blocked-symbols";
 import { fetchActiveEntryCommands } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
+import { useNowTick } from "@/lib/hooks/use-now-tick";
 import { useLatestPredictions } from "@/lib/latest-predictions-context";
 import { watchlistMovesFromPredictions } from "@/lib/market-condition";
 import type { Settings } from "@/lib/types/database";
@@ -65,7 +66,7 @@ export function OverviewWatchlistCard({
     [openSymbols],
   );
   const liveBotStatus = useLiveBotStatus();
-  const traderOnline = isTraderOnline(liveBotStatus.last_heartbeat);
+  const traderOnline = isTraderOnline(liveBotStatus.last_heartbeat, useNowTick());
   const fetchEntryCommands = useCallback(() => fetchActiveEntryCommands(), []);
   const liveEntryCommands = useLiveQuery(
     initialEntryCommands,

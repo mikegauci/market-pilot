@@ -23,9 +23,11 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // getClaims verifies the JWT locally (no Auth round trip) and still refreshes expiring sessions.
-  const { data } = await supabase.auth.getClaims();
-  const user = data?.claims ?? null;
+  // getUser asks the Auth server on every request, so banned/revoked/deleted users are rejected
+  // on soft navigations too (the dashboard layout only re-runs on a full page load).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const isLogin = request.nextUrl.pathname.startsWith("/login");
   const isAuthCallback = request.nextUrl.pathname.startsWith("/auth");

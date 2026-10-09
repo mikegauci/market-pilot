@@ -127,12 +127,19 @@ export function useLiveQuery<T>(
   }, [initial, keepPreviousOnNull, keepPreviousOnEmpty]);
 
   useEffect(() => {
-    const kickoff = skipInitialFetch ? null : window.setTimeout(() => void refresh(), 0);
+    // Only trust server data that has content: null/empty may be a swallowed read error, so refetch.
+    const serverSeeded =
+      skipInitialFetch &&
+      initial !== null &&
+      initial !== undefined &&
+      !(Array.isArray(initial) && initial.length === 0);
+    const kickoff = serverSeeded ? null : window.setTimeout(() => void refresh(), 0);
     const id = setInterval(() => void refresh(), pollIntervalMs);
     return () => {
       if (kickoff !== null) window.clearTimeout(kickoff);
       clearInterval(id);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial is read only at mount
   }, [refresh, pollIntervalMs, skipInitialFetch]);
 
   const realtimeTables = liveRealtimeTables(tables);

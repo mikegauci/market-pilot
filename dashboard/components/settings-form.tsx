@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { BriefSettingDiff } from "@/components/brief-setting-diff";
 import {
   RiskField,
@@ -87,9 +87,11 @@ export function SettingsForm({
     setWatchlistDraft(slice);
   }, []);
 
-  useEffect(() => {
+  const [baselineUpdatedAt, setBaselineUpdatedAt] = useState(settings.updated_at);
+  if (baselineUpdatedAt !== settings.updated_at) {
+    setBaselineUpdatedAt(settings.updated_at);
     setSavedBaseline(settingsToFormDraft(settings));
-  }, [settings.updated_at]);
+  }
   const [riskPerTrade, setRiskPerTrade] = useState(settings.risk_per_trade);
   const [maxPositionSize, setMaxPositionSize] = useState(settings.max_position_size);
   const [maxDailyLoss, setMaxDailyLoss] = useState(settings.max_daily_loss);

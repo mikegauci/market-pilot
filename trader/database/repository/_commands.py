@@ -12,12 +12,12 @@ RECLAIM_MIN_INTERVAL_SEC = 30.0
 class SupabaseCommandsMixin:
     def _reclaim_due(self, table: str) -> bool:
         """Throttle stale-command reclaim per table; the first call always runs."""
-        last = self.__dict__.get("_last_reclaim_mono", {})
+        last = self._last_reclaim_mono
         return table not in last or time.monotonic() - last[table] >= RECLAIM_MIN_INTERVAL_SEC
 
     def _reclaim_done(self, table: str) -> None:
         """Record a successful reclaim, so a failed UPDATE is retried on the next poll."""
-        self.__dict__.setdefault("_last_reclaim_mono", {})[table] = time.monotonic()
+        self._last_reclaim_mono[table] = time.monotonic()
 
     @_db_synchronized
     def reclaim_stale_trade_commands(self, stale_after_sec: float = 120.0) -> int:

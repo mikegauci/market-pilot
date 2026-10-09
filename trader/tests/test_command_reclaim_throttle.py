@@ -11,6 +11,7 @@ from database.repository._commands import SupabaseCommandsMixin
 class _Repo(SupabaseCommandsMixin):
     def __init__(self) -> None:
         self._lock = threading.RLock()
+        self._last_reclaim_mono = {}
         self.client = MagicMock()
         self.client.table.return_value.update.return_value.eq.return_value.lt.return_value.execute.return_value.data = []
 
