@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
+from risk.pnl import close_pnl
 from models.types import (
     ClosedTrade,
     JevPrediction,
@@ -51,24 +52,46 @@ def _record_ibkr_close(
     risk_manager: RiskManager,
     db: SupabaseRepository,
 ) -> None:
-    entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
-    exit_comm = _exit_commission(fill, risk_manager, fill.quantity)
-    gross_pnl = (fill.price - trade.entry_price) * fill.quantity
-    net_pnl = gross_pnl - entry_comm - exit_comm
+    _book_ibkr_close(
+        trade,
+        fill.price,
+        reason,
+        risk_manager,
+        db,
+        quantity=fill.quantity,
+        exit_comm=_exit_commission(fill, risk_manager, fill.quantity),
+        filled_quantity=fill.quantity,
+    )
+
+
+def _book_ibkr_close(
+    trade: TradeRecord,
+    exit_price: float,
+    reason: str,
+    risk_manager: RiskManager,
+    db: SupabaseRepository,
+    *,
+    quantity: float,
+    exit_comm: float,
+    filled_quantity: Optional[float],
+) -> float:
+    """Persist an IBKR close and update the risk manager. Returns net P&L."""
+    gross_pnl, net_pnl = close_pnl(trade, exit_price, quantity, exit_comm)
     now = datetime.now(timezone.utc)
 
     db.close_trade(
         trade.id,
-        fill.price,
+        exit_price,
         now,
         gross_pnl,
         net_pnl,
         exit_reason=reason,
-        filled_quantity=fill.quantity,
+        filled_quantity=filled_quantity,
     )
     risk_manager.remove_open_trade(trade.id)
     risk_manager.record_closed_pnl(net_pnl)
     risk_manager.note_symbol_exit(trade.symbol, now)
+    return net_pnl
 
 
 def sync_ibkr_exits(
@@ -100,18 +123,7 @@ def sync_ibkr_exits(
             continue
 
         exit_price, reason = exit_info
-        entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
-        exit_comm = risk_manager.estimate_ibkr_commission(trade.quantity, round_trip=False)
-        gross_pnl = (exit_price - trade.entry_price) * trade.quantity
-        net_pnl = gross_pnl - entry_comm - exit_comm
-        now = datetime.now(timezone.utc)
-
-        db.close_trade(
-            trade.id, exit_price, now, gross_pnl, net_pnl, exit_reason=reason
-        )
-        risk_manager.remove_open_trade(trade.id)
-        risk_manager.record_closed_pnl(net_pnl)
-        risk_manager.note_symbol_exit(trade.symbol, now)
+        net_pnl = _record_ibkr_book_close(trade, exit_price, reason, risk_manager, db)
         closed_any = True
         logger.info(
             "IBKR exit %s @ $%.2f (%s) PnL $%.2f (net)",
@@ -171,30 +183,23 @@ def _record_ibkr_book_close(
     db: SupabaseRepository,
     *,
     filled_quantity: Optional[float] = None,
-) -> None:
+) -> float:
+    """Book-only close at `exit_price` with an estimated exit commission. Returns net P&L."""
     qty = (
         filled_quantity
         if filled_quantity is not None
         else float(trade.quantity)
     )
-    entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
-    exit_comm = risk_manager.estimate_ibkr_commission(qty, round_trip=False)
-    gross_pnl = (exit_price - trade.entry_price) * qty
-    net_pnl = gross_pnl - entry_comm - exit_comm
-    now = datetime.now(timezone.utc)
-
-    db.close_trade(
-        trade.id,
+    return _book_ibkr_close(
+        trade,
         exit_price,
-        now,
-        gross_pnl,
-        net_pnl,
-        exit_reason=reason,
+        reason,
+        risk_manager,
+        db,
+        quantity=qty,
+        exit_comm=risk_manager.estimate_ibkr_commission(qty, round_trip=False),
         filled_quantity=filled_quantity,
     )
-    risk_manager.remove_open_trade(trade.id)
-    risk_manager.record_closed_pnl(net_pnl)
-    risk_manager.note_symbol_exit(trade.symbol, now)
 
 
 def build_ibkr_flat_closed_trade(
@@ -208,10 +213,9 @@ def build_ibkr_flat_closed_trade(
         trade, ibkr, quotes_by_symbol
     )
     qty = float(trade.quantity)
-    entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
-    exit_comm = risk_manager.estimate_ibkr_commission(qty, round_trip=False)
-    gross_pnl = (exit_price - trade.entry_price) * qty
-    net_pnl = gross_pnl - entry_comm - exit_comm
+    gross_pnl, net_pnl = close_pnl(
+        trade, exit_price, qty, risk_manager.estimate_ibkr_commission(qty, round_trip=False)
+    )
     now = datetime.now(timezone.utc)
     return ClosedTrade(
         trade_id=trade.id,

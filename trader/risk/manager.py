@@ -13,6 +13,7 @@ from strategy.exits import (
 )
 
 from market.hours import trading_calendar_date
+from risk.pnl import close_pnl, entry_commission
 from strategy.config import StrategyConfig
 from strategy.exits import loss_cut_should_exit, profit_take_should_exit
 from strategy.profit_take_tracker import ProfitTakeBandTracker
@@ -614,12 +615,11 @@ class RiskManager:
         exit_price: float,
         reason: str,
     ) -> ClosedTrade:
-        gross_pnl = (exit_price - trade.entry_price) * trade.quantity
-        entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
+        entry_comm = entry_commission(trade)
         exit_comm = float(getattr(trade, "exit_commission", 0) or 0)
         if exit_comm <= 0:
             exit_comm = self.estimate_ibkr_commission(trade.quantity, round_trip=False)
-        net_pnl = gross_pnl - entry_comm - exit_comm
+        gross_pnl, net_pnl = close_pnl(trade, exit_price, trade.quantity, exit_comm)
         now = datetime.now(timezone.utc)
 
         self._ensure_current_trading_day()

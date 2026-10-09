@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Dict, Optional
 
 from broker.execution import build_ibkr_flat_closed_trade
+from risk.pnl import close_pnl
 from models.types import ClosedTrade, ExecutionMode, OrderFill, Quote, TradeRecord
 from database.command_queue import STALE_PROCESSING_SEC
 
@@ -96,14 +97,12 @@ def _execute_manual_close(
             tp_order_id=trade.ibkr_tp_order_id,
             fill_timeout_sec=fill_timeout_sec,
         )
-        entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
         exit_comm = (
             fill.commission
             if fill.commission > 0
             else risk_manager.estimate_ibkr_commission(fill.quantity, round_trip=False)
         )
-        gross_pnl = (fill.price - trade.entry_price) * fill.quantity
-        net_pnl = gross_pnl - entry_comm - exit_comm
+        gross_pnl, net_pnl = close_pnl(trade, fill.price, fill.quantity, exit_comm)
         now = datetime.now(timezone.utc)
         risk_manager.record_closed_pnl(net_pnl)
         return ClosedTrade(
