@@ -413,6 +413,7 @@ class SupabaseSettingsMixin:
         history = (row or {}).get("watchlist_rotation_history")
         return history if isinstance(history, list) else []
 
+    @_db_synchronized
     def save_watchlist_rotation(
         self,
         active: List[str],
@@ -433,19 +434,8 @@ class SupabaseSettingsMixin:
             # The dashboard counts down to the next rotation from this timestamp.
             payload["watchlist_last_rotation_at"] = datetime.now(timezone.utc).isoformat()
         if history_entry is not None:
-            existing: object = []
-            try:
-                row = (
-                    self.client.table("settings")
-                    .select("watchlist_rotation_history")
-                    .eq("id", 1)
-                    .single()
-                    .execute()
-                )
-                if row.data:
-                    existing = row.data.get("watchlist_rotation_history") or []
-            except Exception:
-                existing = []
+            row = self._select_settings_row("watchlist_rotation_history")
+            existing: object = (row or {}).get("watchlist_rotation_history") or []
             payload["watchlist_rotation_history"] = prepend_rotation_history(
                 existing, history_entry
             )

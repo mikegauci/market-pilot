@@ -4,6 +4,7 @@ from database.supabase_support import *  # noqa: F403
 from database.trade_account_scope import apply_trade_account_filter
 
 class SupabaseBotControlMixin:
+    @_db_synchronized
     def get_bot_control(
         self,
         fallback_execution_mode: ExecutionMode = ExecutionMode.IBKR,
