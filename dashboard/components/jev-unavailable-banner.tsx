@@ -1,12 +1,9 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useLiveBotStatus } from "@/components/bot-status-provider";
-import { useIsClient } from "@/lib/hooks/use-is-client";
-import { getMarketStatus, type MarketStatus } from "@/lib/market-hours";
+import { useLiveDisplayStatus } from "@/lib/hooks/use-display-status";
 import {
-  getDisplayStatus,
   getJevSignalsNotice,
   shouldShowJevUnavailableWarning,
 } from "@/lib/trader-status";
@@ -19,22 +16,7 @@ type JevUnavailableBannerProps = {
 
 export function JevUnavailableBanner({ compact = false, className }: JevUnavailableBannerProps) {
   const status = useLiveBotStatus();
-  const isClient = useIsClient();
-  const [market, setMarket] = useState<MarketStatus | null>(null);
-  const [display, setDisplay] = useState(() =>
-    getDisplayStatus(status, Date.parse(status.last_heartbeat ?? "") || Date.now()),
-  );
-
-  useEffect(() => {
-    if (!isClient) return;
-    const tick = () => {
-      setDisplay(getDisplayStatus(status));
-      setMarket(getMarketStatus());
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [isClient, status]);
+  const { isClient, display, market } = useLiveDisplayStatus(status);
 
   if (!isClient || !market?.isOpen) {
     return null;

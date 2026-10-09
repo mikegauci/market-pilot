@@ -1,17 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useNow } from "@/lib/hooks/use-now";
 
 /** Milliseconds remaining until `expiresAtMs`, updating about once per second. */
 export function useCountdownTo(expiresAtMs: number | null): number | null {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (expiresAtMs == null) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [expiresAtMs]);
-
+  const now = useNow(expiresAtMs != null, 1000);
   if (expiresAtMs == null) return null;
   return Math.max(0, expiresAtMs - now);
 }

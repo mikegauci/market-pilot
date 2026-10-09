@@ -1,14 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { initialDataChanged } from "@/lib/hooks/use-live-query";
+import { useCallback, useRef } from "react";
+import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import { createClient } from "@/lib/supabase/client";
-import { useRealtimeRefresh } from "@/lib/hooks/use-realtime-refresh";
-import { LIVE_DATA_POLL_MS } from "@/lib/live-data-config";
 import { clearTradeAccountScopeCache } from "@/lib/trade-account-scope";
 import type { BotStatus } from "@/lib/types/database";
 
-export async function fetchBotStatus(): Promise<BotStatus | null> {
+async function fetchBotStatus(): Promise<BotStatus | null> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("bot_status")
@@ -26,38 +24,21 @@ export async function fetchBotStatus(): Promise<BotStatus | null> {
 
 /** Keep bot_status fresh via client polling + Realtime (SSR props alone go stale). */
 export function useBotStatus(initialStatus: BotStatus): BotStatus {
-  const [status, setStatus] = useState(initialStatus);
-  const syncedInitialRef = useRef(initialStatus);
+  const accountIdRef = useRef(initialStatus.ibkr_account_id);
 
-  const refresh = useCallback(async () => {
+  // Clear the trade-scope cache before the new status reaches subscribers, so their
+  // account-keyed refetches resolve against the new account.
+  const fetchStatus = useCallback(async () => {
     const next = await fetchBotStatus();
-    if (!next) return;
-    setStatus((prev) => {
-      if (prev.ibkr_account_id !== next.ibkr_account_id) {
-        clearTradeAccountScopeCache();
-      }
-      return initialDataChanged(prev, next) ? next : prev;
-    });
+    if (next && next.ibkr_account_id !== accountIdRef.current) {
+      accountIdRef.current = next.ibkr_account_id;
+      clearTradeAccountScopeCache();
+    }
+    return next;
   }, []);
 
-  useEffect(() => {
-    if (!initialDataChanged(syncedInitialRef.current, initialStatus)) {
-      return;
-    }
-    syncedInitialRef.current = initialStatus;
-    setStatus(initialStatus);
-  }, [initialStatus]);
-
-  useEffect(() => {
-    const kickoff = window.setTimeout(() => void refresh(), 0);
-    const id = setInterval(() => void refresh(), LIVE_DATA_POLL_MS);
-    return () => {
-      window.clearTimeout(kickoff);
-      clearInterval(id);
-    };
-  }, [refresh]);
-
-  useRealtimeRefresh(["bot_status"], refresh);
-
-  return status;
+  // keepPreviousOnNull: a failed read never replaces the last good status.
+  return useLiveQuery<BotStatus | null>(initialStatus, fetchStatus, ["bot_status"], undefined, {
+    keepPreviousOnNull: true,
+  }) as BotStatus;
 }

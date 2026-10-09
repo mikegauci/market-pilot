@@ -20,20 +20,23 @@ const offlineFallback: BotStatus = {
 };
 
 function useTraderOnlineFromStatus(status: BotStatus): boolean {
-  const stableNow = getStableDisplayNow(status.last_heartbeat);
+  const lastHeartbeat = status.last_heartbeat;
   const isClient = useIsClient();
-  const [clock, setClock] = useState(0);
+  // Server/hydration render uses the heartbeat time as "now"; on the client re-check every second
+  // but only re-render callers when the online state actually flips.
+  const [online, setOnline] = useState(() =>
+    isTraderOnline(lastHeartbeat, getStableDisplayNow(lastHeartbeat)),
+  );
 
   useEffect(() => {
     if (!isClient) return;
-    const id = setInterval(() => setClock((value) => value + 1), 1000);
+    const tick = () => setOnline(isTraderOnline(lastHeartbeat));
+    tick();
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [isClient]);
+  }, [isClient, lastHeartbeat]);
 
-  void clock;
-  return isClient
-    ? isTraderOnline(status.last_heartbeat)
-    : isTraderOnline(status.last_heartbeat, stableNow);
+  return online;
 }
 
 /** Live trader online state (prefers shared bot_status from DashboardShell). */

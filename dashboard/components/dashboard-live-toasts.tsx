@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLiveBotStatus } from "@/components/bot-status-provider";
 import { tradeClosedToastVariant, useToast } from "@/components/toast-provider";
-import { fetchSettings, fetchTradesForTradingDay } from "@/lib/data-client";
+import { useLiveSettings } from "@/components/shell-live-data-provider";
+import { fetchTradesForTradingDay } from "@/lib/data-client";
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
 import {
@@ -18,28 +19,20 @@ import {
   watchlistDiff,
   watchlistToastDescription,
 } from "@/lib/live-event-diff";
-import { LIVE_SETTINGS_POLL_MS } from "@/lib/live-data-config";
 import { tradingDayStartUtc } from "@/lib/market-hours";
 import { createClient } from "@/lib/supabase/client";
 import { resolveTradeAccountScope } from "@/lib/trade-account-scope";
-import type { Settings, Trade } from "@/lib/types/database";
+import type { Trade } from "@/lib/types/database";
 import { formatCurrency } from "@/lib/utils";
 
 const EMPTY_TRADES: Trade[] = [];
 
-export function DashboardLiveToasts({
-  settings: initialSettings,
-}: {
-  settings: Settings | null;
-}) {
+export function DashboardLiveToasts() {
   const { push } = useToast();
   const botStatus = useLiveBotStatus();
   const [tradesScopeReady, setTradesScopeReady] = useState(false);
 
-  const loadSettings = useCallback(() => fetchSettings(), []);
-  const settings = useLiveQuery(initialSettings, loadSettings, ["settings"], LIVE_SETTINGS_POLL_MS, {
-    keepPreviousOnNull: true,
-  });
+  const settings = useLiveSettings();
 
   const tradesLiveFetchDoneRef = useRef(false);
   const loadTrades = useCallback(async () => {

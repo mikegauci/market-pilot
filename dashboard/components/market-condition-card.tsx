@@ -1,12 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/card";
-import { fetchSettings } from "@/lib/data-client";
+import { useLiveSettings } from "@/components/shell-live-data-provider";
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
-import { useLiveQuery } from "@/lib/hooks/use-live-query";
-import { LIVE_SETTINGS_POLL_MS } from "@/lib/live-data-config";
 import { useLatestPredictions } from "@/lib/latest-predictions-context";
 import { getMarketStatus } from "@/lib/market-hours";
 import { WatchlistMoveChip } from "@/components/watchlist-move-chip";
@@ -34,15 +32,7 @@ function useLiveMarketCondition(
   openSymbols: string[],
 ): { condition: MarketCondition; watchlist: string[] } {
   const livePredictions = useLatestPredictions(predictions);
-  const loadSettings = useCallback(() => fetchSettings(), []);
-
-  const liveSettings = useLiveQuery(
-    settings,
-    loadSettings,
-    ["settings"],
-    LIVE_SETTINGS_POLL_MS,
-    { keepPreviousOnNull: true },
-  );
+  const liveSettings = useLiveSettings(settings);
 
   const [isMarketOpen, setIsMarketOpen] = useState(true);
 

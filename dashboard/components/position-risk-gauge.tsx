@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useNow } from "@/lib/hooks/use-now";
 import {
   formatGaugePercent,
   formatPriceMoveFromEntry,
@@ -65,12 +65,7 @@ function formatCountdown(remainingMs: number): string {
 }
 
 export function PositionRiskGauge({ position, trade, settings }: Props) {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, []);
+  const now = useNow(true, 30_000);
 
   if (!trade) return null;
 

@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useIsClient } from "@/lib/hooks/use-is-client";
-import { getMarketStatus, type MarketStatus } from "@/lib/market-hours";
+import { useLiveDisplayStatus } from "@/lib/hooks/use-display-status";
+import type { MarketStatus } from "@/lib/market-hours";
 import { getBrokerNotice, getTradeModeCopy } from "@/lib/trade-mode";
 import { JevUnavailableBanner } from "@/components/jev-unavailable-banner";
-import { getDisplayStatus, getStableDisplayNow } from "@/lib/trader-status";
+import type { getDisplayStatus } from "@/lib/trader-status";
 import type { BotStatus } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 
@@ -16,22 +15,7 @@ export function StatusBadges({
   status: BotStatus;
   variant?: "default" | "sidebar";
 }) {
-  const stableNow = getStableDisplayNow(status.last_heartbeat);
-  const isClient = useIsClient();
-  const [display, setDisplay] = useState(() => getDisplayStatus(status, stableNow));
-  const [market, setMarket] = useState<MarketStatus | null>(null);
-
-  useEffect(() => {
-    if (!isClient) return;
-
-    const tick = () => {
-      setDisplay(getDisplayStatus(status));
-      setMarket(getMarketStatus());
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [isClient, status]);
+  const { isClient, display, market } = useLiveDisplayStatus(status);
 
   return (
     <StatusPanel

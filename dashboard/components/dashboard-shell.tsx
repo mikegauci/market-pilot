@@ -12,6 +12,7 @@ import { DashboardRightSidebar } from "@/components/dashboard-right-sidebar";
 import { IbkrAccountBadge } from "@/components/ibkr-account-badge";
 import { Logo } from "@/components/logo";
 import { OpenPositionsCountProvider } from "@/components/open-positions-count-provider";
+import { ShellLiveDataProvider } from "@/components/shell-live-data-provider";
 import { DashboardLiveToasts } from "@/components/dashboard-live-toasts";
 import { JevUnavailableBanner } from "@/components/jev-unavailable-banner";
 import { ToastProvider } from "@/components/toast-provider";
@@ -96,8 +97,9 @@ export function DashboardShell({
   return (
     <ToastProvider>
       <BotStatusProvider initialStatus={botStatus}>
+        <ShellLiveDataProvider initialSettings={settings}>
         <OpenPositionsCountProvider>
-          <DashboardLiveToasts settings={settings} />
+          <DashboardLiveToasts />
           <div className="flex min-h-screen">
           <aside
             className={cn(
@@ -165,6 +167,7 @@ export function DashboardShell({
           <DashboardRightSidebar />
           </div>
         </OpenPositionsCountProvider>
+        </ShellLiveDataProvider>
       </BotStatusProvider>
     </ToastProvider>
   );

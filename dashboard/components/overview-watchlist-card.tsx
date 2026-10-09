@@ -11,12 +11,11 @@ import { useLiveBotStatus } from "@/components/bot-status-provider";
 import { useReadOnly } from "@/components/read-only-provider";
 import { ManualBuyButton } from "@/components/manual-buy-button";
 import { blockSymbolFromEntries, updateWatchlist } from "@/lib/actions";
-import { isTraderOnline } from "@/lib/trader-status";
 import type { EntryCommand } from "@/lib/types/database";
 import { mergeEntryBlockedSymbols } from "@/lib/entry-blocked-symbols";
 import { fetchActiveEntryCommands } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
-import { useNowTick } from "@/lib/hooks/use-now-tick";
+import { useTraderOnline } from "@/lib/hooks/use-trader-online";
 import { useLatestPredictions } from "@/lib/latest-predictions-context";
 import { watchlistMovesFromPredictions } from "@/lib/market-condition";
 import type { Settings } from "@/lib/types/database";
@@ -66,7 +65,7 @@ export function OverviewWatchlistCard({
     [openSymbols],
   );
   const liveBotStatus = useLiveBotStatus();
-  const traderOnline = isTraderOnline(liveBotStatus.last_heartbeat, useNowTick());
+  const traderOnline = useTraderOnline(liveBotStatus);
   const fetchEntryCommands = useCallback(() => fetchActiveEntryCommands(), []);
   const liveEntryCommands = useLiveQuery(
     initialEntryCommands,

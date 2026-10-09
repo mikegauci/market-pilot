@@ -1,12 +1,9 @@
 "use client";
 
-import { useCallback } from "react";
 import { IbkrAccountBadge } from "@/components/ibkr-account-badge";
 import { useLiveBotStatus } from "@/components/bot-status-provider";
-import { fetchLatestPortfolio } from "@/lib/data-client";
+import { useLivePortfolio } from "@/components/shell-live-data-provider";
 import { useEquityFlash } from "@/lib/hooks/use-equity-flash";
-import { useLiveQuery } from "@/lib/hooks/use-live-query";
-import type { PortfolioSnapshot } from "@/lib/types/database";
 import { cn, formatCurrency } from "@/lib/utils";
 
 type NavEquityProps = {
@@ -17,17 +14,7 @@ export function NavEquity({ className }: NavEquityProps) {
   const botStatus = useLiveBotStatus();
   const tradingMode = botStatus.trading_mode === "live" ? "live" : "paper";
 
-  const fetchPortfolio = useCallback(() => fetchLatestPortfolio(), []);
-  const portfolio = useLiveQuery<PortfolioSnapshot | null>(
-    null,
-    fetchPortfolio,
-    ["portfolio_history", "bot_status"],
-    undefined,
-    {
-      keepPreviousOnNull: true,
-      resetKey: botStatus.ibkr_account_id,
-    },
-  );
+  const portfolio = useLivePortfolio();
 
   const equity = portfolio?.equity ?? null;
   const currency = portfolio?.currency ?? "USD";
