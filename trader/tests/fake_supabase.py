@@ -44,6 +44,7 @@ def fake_repository(client: FakeSupabaseClient):
     repo._lock = threading.RLock()
     repo._last_reclaim_mono = {}
     repo._profile_capital_cache = {}
+    repo._account_profile_cache = {}
     repo._cached_risk_sync_equity = None
     repo._cached_risk_sync_account_id = None
     repo._known_position_symbols = None

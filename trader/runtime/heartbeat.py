@@ -58,7 +58,7 @@ def run_heartbeat_cycle(
 
     if risk_manager:
         risk_manager.sync_daily_realized_for_trading_day(
-            db.get_daily_realized_pnl(active_ibkr_account_id)
+            lambda: db.get_daily_realized_pnl(active_ibkr_account_id)
         )
 
     if execution_mode == ExecutionMode.IBKR and ibkr.is_connected():

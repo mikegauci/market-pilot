@@ -82,12 +82,15 @@ class RiskManager:
             self.daily_realized_pnl = 0.0
             self._entries_today = {}
 
-    def sync_daily_realized_for_trading_day(self, realized_pnl: float) -> None:
-        """On a new trading day, reload realized P&L from persisted trades."""
+    def sync_daily_realized_for_trading_day(self, load_realized_pnl: Callable[[], float]) -> None:
+        """On a new trading day, reload realized P&L from persisted trades.
+
+        Takes a loader so the trades query only runs when the day has actually rolled over.
+        """
         today = trading_calendar_date()
         if today != self._daily_pnl_trading_date:
             self._daily_pnl_trading_date = today
-            self.daily_realized_pnl = realized_pnl
+            self.daily_realized_pnl = load_realized_pnl()
 
     def hydrate_symbol_entry_counts(self, counts_by_symbol: Dict[str, int]) -> None:
         """Seed per-symbol entry counts for the current US trading day."""

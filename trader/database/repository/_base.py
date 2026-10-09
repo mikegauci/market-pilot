@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from database.supabase_support import (
     Client,
@@ -26,6 +26,8 @@ class SupabaseRepositoryBase:
         self._cached_risk_sync_equity: Optional[float] = None
         self._cached_risk_sync_account_id: Optional[str] = None
         self._profile_capital_cache: Dict[str, float] = {}
+        # account_id -> (monotonic fetch time, profile row); see ensure_account_profile.
+        self._account_profile_cache: Dict[str, Tuple[float, dict]] = {}
         self._last_reclaim_mono: Dict[str, float] = {}
         self._known_position_symbols: Optional[set[str]] = None
         self._legacy_untagged_cache: Dict[str, bool] = {}

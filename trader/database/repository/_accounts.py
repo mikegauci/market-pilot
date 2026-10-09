@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import time
+
 from database.supabase_support import *  # noqa: F403
 from database.trade_account_scope import apply_trade_account_filter
+
+# Profiles are written once (baseline at creation); re-read occasionally in case of manual edits.
+ACCOUNT_PROFILE_CACHE_TTL_SEC = 600.0
+
 
 class SupabaseAccountsMixin:
     @_db_synchronized
@@ -26,8 +32,13 @@ class SupabaseAccountsMixin:
         *,
         unrealized_pnl: float = 0.0,
     ) -> dict:
+        cached = self._account_profile_cache.get(account_id)
+        if cached is not None and time.monotonic() - cached[0] < ACCOUNT_PROFILE_CACHE_TTL_SEC:
+            return cached[1]
+
         existing = self.get_account_profile(account_id)
         if existing:
+            self._account_profile_cache[account_id] = (time.monotonic(), existing)
             return existing
 
         realized = self.get_total_realized_pnl(account_id)
@@ -48,6 +59,7 @@ class SupabaseAccountsMixin:
         ).execute()
         created = self.get_account_profile(account_id)
         if created:
+            self._account_profile_cache[account_id] = (time.monotonic(), created)
             logger.info(
                 "New IBKR account profile %s (baseline equity $%.2f)",
                 account_id,
