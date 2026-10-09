@@ -1074,6 +1074,7 @@ export function SettingsForm({
       >
         <WatchlistSettingsSection
           settings={settings}
+          maxRsi={maxRsi}
           onDraftChange={handleWatchlistDraftChange}
         />
       </SettingsSection>

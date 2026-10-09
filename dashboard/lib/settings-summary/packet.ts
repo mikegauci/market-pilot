@@ -1,5 +1,8 @@
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
-import { traderBuiltInGatesForPacket } from "@/lib/trader-built-in-gates";
+import {
+  breakoutRsiCapForPacket,
+  traderBuiltInGatesForPacket,
+} from "@/lib/trader-built-in-gates";
 import type { BotStatus, Settings } from "@/lib/types/database";
 
 function percentPoints(decimal: number): number {
@@ -86,6 +89,15 @@ export type SettingsAiSummaryPacket = {
     max_swaps_per_rotation: number;
     entry_blocked_symbols: string[];
     last_rotation_note: string;
+    breakout: {
+      enabled: boolean;
+      max_rsi: number;
+      window_minutes: number;
+      max_names_at_once: number;
+      lookback_minutes: number;
+      min_volume_ratio: number;
+      min_change_5m_pct: number;
+    };
   };
   trader_built_in_gates: ReturnType<typeof traderBuiltInGatesForPacket> & {
     gates_note: string;
@@ -103,6 +115,7 @@ export function buildSettingsAiSummaryPacket(input: {
   const builtIn = traderBuiltInGatesForPacket(settings.entry_ema_gate, {
     max_rsi: settings.max_rsi,
     max_spread_pct: settings.max_spread_pct,
+    breakout_rsi: breakoutRsiCapForPacket(settings),
   });
   const effective = resolveEffectiveWatchlist(settings);
 
@@ -178,6 +191,18 @@ export function buildSettingsAiSummaryPacket(input: {
       max_swaps_per_rotation: settings.watchlist_max_swaps_per_rotation,
       entry_blocked_symbols: settings.entry_blocked_symbols.map((s) => s.toUpperCase()),
       last_rotation_note: settings.watchlist_last_rotation_note.trim().slice(0, 200),
+      breakout: {
+        enabled:
+          settings.watchlist_rotation_enabled &&
+          settings.breakout_enabled &&
+          settings.breakout_max_promotions_per_cycle > 0,
+        max_rsi: settings.breakout_max_rsi,
+        window_minutes: settings.breakout_window_minutes,
+        max_names_at_once: settings.breakout_max_promotions_per_cycle,
+        lookback_minutes: settings.breakout_lookback_minutes,
+        min_volume_ratio: settings.breakout_min_volume_ratio,
+        min_change_5m_pct: settings.breakout_min_change_5m_pct,
+      },
     },
     trader_built_in_gates: {
       ...builtIn,

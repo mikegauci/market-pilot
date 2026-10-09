@@ -171,20 +171,32 @@ describe("parseSettingsForm breakout settings", () => {
     expect(parsed.breakout_max_rsi).toBe(82);
   });
 
-  it("requires breakout RSI above normal RSI when rotation and breakout are enabled", () => {
+  it("allows breakout RSI at or below normal RSI when breakout is enabled (no extra room)", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        watchlist: "",
+        watchlist_rotation_enabled: "on",
+        watchlist_pool: "NVDA,AMD",
+        breakout_enabled: "on",
+        max_rsi: "100",
+        breakout_max_rsi: "100",
+      }),
+    );
+    expect(parsed.breakout_enabled).toBe(true);
+    expect(parsed.breakout_max_rsi).toBe(100);
+  });
+
+  it("rejects a breakout lookback below 5 minutes", () => {
     expect(() =>
-      parseSettingsForm(
-        form({
-          ...baseFields,
-          watchlist: "",
-          watchlist_rotation_enabled: "on",
-          watchlist_pool: "NVDA,AMD",
-          breakout_enabled: "on",
-          max_rsi: "82",
-          breakout_max_rsi: "82",
-        }),
-      ),
-    ).toThrow("Breakout max RSI must be higher than Max RSI");
+      parseSettingsForm(form({ ...baseFields, breakout_lookback_minutes: "4" })),
+    ).toThrow("Breakout lookback (minutes) must be a whole number from 5 to 60");
+  });
+
+  it("rejects zero max breakout names (use the checkbox to turn breakouts off)", () => {
+    expect(() =>
+      parseSettingsForm(form({ ...baseFields, breakout_max_promotions_per_cycle: "0" })),
+    ).toThrow("Max breakout names at once must be a whole number from 1 to 5");
   });
 });
 

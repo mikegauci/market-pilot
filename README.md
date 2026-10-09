@@ -335,9 +335,9 @@ The trader applies additional gates before opening a position:
 | Max spread | 0.15% (Settings) | Skip illiquid quotes |
 | Trend filter (EMA) | EMA-20 (Settings) | Off, EMA-9, or EMA-20 — warmup + price above chosen EMA |
 | Rotation session % | ≥ 0% vs RTH open | Keep red-day names off active scan (`STRATEGY_ROTATION_MIN_SESSION_CHANGE_PCT`) |
-| Breakout promotion | Settings → Watchlist (rotation on) | Pool symbol joins the active list the cycle it breaks out; Jev BUY still required. Env `STRATEGY_BREAKOUT_*` is fallback when DB columns are absent |
+| Breakout promotion | Settings → Watchlist (rotation on) | Pool symbol joins the active list the cycle it breaks out (prior-high break, volume spike, 5m move beating the benchmark, same session % floor as rotation). At most "Max breakout names at once" (default 2) sit inside their window together; none in the last 15 min. Jev BUY still required. Env `STRATEGY_BREAKOUT_*` is fallback when DB columns are absent |
 | Max RSI | Settings → Entry filters | Normal entry cap for all symbols |
-| Breakout max RSI | Settings → Watchlist | Temporary higher cap for ~10 min after a breakout promotion only; must be above Max RSI |
+| Breakout max RSI | Settings → Watchlist | Temporary higher cap for ~10 min after a breakout promotion only; at or below Max RSI gives no extra room |
 | Max entries / symbol / day | 3 (settings) | Limits repeat stop/re-entry churn (0 = off) |
 | SPY 5m change | ≥ −0.3% | Avoid broad-market headwinds |
 | Max hold time | 15 min | Time-based exit (matches Jev horizon) |

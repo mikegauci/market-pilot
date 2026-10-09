@@ -10,7 +10,7 @@ from config import Settings
 from database.supabase import SupabaseRepository
 from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
-from market.hours import is_us_regular_session_open
+from market.hours import is_entry_window_open, is_us_regular_session_open
 from market.mock import MockMarketProvider
 from models.types import DataSource
 from risk.manager import RiskManager
@@ -70,6 +70,15 @@ def run_cycle_rotation_and_bar_flush(
         )
         scratch.risk_settings, breakout_swapped_in = maybe_promote_breakouts(
             risk_settings=scratch.risk_settings,
+            # No point promoting a name the bot is no longer allowed to enter.
+            entry_window_open=(
+                settings.data_source != DataSource.IBKR
+                or is_entry_window_open(
+                    cutoff_minutes_before_close=(
+                        strategy_config.entry_cutoff_minutes_before_close
+                    )
+                )
+            ),
             **rotation_kwargs,
         )
         scratch.risk_settings, rotation_swapped_in = maybe_rotate_watchlist(

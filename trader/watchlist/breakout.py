@@ -8,6 +8,7 @@ from typing import Mapping, Optional, Set
 from market.bar_aggregator import MinuteBarAggregator
 from strategy.config import StrategyConfig
 
+MIN_LOOKBACK_MINUTES = 5
 MIN_BASELINE_VOLUME_BARS = 5
 
 
@@ -31,7 +32,7 @@ def detect_breakout(
     """Price above the prior N-minute high, on a volume spike, outrunning the benchmark."""
     if aggregator is None or price is None or price <= 0:
         return None
-    lookback = max(2, int(config.breakout_lookback_minutes))
+    lookback = max(MIN_LOOKBACK_MINUTES, int(config.breakout_lookback_minutes))
     bars = [bar for bar in aggregator.all_bars() if not bar.synthetic]
     if len(bars) < lookback + 1:
         return None
@@ -47,7 +48,8 @@ def detect_breakout(
 
     # Seeded history uses different volume units than live ticks, so only live bars count.
     live = [bar for bar in bars if not bar.seeded]
-    baseline = live[-(lookback + 2) : -2]
+    baseline_len = max(lookback, MIN_BASELINE_VOLUME_BARS)
+    baseline = live[-(baseline_len + 2) : -2]
     if len(baseline) < MIN_BASELINE_VOLUME_BARS:
         return None
     baseline_avg = sum(bar.volume for bar in baseline) / len(baseline)

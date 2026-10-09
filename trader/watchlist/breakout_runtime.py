@@ -6,6 +6,7 @@ from typing import Dict, Optional, Sequence
 
 from market.bar_aggregator import MinuteBarStore
 from market.bars import BarStore
+from market.session import session_change_pct_for_rotation
 from models.types import Quote, RiskSettings
 from runtime.state import TraderRuntimeState
 from strategy.config import StrategyConfig
@@ -33,8 +34,13 @@ def maybe_promote_breakouts(
     now_mono: float,
     market_open: bool,
     strategy_config: StrategyConfig,
+    entry_window_open: bool = True,
 ) -> tuple[RiskSettings, list[str]]:
-    """Every cycle: move breaking-out pool names into the active list. Returns symbols added."""
+    """Every cycle: move breaking-out pool names into the active list. Returns symbols added.
+
+    ``breakout_max_promotions_per_cycle`` caps how many names may sit inside their
+    breakout window at once, so a broad rally cannot churn the whole active list.
+    """
     runtime.breakout_until_mono = {
         symbol: until
         for symbol, until in runtime.breakout_until_mono.items()
@@ -43,9 +49,15 @@ def maybe_promote_breakouts(
     if (
         not strategy_config.breakout_enabled
         or not market_open
+        or not entry_window_open
         or not risk_settings.watchlist_rotation_enabled
         or not risk_settings.watchlist_pool
     ):
+        return risk_settings, []
+    slots = max(0, int(strategy_config.breakout_max_promotions_per_cycle)) - len(
+        active_breakout_symbols(runtime.breakout_until_mono, now_mono)
+    )
+    if slots <= 0:
         return risk_settings, []
 
     blocked = entry_blocked_symbol_set(risk_settings)
@@ -55,26 +67,41 @@ def maybe_promote_breakouts(
         benchmark_minute_bars.change_pct(5) if benchmark_minute_bars is not None else None
     )
 
+    session_floor = strategy_config.rotation_min_session_change_pct
+
     signals: list[BreakoutSignal] = []
     for raw in risk_settings.watchlist_pool:
         symbol = str(raw).strip().upper()
         if not symbol or symbol in active_set or symbol in blocked:
             continue
         quote = quotes_by_symbol.get(symbol)
+        aggregator = minute_bars.get(symbol)
         signal = detect_breakout(
             symbol,
-            minute_bars.get(symbol),
+            aggregator,
             quote.price if quote is not None else None,
             strategy_config,
             benchmark_change_5m=benchmark_change_5m,
         )
-        if signal is not None:
-            signals.append(signal)
+        if signal is None:
+            continue
+        # Same day-colour floor as rotation, so a promotion is not undone by the next swap.
+        if session_floor is not None:
+            session_pct = session_change_pct_for_rotation(
+                signal.price,
+                intraday_five_min_bars=(
+                    bar_store.get_intraday_bars(symbol) if bar_store is not None else None
+                ),
+                minute_aggregator=aggregator,
+            )
+            if session_pct is None or session_pct < session_floor:
+                continue
+        signals.append(signal)
     if not signals:
         return risk_settings, []
 
     signals.sort(key=lambda signal: signal.change_5m, reverse=True)
-    signals = signals[: max(0, int(strategy_config.breakout_max_promotions_per_cycle))]
+    signals = signals[:slots]
 
     protected = {
         symbol.upper()

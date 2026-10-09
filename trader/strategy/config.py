@@ -52,6 +52,7 @@ class StrategyConfig:
     breakout_lookback_minutes: int = 10
     breakout_min_volume_ratio: float = 1.5
     breakout_min_change_5m_pct: float = 0.15
+    # Max names inside their breakout window at once (legacy name: not a per-cycle count).
     breakout_max_promotions_per_cycle: int = 2
     breakout_window_minutes: float = 10.0
     # RSI cap used instead of max_rsi while a name is inside its breakout window.
@@ -149,7 +150,7 @@ def breakout_dashboard_override(
         return {}
     return {
         "breakout_enabled": bool(enabled),
-        "breakout_lookback_minutes": max(2, int(lookback_minutes)),
+        "breakout_lookback_minutes": max(5, int(lookback_minutes)),
         "breakout_min_volume_ratio": float(min_volume_ratio),
         "breakout_min_change_5m_pct": float(min_change_5m_pct),
         "breakout_max_promotions_per_cycle": max(0, int(max_promotions_per_cycle)),

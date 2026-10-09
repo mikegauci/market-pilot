@@ -3,7 +3,10 @@ import {
   isPreJevFilterSkip,
 } from "@/lib/prediction-skip-reason";
 import type { SkipExplanation } from "@/lib/skip-explainer/schema";
-import { traderBuiltInGatesForPacket } from "@/lib/trader-built-in-gates";
+import {
+  breakoutRsiCapForPacket,
+  traderBuiltInGatesForPacket,
+} from "@/lib/trader-built-in-gates";
 import type { MarketSnapshot, Prediction, Settings } from "@/lib/types/database";
 
 function percentPoints(decimal: number): number {
@@ -62,6 +65,7 @@ export function buildSkipExplainPacket(
   const builtIn = traderBuiltInGatesForPacket(settings.entry_ema_gate, {
     max_rsi: settings.max_rsi,
     max_spread_pct: settings.max_spread_pct,
+    breakout_rsi: breakoutRsiCapForPacket(settings),
   });
   const snapshot: MarketSnapshot = prediction.market_snapshot ?? {};
   const price = prediction.price;
@@ -85,7 +89,7 @@ export function buildSkipExplainPacket(
   return {
     jev_was_called: jevWasCalled,
     note: jevWasCalled
-      ? "Percents are already in percent (85 means 85%). spread_pct and max_spread_pct are percent of price (0.15 means 0.15%). Explain only this row. Do not invent prices, headlines, or other skips. Gates under settings are the bot's current dashboard settings, not necessarily what applied when this prediction was stored."
+      ? "Percents are already in percent (85 means 85%). spread_pct and max_spread_pct are percent of price (0.15 means 0.15%). Explain only this row. Do not invent prices, headlines, or other skips. Gates under settings are the bot's current dashboard settings, not necessarily what applied when this prediction was stored. When gates.breakout_rsi is set, a symbol promoted by a breakout uses that RSI cap instead of max_rsi for window_minutes; the row does not say whether this symbol was inside such a window, so mention both caps for an RSI skip."
       : "jev_was_called is false. Jev did not run on this eval — buy_pct, hold_pct, and sell_pct are storage placeholders (0), not model output. Explain the entry filter in skip_reason_label. Do not say Jev scored or recorded confidence.",
     symbol: prediction.symbol,
     timestamp: prediction.timestamp,

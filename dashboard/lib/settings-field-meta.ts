@@ -41,7 +41,7 @@ export const SETTING_FIELD_EXAMPLES: Partial<Record<SettingDescriptionKey, strin
   breakout_enabled: "On → fast pool breakouts can join the active list immediately.",
   breakout_max_rsi: "82 → temporary cap after promotion; normal Max RSI still applies later.",
   breakout_window_minutes: "10 → use breakout RSI and rotation protection for 10 minutes.",
-  breakout_max_promotions_per_cycle: "2 → promote at most two breaking-out names per check.",
+  breakout_max_promotions_per_cycle: "2 → at most two breakout names inside their window at once.",
   breakout_lookback_minutes: "10 → price must clear the prior 10 one-minute bars.",
   breakout_min_volume_ratio: "1.5 → latest 1m volume must be at least 1.5× recent average.",
   breakout_min_change_5m_pct: "0.15 → require at least a 0.15% move over five minutes.",

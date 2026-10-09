@@ -109,7 +109,7 @@ function labelFor(name: string): string {
     breakout_enabled: "Breakout promotion",
     breakout_max_rsi: "Breakout max RSI",
     breakout_window_minutes: "Breakout window (minutes)",
-    breakout_max_promotions_per_cycle: "Breakout max promotions per cycle",
+    breakout_max_promotions_per_cycle: "Max breakout names at once",
     breakout_lookback_minutes: "Breakout lookback (minutes)",
     breakout_min_volume_ratio: "Breakout min volume ratio",
     breakout_min_change_5m_pct: "Breakout min 5m change (%)",
@@ -496,15 +496,6 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     throw new Error(`${labelFor("breakout_max_rsi")} must be a whole number from 1 to 100`);
   }
   if (
-    watchlist_rotation_enabled &&
-    breakout_enabled &&
-    breakout_max_rsi <= max_rsi
-  ) {
-    throw new Error(
-      `${labelFor("breakout_max_rsi")} must be higher than ${labelFor("max_rsi")} (${max_rsi})`,
-    );
-  }
-  if (
     !Number.isFinite(breakout_window_minutes) ||
     breakout_window_minutes < 1 ||
     breakout_window_minutes > 60
@@ -513,19 +504,19 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   }
   if (
     !Number.isInteger(breakout_max_promotions_per_cycle) ||
-    breakout_max_promotions_per_cycle < 0 ||
+    breakout_max_promotions_per_cycle < 1 ||
     breakout_max_promotions_per_cycle > 5
   ) {
     throw new Error(
-      `${labelFor("breakout_max_promotions_per_cycle")} must be a whole number from 0 to 5`,
+      `${labelFor("breakout_max_promotions_per_cycle")} must be a whole number from 1 to 5`,
     );
   }
   if (
     !Number.isInteger(breakout_lookback_minutes) ||
-    breakout_lookback_minutes < 2 ||
+    breakout_lookback_minutes < 5 ||
     breakout_lookback_minutes > 60
   ) {
-    throw new Error(`${labelFor("breakout_lookback_minutes")} must be between 2 and 60`);
+    throw new Error(`${labelFor("breakout_lookback_minutes")} must be a whole number from 5 to 60`);
   }
   if (
     !Number.isFinite(breakout_min_volume_ratio) ||

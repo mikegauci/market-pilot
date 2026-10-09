@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from market.bar_aggregator import MinuteBarAggregator, MinuteBarStore
 from market.bars import Bar
@@ -94,6 +94,14 @@ class DetectBreakoutTests(unittest.TestCase):
             )
         )
 
+    def test_short_lookback_is_raised_to_minimum_and_still_fires(self) -> None:
+        aggregator = MinuteBarAggregator()
+        _feed(aggregator)
+        signal = detect_breakout(
+            "QCOM", aggregator, 100.4, StrategyConfig(breakout_lookback_minutes=2)
+        )
+        self.assertIsNotNone(signal)
+
     def test_seeded_history_alone_is_not_enough(self) -> None:
         aggregator = MinuteBarAggregator()
         aggregator.bootstrap_from_minute_bars(
@@ -125,7 +133,15 @@ class BreakoutEntryConfigTests(unittest.TestCase):
 
 
 class PromoteBreakoutsTests(unittest.TestCase):
-    def _run(self, risk: RiskSettings, *, open_symbols=(), runtime=None):
+    def _run(
+        self,
+        risk: RiskSettings,
+        *,
+        open_symbols=(),
+        runtime=None,
+        strategy_config=None,
+        entry_window_open=True,
+    ):
         minute_bars = MinuteBarStore(["AAA", "BBB", "QCOM"])
         _feed(minute_bars.get("QCOM"))
         db = MagicMock()
@@ -145,7 +161,9 @@ class PromoteBreakoutsTests(unittest.TestCase):
             runtime=runtime,
             now_mono=1_000.0,
             market_open=True,
-            strategy_config=StrategyConfig(),
+            strategy_config=strategy_config
+            or StrategyConfig(rotation_min_session_change_pct=None),
+            entry_window_open=entry_window_open,
         )
         return updated, added, db, runtime
 
@@ -162,6 +180,37 @@ class PromoteBreakoutsTests(unittest.TestCase):
         updated, added, _, _ = self._run(_risk(), open_symbols=["AAA", "BBB"])
         self.assertEqual(added, [])
         self.assertEqual(updated.watchlist_active, ["AAA", "BBB"])
+
+    def test_cap_counts_names_still_inside_their_window(self) -> None:
+        runtime = TraderRuntimeState()
+        runtime.breakout_until_mono = {"AAA": 1_200.0, "BBB": 1_300.0}
+        _, added, _, _ = self._run(_risk(), runtime=runtime)
+        self.assertEqual(added, [])
+
+        runtime = TraderRuntimeState()
+        runtime.breakout_until_mono = {"AAA": 1_200.0, "BBB": 900.0}
+        _, added, _, _ = self._run(_risk(watchlist_active_size=3), runtime=runtime)
+        self.assertEqual(added, ["QCOM"])
+
+    def test_session_floor_blocks_names_red_on_the_day(self) -> None:
+        config = StrategyConfig(rotation_min_session_change_pct=0.0)
+        with patch(
+            "watchlist.breakout_runtime.session_change_pct_for_rotation",
+            return_value=-0.4,
+        ):
+            _, added, _, _ = self._run(_risk(), strategy_config=config)
+        self.assertEqual(added, [])
+        with patch(
+            "watchlist.breakout_runtime.session_change_pct_for_rotation",
+            return_value=0.6,
+        ):
+            _, added, _, _ = self._run(_risk(), strategy_config=config)
+        self.assertEqual(added, ["QCOM"])
+
+    def test_no_promotion_after_entry_cutoff(self) -> None:
+        _, added, db, _ = self._run(_risk(), entry_window_open=False)
+        self.assertEqual(added, [])
+        db.save_watchlist_rotation.assert_not_called()
 
     def test_disabled_is_noop(self) -> None:
         risk = _risk(watchlist_rotation_enabled=False)

@@ -59,19 +59,19 @@ export const SETTING_DESCRIPTIONS_FULL = {
   max_rsi:
     "Block new entries when the 1-minute RSI is above this level. Lower values skip more overbought names; 70 is a common default. Breakout promotions can use a separate, temporary cap in Watchlist settings.",
   breakout_enabled:
-    "When rotation is on, pull a pool symbol onto the active list the same cycle it breaks out on volume and price. Jev BUY and your other entry filters still apply.",
+    "When rotation is on, you let the bot move a pool symbol onto the active list as soon as it breaks out on price and volume, using the same session % floor as rotation. Jev BUY and your other entry filters still decide whether it trades.",
   breakout_max_rsi:
-    "For a short window after a breakout promotion only, allow entries up to this RSI. Must be higher than Max RSI in Entry filters. Example: Max RSI 75 and Breakout max RSI 82 lets a freshly promoted name enter while momentum is hot.",
+    "For a few minutes after a breakout promotion, you allow entries up to this RSI instead of your normal Max RSI. If you set it at or below Max RSI, promoted names get no extra room.",
   breakout_window_minutes:
-    "How long a breakout-promoted symbol keeps the higher RSI cap and stays protected from rotation swaps.",
+    "How long you give a breakout-promoted symbol the higher RSI cap. During this time rotation also won't swap it out.",
   breakout_max_promotions_per_cycle:
-    "Max pool symbols promoted per eval cycle (0 = off).",
+    "The most breakout-promoted symbols you allow inside their window at the same time. When the limit is reached, new breakouts wait until a window ends.",
   breakout_lookback_minutes:
-    "Price must clear the high of the prior N one-minute bars to count as breaking out.",
+    "You count a breakout when price clears the highest point of this many previous 1-minute bars. Shorter lookbacks fire more often but catch more noise; 5 is the minimum.",
   breakout_min_volume_ratio:
-    "Latest 1-minute volume must be at least this multiple of the recent average.",
+    "You need the latest 1-minute volume to be at least this multiple of the recent average. 1.5 means 50% more volume than usual.",
   breakout_min_change_5m_pct:
-    "Minimum 5-minute price change (percent) vs the benchmark move.",
+    "You need the price up at least this percent over five minutes, and also up more than the benchmark over the same five minutes. 0.15 means 0.15%.",
   max_spread_pct:
     "Block entries when the bid–ask spread is wider than this percent of the share price. Example: 0.15 means 0.15% — tight for liquid large caps.",
   min_volume_ratio:
@@ -116,13 +116,15 @@ export const SETTING_DESCRIPTIONS = {
     "Rotation only: min % since market open (blank = off, 0 = flat or up).",
   entry_ema_gate: "Require price above EMA-9, EMA-20, or Off.",
   max_rsi: "Skip entries when RSI is above this (1–100).",
-  breakout_enabled: "Promote pool breakouts onto the active list (rotation on).",
-  breakout_max_rsi: "Temporary RSI cap after a breakout promotion.",
-  breakout_window_minutes: "Minutes the breakout RSI cap applies.",
-  breakout_max_promotions_per_cycle: "Max breakout promotions per cycle.",
-  breakout_lookback_minutes: "1-min bars for prior-high breakout check.",
-  breakout_min_volume_ratio: "Volume spike vs recent average.",
-  breakout_min_change_5m_pct: "Min 5m % move to qualify.",
+  breakout_enabled: "Move pool symbols onto the active list as soon as they break out.",
+  breakout_max_rsi: "Higher RSI cap for a few minutes after a breakout promotion.",
+  breakout_window_minutes:
+    "Minutes a promoted name keeps the breakout RSI cap and rotation protection.",
+  breakout_max_promotions_per_cycle:
+    "Most breakout-promoted names allowed inside their window at the same time.",
+  breakout_lookback_minutes: "Price must clear the high of this many prior 1-minute bars.",
+  breakout_min_volume_ratio: "Latest 1-minute volume must be this multiple of the recent average.",
+  breakout_min_change_5m_pct: "Minimum 5-minute % rise, which must also beat the benchmark's move.",
   max_spread_pct: "Skip when spread exceeds this % of price (e.g. 0.15).",
   min_volume_ratio: "Block entries when volume is below this fraction of average (0 = off).",
   min_share_price: "Block entries below this USD price (0 = off).",

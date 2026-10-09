@@ -1,5 +1,8 @@
 import { resolveEffectiveWatchlist } from "@/lib/effective-watchlist";
-import { traderBuiltInGatesForPacket } from "@/lib/trader-built-in-gates";
+import {
+  breakoutRsiCapForPacket,
+  traderBuiltInGatesForPacket,
+} from "@/lib/trader-built-in-gates";
 import type { MarketNewsRow, Settings } from "@/lib/types/database";
 
 export const MORNING_BRIEF_WINDOW_HOURS = 18;
@@ -47,6 +50,7 @@ export function buildMorningBriefPacket(input: {
   const builtIn = traderBuiltInGatesForPacket(settings.entry_ema_gate, {
     max_rsi: settings.max_rsi,
     max_spread_pct: settings.max_spread_pct,
+    breakout_rsi: breakoutRsiCapForPacket(settings),
   });
   const now = input.now ?? new Date();
   const windowStart = now.getTime() - MORNING_BRIEF_WINDOW_HOURS * 60 * 60 * 1000;

@@ -31,10 +31,12 @@ import {
 
 type Props = {
   settings: Settings;
+  /** Live Max RSI from Entry filters, so the breakout cap hint stays in sync before save. */
+  maxRsi?: number;
   onDraftChange?: (draft: WatchlistFormDraftSlice) => void;
 };
 
-export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
+export function WatchlistSettingsSection({ settings, maxRsi, onDraftChange }: Props) {
   const [rotating, setRotating] = useState(Boolean(settings.watchlist_rotation_enabled));
   const [poolSymbols, setPoolSymbols] = useState(() =>
     normalizeWatchlistSymbols(settings.watchlist_pool ?? []),
@@ -57,6 +59,7 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
     Boolean(settings.breakout_enabled ?? true),
   );
   const [breakoutMaxRsi, setBreakoutMaxRsi] = useState(settings.breakout_max_rsi ?? 82);
+  const entryMaxRsi = maxRsi ?? settings.max_rsi ?? 70;
   const [breakoutWindowMinutes, setBreakoutWindowMinutes] = useState(
     settings.breakout_window_minutes ?? 10,
   );
@@ -249,7 +252,7 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
 
       <SettingsSubsection
         title="Breakout promotion"
-        description="Catch fast movers from the pool before the 15-minute rotation swap. Requires rotation on."
+        description="Catch fast movers from the pool between rotation swaps. Stops 15 minutes before the close."
       >
         {rotating ? (
           <div className="space-y-4">
@@ -281,6 +284,11 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
                     onChange={(event) => setBreakoutMaxRsi(Number(event.target.value))}
                     className="max-w-[10rem]"
                   />
+                  {breakoutMaxRsi <= entryMaxRsi ? (
+                    <p className="text-xs text-amber-400/90">
+                      At or below Max RSI ({entryMaxRsi}), so promoted names get no extra RSI room.
+                    </p>
+                  ) : null}
                   <SettingsFieldHelp fieldKey="breakout_max_rsi" />
                 </div>
                 <div className="space-y-1">
@@ -303,12 +311,15 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="breakout_max_promotions_per_cycle">Max promotions / cycle</Label>
+                  <Label htmlFor="breakout_max_promotions_per_cycle">Max breakout names at once</Label>
+                  <FieldDescription title={SETTING_DESCRIPTIONS_FULL.breakout_max_promotions_per_cycle}>
+                    {SETTING_DESCRIPTIONS.breakout_max_promotions_per_cycle}
+                  </FieldDescription>
                   <Input
                     id="breakout_max_promotions_per_cycle"
                     name="breakout_max_promotions_per_cycle"
                     type="number"
-                    min={0}
+                    min={1}
                     max={5}
                     value={breakoutMaxPromotions}
                     onChange={(event) =>
@@ -319,11 +330,14 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="breakout_lookback_minutes">Lookback (1-min bars)</Label>
+                  <FieldDescription title={SETTING_DESCRIPTIONS_FULL.breakout_lookback_minutes}>
+                    {SETTING_DESCRIPTIONS.breakout_lookback_minutes}
+                  </FieldDescription>
                   <Input
                     id="breakout_lookback_minutes"
                     name="breakout_lookback_minutes"
                     type="number"
-                    min={2}
+                    min={5}
                     max={60}
                     value={breakoutLookbackMinutes}
                     onChange={(event) =>
@@ -334,6 +348,9 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="breakout_min_volume_ratio">Min volume ratio</Label>
+                  <FieldDescription title={SETTING_DESCRIPTIONS_FULL.breakout_min_volume_ratio}>
+                    {SETTING_DESCRIPTIONS.breakout_min_volume_ratio}
+                  </FieldDescription>
                   <Input
                     id="breakout_min_volume_ratio"
                     name="breakout_min_volume_ratio"
@@ -350,6 +367,9 @@ export function WatchlistSettingsSection({ settings, onDraftChange }: Props) {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="breakout_min_change_5m_pct">Min 5m change (%)</Label>
+                  <FieldDescription title={SETTING_DESCRIPTIONS_FULL.breakout_min_change_5m_pct}>
+                    {SETTING_DESCRIPTIONS.breakout_min_change_5m_pct}
+                  </FieldDescription>
                   <Input
                     id="breakout_min_change_5m_pct"
                     name="breakout_min_change_5m_pct"
