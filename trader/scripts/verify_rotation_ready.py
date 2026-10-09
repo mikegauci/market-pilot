@@ -24,12 +24,7 @@ from market.bar_aggregator import MinuteBarStore  # noqa: E402
 from market.bars import BarStore  # noqa: E402
 from market.hours import is_us_regular_session_open  # noqa: E402
 from models.types import DataSource, Quote  # noqa: E402
-from strategy.config import (  # noqa: E402
-    rotation_dashboard_override,
-    entry_ema_dashboard_override,
-    entry_rsi_spread_dashboard_overrides,
-    strategy_config_with_risk_overrides,
-)
+from strategy.config import strategy_config_from_risk  # noqa: E402
 from watchlist.resolution import effective_benchmark  # noqa: E402
 from watchlist.rotation import rotate_active, score_candidate  # noqa: E402
 from watchlist.rotation_runtime import build_rotation_candidate  # noqa: E402
@@ -93,29 +88,7 @@ def simulate_scores(
     bench_15m = bench_agg.change_pct(15) if bench_agg and bench_agg.bar_count() else None
     print(f"  Benchmark {benchmark or '—'} 5m change: {bench_5m}")
 
-    strategy = strategy_config_with_risk_overrides(
-        settings.strategy_config,
-        min_volume_ratio=risk.min_volume_ratio,
-        min_share_price=risk.min_share_price,
-        min_dollar_volume=risk.min_dollar_volume,
-        jev_sell_exit_threshold=risk.jev_sell_exit_threshold,
-        confirmation_cycles=risk.confirmation_cycles,
-        confirmation_seconds=risk.confirmation_seconds,
-        **rotation_dashboard_override(
-            from_settings=risk.rotation_session_pct_from_settings,
-            value=risk.rotation_min_session_change_pct,
-        ),
-        **entry_ema_dashboard_override(
-            from_settings=risk.entry_ema_gate_from_settings,
-            value=risk.entry_ema_gate,
-        ),
-        **entry_rsi_spread_dashboard_overrides(
-            max_rsi_from_settings=risk.max_rsi_from_settings,
-            max_rsi=risk.max_rsi,
-            max_spread_pct_from_settings=risk.max_spread_pct_from_settings,
-            max_spread_pct=risk.max_spread_pct,
-        ),
-    )
+    strategy = strategy_config_from_risk(settings.strategy_config, risk)
 
     scores: dict[str, float] = {}
     for symbol in risk.watchlist_pool:
@@ -124,6 +97,7 @@ def simulate_scores(
             quotes_by_symbol.get(symbol.upper()),
             minute_bars,
             bar_store,
+            warmup_min_1m_bars=strategy.warmup_min_1m_bars,
         )
         scores[symbol.upper()] = score_candidate(
             candidate,
@@ -132,6 +106,7 @@ def simulate_scores(
             min_volume_ratio=strategy.min_volume_ratio,
             max_rsi=strategy.max_rsi,
             min_session_change_pct=strategy.rotation_min_session_change_pct,
+            entry_ema_gate=strategy.entry_ema_gate,
         )
 
     ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)

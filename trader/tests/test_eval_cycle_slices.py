@@ -56,16 +56,16 @@ class EvalCycleSliceTests(unittest.TestCase):
         self.assertEqual(ctx.watchlist, ["MSFT"])
         self.assertEqual(ctx.last_settings_sync, 2.0)
 
-    @patch("runtime.loop.cycle_sync.should_refresh", return_value=True)
-    def test_sync_phase_updates_bot_control(self, _refresh: MagicMock) -> None:
+    def _run_sync(self, *, refresh: bool, shutdown_requested: bool):
         settings = load_settings()
         settings.data_source = DataSource.MOCK
         db = MagicMock()
-        db.poll_shutdown_requested.return_value = False
+        db.poll_shutdown_requested.return_value = shutdown_requested
         db.get_bot_control.return_value = MagicMock(
             enabled=False,
             trading_mode=TradingMode.PAPER,
             execution_mode=ExecutionMode.SIMULATED,
+            shutdown_requested=shutdown_requested,
         )
         db.get_risk_settings.return_value = MagicMock(
             min_volume_ratio=0.5,
@@ -98,11 +98,14 @@ class EvalCycleSliceTests(unittest.TestCase):
             watchlist=[],
             all_symbols=[],
         )
-        with patch("runtime.loop.cycle_sync.sync_watchlist_symbols", return_value=[]):
+        runtime = TraderRuntimeState()
+        with patch("runtime.loop.cycle_sync.sync_watchlist_symbols", return_value=[]), patch(
+            "runtime.loop.cycle_sync.should_refresh", return_value=refresh
+        ):
             run_cycle_sync(
                 db=db,
                 settings=settings,
-                runtime=TraderRuntimeState(),
+                runtime=runtime,
                 mock=MagicMock(),
                 minute_bars=MagicMock(),
                 bar_store=MagicMock(),
@@ -116,9 +119,25 @@ class EvalCycleSliceTests(unittest.TestCase):
                 last_general_news_refresh=0.0,
                 start_general_news_refresh=MagicMock(),
             )
+        return db, runtime, scratch
+
+
+    def test_sync_phase_updates_bot_control(self) -> None:
+        db, runtime, scratch = self._run_sync(refresh=True, shutdown_requested=False)
         self.assertFalse(scratch.bot_enabled)
         self.assertEqual(scratch.trading_mode, TradingMode.PAPER)
+        self.assertFalse(runtime.shutdown_requested)
 
+    def test_bot_control_refresh_reads_bot_status_once(self) -> None:
+        db, runtime, _ = self._run_sync(refresh=True, shutdown_requested=True)
+        db.poll_shutdown_requested.assert_not_called()
+        self.assertTrue(runtime.shutdown_requested)
+
+    def test_shutdown_polled_between_bot_control_refreshes(self) -> None:
+        db, runtime, _ = self._run_sync(refresh=False, shutdown_requested=True)
+        db.get_bot_control.assert_not_called()
+        db.poll_shutdown_requested.assert_called_once()
+        self.assertTrue(runtime.shutdown_requested)
 
 if __name__ == "__main__":
     unittest.main()

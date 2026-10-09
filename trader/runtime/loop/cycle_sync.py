@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import replace
 from typing import Callable, TYPE_CHECKING
 
 from config import Settings
@@ -19,13 +18,7 @@ from runtime.loop.eval_cycle_state import EvalCycleScratch
 from runtime.state import TraderRuntimeState
 from runtime.timing import should_refresh
 from runtime.trader_ops import merge_watchlist_symbols, sync_watchlist_symbols
-from strategy.config import (
-    rotation_dashboard_override,
-    entry_ema_dashboard_override,
-    breakout_dashboard_override,
-    entry_rsi_spread_dashboard_overrides,
-    strategy_config_with_risk_overrides,
-)
+from strategy.config import strategy_config_from_risk
 from strategy.confirmation import ConfirmationTracker
 from strategy.profit_take_tracker import ProfitTakeBandTracker
 from watchlist.backfill import backfill_watchlist_symbols, drain_deferred_backfill_queue
@@ -60,17 +53,15 @@ def run_cycle_sync(
     last_general_news_refresh: float,
     start_general_news_refresh: Callable[[], None],
 ) -> None:
-    if db.poll_shutdown_requested():
-        logger.info("Shutdown requested from dashboard — stopping trading engine")
-        runtime.shutdown_requested = True
-
     now_mono = time.monotonic()
     if should_refresh(
         now_mono,
         scratch.last_bot_control_sync,
         settings.bot_control_refresh_interval_sec,
     ):
+        # bot_control already carries shutdown_requested: one bot_status read, not two.
         bot_control = db.get_bot_control(settings.execution_mode)
+        shutdown_requested = bot_control.shutdown_requested
         scratch.bot_enabled = bot_control.enabled
         scratch.trading_mode = bot_control.trading_mode
         scratch.configured_execution_mode = bot_control.execution_mode
@@ -78,6 +69,12 @@ def run_cycle_sync(
             settings.data_source, scratch.configured_execution_mode
         )
         scratch.last_bot_control_sync = now_mono
+    else:
+        shutdown_requested = db.poll_shutdown_requested()
+
+    if shutdown_requested:
+        logger.info("Shutdown requested from dashboard — stopping trading engine")
+        runtime.shutdown_requested = True
 
     if (
         news_client is not None
@@ -97,40 +94,8 @@ def run_cycle_sync(
         scratch.risk_settings = db.get_risk_settings()
         prev_cycles = scratch.strategy_config.confirmation_cycles
         prev_seconds = scratch.strategy_config.confirmation_seconds
-        scratch.strategy_config = replace(
-            strategy_config_with_risk_overrides(
-                settings.strategy_config,
-                min_volume_ratio=scratch.risk_settings.min_volume_ratio,
-                min_share_price=scratch.risk_settings.min_share_price,
-                min_dollar_volume=scratch.risk_settings.min_dollar_volume,
-                jev_sell_exit_threshold=scratch.risk_settings.jev_sell_exit_threshold,
-                confirmation_cycles=scratch.risk_settings.confirmation_cycles,
-                confirmation_seconds=scratch.risk_settings.confirmation_seconds,
-                **rotation_dashboard_override(
-                    from_settings=scratch.risk_settings.rotation_session_pct_from_settings,
-                    value=scratch.risk_settings.rotation_min_session_change_pct,
-                ),
-                **entry_ema_dashboard_override(
-                    from_settings=scratch.risk_settings.entry_ema_gate_from_settings,
-                    value=scratch.risk_settings.entry_ema_gate,
-                ),
-                **entry_rsi_spread_dashboard_overrides(
-                    max_rsi_from_settings=scratch.risk_settings.max_rsi_from_settings,
-                    max_rsi=scratch.risk_settings.max_rsi,
-                    max_spread_pct_from_settings=scratch.risk_settings.max_spread_pct_from_settings,
-                    max_spread_pct=scratch.risk_settings.max_spread_pct,
-                ),
-            ),
-            **breakout_dashboard_override(
-                from_settings=scratch.risk_settings.breakout_from_settings,
-                enabled=scratch.risk_settings.breakout_enabled,
-                lookback_minutes=scratch.risk_settings.breakout_lookback_minutes,
-                min_volume_ratio=scratch.risk_settings.breakout_min_volume_ratio,
-                min_change_5m_pct=scratch.risk_settings.breakout_min_change_5m_pct,
-                max_promotions_per_cycle=scratch.risk_settings.breakout_max_promotions_per_cycle,
-                window_minutes=scratch.risk_settings.breakout_window_minutes,
-                max_rsi=scratch.risk_settings.breakout_max_rsi,
-            ),
+        scratch.strategy_config = strategy_config_from_risk(
+            settings.strategy_config, scratch.risk_settings
         )
         if (
             scratch.strategy_config.confirmation_cycles != prev_cycles

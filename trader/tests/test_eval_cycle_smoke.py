@@ -30,6 +30,7 @@ class EvalCycleSmokeTests(unittest.TestCase):
             enabled=True,
             trading_mode=TradingMode.PAPER,
             execution_mode=ExecutionMode.SIMULATED,
+            shutdown_requested=False,
         )
         db.get_risk_settings.return_value = MagicMock(
             min_volume_ratio=0.5,

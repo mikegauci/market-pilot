@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
 from strategy.ema_gate import EntryEmaGate, normalize_entry_ema_gate
+
+if TYPE_CHECKING:
+    from models.types import RiskSettings
 
 
 @dataclass(frozen=True)
@@ -157,3 +160,42 @@ def breakout_dashboard_override(
         "breakout_window_minutes": max(0.0, float(window_minutes)),
         "breakout_max_rsi": float(max_rsi),
     }
+
+
+def strategy_config_from_risk(base: StrategyConfig, risk: "RiskSettings") -> StrategyConfig:
+    """Env strategy config with every dashboard/DB override applied (startup, settings refresh, scripts)."""
+    return replace(
+        strategy_config_with_risk_overrides(
+            base,
+            min_volume_ratio=risk.min_volume_ratio,
+            min_share_price=risk.min_share_price,
+            min_dollar_volume=risk.min_dollar_volume,
+            jev_sell_exit_threshold=risk.jev_sell_exit_threshold,
+            confirmation_cycles=risk.confirmation_cycles,
+            confirmation_seconds=risk.confirmation_seconds,
+            **rotation_dashboard_override(
+                from_settings=risk.rotation_session_pct_from_settings,
+                value=risk.rotation_min_session_change_pct,
+            ),
+            **entry_ema_dashboard_override(
+                from_settings=risk.entry_ema_gate_from_settings,
+                value=risk.entry_ema_gate,
+            ),
+            **entry_rsi_spread_dashboard_overrides(
+                max_rsi_from_settings=risk.max_rsi_from_settings,
+                max_rsi=risk.max_rsi,
+                max_spread_pct_from_settings=risk.max_spread_pct_from_settings,
+                max_spread_pct=risk.max_spread_pct,
+            ),
+        ),
+        **breakout_dashboard_override(
+            from_settings=risk.breakout_from_settings,
+            enabled=risk.breakout_enabled,
+            lookback_minutes=risk.breakout_lookback_minutes,
+            min_volume_ratio=risk.breakout_min_volume_ratio,
+            min_change_5m_pct=risk.breakout_min_change_5m_pct,
+            max_promotions_per_cycle=risk.breakout_max_promotions_per_cycle,
+            window_minutes=risk.breakout_window_minutes,
+            max_rsi=risk.breakout_max_rsi,
+        ),
+    )
