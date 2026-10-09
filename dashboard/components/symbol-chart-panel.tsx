@@ -269,7 +269,7 @@ export function SymbolChartPanel({
               />
               {asOfLabel ? (
                 <p className="mt-1 text-[10px] text-zinc-600">
-                  As of {asOfLabel} Malta · drag/swipe for older bars, pinch to zoom
+                  As of {asOfLabel} Malta · drag/swipe for earlier prices, pinch to zoom
                 </p>
               ) : null}
             </>

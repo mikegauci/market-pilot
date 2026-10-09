@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  BarSeries,
+  AreaSeries,
   ColorType,
   createChart,
   createSeriesMarkers,
@@ -104,6 +104,28 @@ function markersFingerprint(markers: ChartMarker[]): string {
   return markers.map((marker) => `${marker.time}:${marker.label ?? ""}`).join("|");
 }
 
+const TREND_COLORS = {
+  up: {
+    lineColor: "#10b981",
+    topColor: "rgba(16, 185, 129, 0.35)",
+    bottomColor: "rgba(16, 185, 129, 0)",
+  },
+  down: {
+    lineColor: "#ef4444",
+    topColor: "rgba(239, 68, 68, 0.35)",
+    bottomColor: "rgba(239, 68, 68, 0)",
+  },
+} as const;
+
+/** Green when price ended the visible window higher than it started, red otherwise. */
+function trendColors(bars: SymbolBar[], visibleLookbackMs: number | null) {
+  const last = bars[bars.length - 1]!;
+  const startMs =
+    visibleLookbackMs == null ? 0 : new Date(last.ts).getTime() - visibleLookbackMs;
+  const first = bars.find((bar) => new Date(bar.ts).getTime() >= startMs) ?? bars[0]!;
+  return Number(last.close) >= Number(first.close) ? TREND_COLORS.up : TREND_COLORS.down;
+}
+
 function barsFingerprint(bars: SymbolBar[]): string {
   if (bars.length === 0) return "";
   const first = bars[0];
@@ -121,7 +143,7 @@ export function SymbolChart({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Bar"> | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Area"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const markersApiRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const fittedViewKeyRef = useRef<string | null>(null);
@@ -175,11 +197,9 @@ export function SymbolChart({
       },
     });
 
-    const series = chart.addSeries(BarSeries, {
-      upColor: "#10b981",
-      downColor: "#ef4444",
-      openVisible: true,
-      thinBars: false,
+    const series = chart.addSeries(AreaSeries, {
+      ...TREND_COLORS.up,
+      lineWidth: 2,
     });
 
     chartRef.current = chart;
@@ -230,12 +250,10 @@ export function SymbolChart({
       series.setData(
         bars.map((bar) => ({
           time: toChartTime(bar.ts),
-          open: Number(bar.open),
-          high: Number(bar.high),
-          low: Number(bar.low),
-          close: Number(bar.close),
+          value: Number(bar.close),
         })),
       );
+      series.applyOptions(trendColors(bars, visibleLookbackMs));
       lastBarsFpRef.current = barsFp;
     }
 
