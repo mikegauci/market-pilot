@@ -212,8 +212,15 @@ export function TradesTable({
 
   const liveTrades = useLiveQuery(trades, fetchTrades, ["trades"], undefined, {
     keepPreviousOnEmpty: true,
+    skipInitialFetch: true,
   });
-  const liveCommands = useLiveQuery(tradeCommands, fetchCommands, ["trade_commands"]);
+  const liveCommands = useLiveQuery(
+    tradeCommands,
+    fetchCommands,
+    ["trade_commands"],
+    undefined,
+    { skipInitialFetch: true },
+  );
 
   const commandByTradeId = useMemo(() => {
     const map = new Map<string, TradeCommand>();

@@ -104,9 +104,11 @@ export function DashboardNavContent({
 
       </nav>
 
-      <div className="mt-4 lg:hidden">
-        <DashboardAccountPanel />
-      </div>
+      {onNavigate ? (
+        <div className="mt-4">
+          <DashboardAccountPanel viewport="mobile" />
+        </div>
+      ) : null}
 
       <button
         type="button"

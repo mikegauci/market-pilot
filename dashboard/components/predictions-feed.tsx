@@ -243,6 +243,7 @@ export function PredictionsFeed({
   const livePredictions = useLiveQuery(predictions, loadPredictions, ["predictions"], undefined, {
     keepPreviousOnEmpty: true,
     resetKey: liveQueryKey,
+    skipInitialFetch: true,
   });
   const effectiveLoadError = pollLoadError ?? loadError;
 

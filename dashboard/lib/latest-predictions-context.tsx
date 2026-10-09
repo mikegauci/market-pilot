@@ -9,7 +9,7 @@ import {
 } from "react";
 import { fetchLatestPredictionsBySymbol } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
-import { LIVE_DATA_POLL_MS } from "@/lib/live-data-config";
+import { LIVE_PREDICTIONS_POLL_MS } from "@/lib/live-data-config";
 import type { Prediction } from "@/lib/types/database";
 
 type LatestPredictionsContextValue = {
@@ -28,8 +28,9 @@ type ProviderProps = {
 /** One poll for latest-per-symbol predictions (Overview + Strategy share this). */
 export function LatestPredictionsProvider({ initial, children }: ProviderProps) {
   const load = useCallback(() => fetchLatestPredictionsBySymbol(), []);
-  const predictions = useLiveQuery(initial, load, ["predictions"], LIVE_DATA_POLL_MS, {
+  const predictions = useLiveQuery(initial, load, ["predictions"], LIVE_PREDICTIONS_POLL_MS, {
     keepPreviousOnEmpty: true,
+    skipInitialFetch: true,
   });
 
   const value = useMemo(() => ({ predictions }), [predictions]);

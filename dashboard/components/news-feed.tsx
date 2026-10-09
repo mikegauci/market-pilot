@@ -27,7 +27,9 @@ export function NewsFeed({ articles }: { articles: MarketNewsRow[] }) {
   const [badgeFilter, setBadgeFilter] = useState<NewsBadgeFilter>("all");
 
   const loadNews = useCallback(() => fetchMarketNews(NEWS_LIMIT), []);
-  const liveArticles = useLiveQuery(articles, loadNews, ["market_news"]);
+  const liveArticles = useLiveQuery(articles, loadNews, ["market_news"], undefined, {
+    skipInitialFetch: true,
+  });
 
   const newsItems = useMemo(
     () => buildNewsFeedItems(liveArticles),

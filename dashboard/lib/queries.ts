@@ -39,7 +39,7 @@ import {
   readTradesForTradingDay,
 } from "@/lib/supabase/data-reads";
 import { canDashboardWrite } from "@/lib/dashboard-role";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import type {
   BotStatus,
   MarketNewsRow,
@@ -64,9 +64,7 @@ export async function getBotStatus(): Promise<BotStatus | null> {
 
 export async function getSettings(): Promise<Settings | null> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (canDashboardWrite(user)) {
     const { expireEntryBlocksIfDue } = await import("@/lib/entry-block-expire.server");
     await expireEntryBlocksIfDue(supabase);
@@ -153,17 +151,31 @@ export type SessionConditionMixLoad = {
   loadError: string | null;
 };
 
+const SESSION_CONDITION_MIX_MAX_AGE_MS = 15 * 60 * 1000;
+
+async function sessionConditionMixIsStale(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("session_market_condition_daily")
+    .select("refreshed_at")
+    .order("refreshed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data?.refreshed_at) return true;
+  return Date.now() - new Date(data.refreshed_at).getTime() > SESSION_CONDITION_MIX_MAX_AGE_MS;
+}
+
 export async function getSessionMarketConditionMix(): Promise<SessionConditionMixLoad> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   const mixParams = {
     p_since: SESSION_BRIEF_FIRST_DATE,
     p_headwind_floor: STRATEGY_FILTER_THRESHOLDS.maxBenchmarkDrop5mPct,
   };
   let refreshError: { message: string } | null = null;
-  if (canDashboardWrite(user)) {
+  // The recompute scans every prediction (45s timeout), so only run it when the stored mix is stale.
+  if (canDashboardWrite(user) && (await sessionConditionMixIsStale(supabase))) {
     const { error } = await supabase.rpc("refresh_session_market_condition_mix", mixParams);
     refreshError = error;
   }
@@ -180,9 +192,7 @@ export async function getSessionMarketConditionMix(): Promise<SessionConditionMi
 
 export async function getLatestSessionBriefForUser(): Promise<SessionBriefRow | null> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   const { data, error } = await supabase

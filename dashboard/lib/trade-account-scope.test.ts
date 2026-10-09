@@ -31,10 +31,26 @@ describe("resolveTradeAccountScope", () => {
       .mockResolvedValueOnce(false);
 
     const first = await resolveTradeAccountScope(supabase);
+    clearTradeAccountScopeCache(); // what useBotStatus does when ibkr_account_id changes
     const second = await resolveTradeAccountScope(supabase);
 
     expect(first).toEqual({ accountId: "DU111", includeLegacy: true, source: "live" });
     expect(second).toEqual({ accountId: "DU222", includeLegacy: false, source: "live" });
     expect(includeLegacyUntaggedTrades).toHaveBeenCalledTimes(2);
+  });
+
+  it("shares one lookup between callers on the same client", async () => {
+    const supabase = {} as never;
+    vi.mocked(resolveDashboardIbkrAccount).mockResolvedValue({ accountId: "DU111", source: "live" });
+    vi.mocked(includeLegacyUntaggedTrades).mockResolvedValue(false);
+
+    const [a, b] = await Promise.all([
+      resolveTradeAccountScope(supabase),
+      resolveTradeAccountScope(supabase),
+    ]);
+    await resolveTradeAccountScope(supabase);
+
+    expect(a).toBe(b);
+    expect(resolveDashboardIbkrAccount).toHaveBeenCalledTimes(1);
   });
 });

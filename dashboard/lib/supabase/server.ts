@@ -2,8 +2,10 @@ import "server-only";
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
-export async function createClient() {
+/** One client per request: repeated calls in a render share it. */
+export const createClient = cache(async () => {
   const cookieStore = await cookies();
 
   return createServerClient(
@@ -26,4 +28,13 @@ export async function createClient() {
       },
     },
   );
-}
+});
+
+/** One Auth round trip per request, shared by the layout, pages and query helpers. */
+export const getCurrentUser = cache(async () => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+});

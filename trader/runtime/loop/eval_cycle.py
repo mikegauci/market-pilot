@@ -81,7 +81,6 @@ def run_eval_cycle(
     db = ctx.db
     scratch = EvalCycleScratch.from_context(ctx)
     loop_start = time.monotonic()
-
     try:
         if db:
             run_cycle_sync(
@@ -177,8 +176,10 @@ def run_eval_cycle(
             runtime=runtime,
             data_source_label=ctx.data_source_label,
         )
+        runtime.consecutive_cycle_failures = 0
 
     except Exception as exc:
+        runtime.consecutive_cycle_failures += 1
         logger.exception("Eval cycle failed: %s", exc)
         if db:
             db.record_error(

@@ -104,6 +104,38 @@ class RollupAndFlushTests(unittest.TestCase):
         # Live flush must not pretend to be a full historical fetch.
         self.assertNotIn(("AAPL", BAR_SIZE_INTRADAY), repo.meta)
 
+    def test_flush_only_upserts_bars_that_changed(self) -> None:
+        repo = InMemoryBarRepo()
+        writes: list[int] = []
+        original = repo.upsert_bars
+        repo.upsert_bars = lambda bars: (writes.append(len(list(bars))), original(bars))[1]  # type: ignore[method-assign]
+        store = BarStore(repo)
+        minute_bars = MinuteBarStore(["AAPL"])
+        agg = minute_bars.get("AAPL")
+        base = datetime(2026, 1, 10, 15, 0, tzinfo=timezone.utc)
+        for offset, price in enumerate([100.0, 101.0, 102.0, 103.0, 104.0, 105.0]):
+            agg.record_point(base + timedelta(minutes=offset), price, 1000)
+
+        self.assertEqual(store.flush_live_intraday_bars(["AAPL"], minute_bars), 1)
+        self.assertEqual(writes, [2])
+
+        # Nothing new: no upsert at all.
+        self.assertEqual(store.flush_live_intraday_bars(["AAPL"], minute_bars), 0)
+        self.assertEqual(writes, [2])
+
+        # Only the forming bucket moved: only that bar is rewritten.
+        agg.record_point(base + timedelta(minutes=6), 106.0, 1000)
+        self.assertEqual(store.flush_live_intraday_bars(["AAPL"], minute_bars), 1)
+        self.assertEqual(writes, [2, 1])
+
+    def test_flush_cache_evicts_old_sessions_not_everything(self) -> None:
+        store = BarStore(InMemoryBarRepo())
+        newest = datetime(2026, 1, 12, 15, 0, tzinfo=timezone.utc)
+        old = newest - timedelta(days=3)
+        store._flushed_bar_values = {("AAPL", old): (1.0,) * 5, ("AAPL", newest): (2.0,) * 5}
+        store._evict_old_flushed_bars(newest)
+        self.assertEqual(list(store._flushed_bar_values), [("AAPL", newest)])
+
     def test_flush_skips_bootstrap_placeholders(self) -> None:
         repo = InMemoryBarRepo()
         historical_ts = datetime(2026, 1, 10, 14, 55, tzinfo=timezone.utc)

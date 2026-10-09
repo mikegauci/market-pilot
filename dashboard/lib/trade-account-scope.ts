@@ -14,10 +14,33 @@ export type TradeAccountScope = {
 
 let cachedScope: { scope: TradeAccountScope; expiresAt: number } | null = null;
 
-/** Cached legacy trade tag check; account id uses live bot status or dashboard fallback. */
-export async function resolveTradeAccountScope(
-  supabase: SupabaseClient,
-): Promise<TradeAccountScope> {
+type ScopeEntry = { promise: Promise<TradeAccountScope>; expiresAt: number; generation: number };
+
+// Memoized per Supabase client. On the server that is one client per request (see
+// createClient), so a render's trade and portfolio reads share one bot_status lookup.
+const scopeByClient = new WeakMap<SupabaseClient, ScopeEntry>();
+let generation = 0;
+
+/** Scope for trade/portfolio reads, shared by every caller using the same client. */
+export function resolveTradeAccountScope(supabase: SupabaseClient): Promise<TradeAccountScope> {
+  const now = Date.now();
+  const hit = scopeByClient.get(supabase);
+  if (hit && hit.generation === generation && hit.expiresAt > now) return hit.promise;
+
+  const promise = computeTradeAccountScope(supabase);
+  scopeByClient.set(supabase, { promise, expiresAt: now + LIVE_DATA_POLL_MS, generation });
+  promise.catch(() => {
+    if (scopeByClient.get(supabase)?.promise === promise) scopeByClient.delete(supabase);
+  });
+  return promise;
+}
+
+/**
+ * Resolves the account (one bot_status read) and the legacy-trade check. The module-level
+ * `cachedScope` is a second, cross-request layer that only saves the legacy count query; the
+ * per-client memo above exists to avoid the bot_status read within one render.
+ */
+async function computeTradeAccountScope(supabase: SupabaseClient): Promise<TradeAccountScope> {
   const { accountId, source } = await resolveDashboardIbkrAccount(supabase);
   const now = Date.now();
 
@@ -44,4 +67,5 @@ export async function resolveTradeAccountScope(
 
 export function clearTradeAccountScopeCache(): void {
   cachedScope = null;
+  generation += 1;
 }

@@ -26,6 +26,8 @@ import type {
 } from "@/lib/types/database";
 import { formatCurrency } from "@/lib/utils";
 
+const SERVER_SEEDED = { skipInitialFetch: true } as const;
+
 type Props = {
   positions: Position[];
   openTrades: Trade[];
@@ -47,12 +49,20 @@ export function PositionsGrid({
   const fetchCommands = useCallback(() => fetchActiveTradeCommands(), []);
   const fetchPositionCommands = useCallback(() => fetchActivePositionCommands(), []);
 
-  const liveOpenTrades = useLiveQuery(openTrades, fetchTrades, ["trades"]);
-  const liveCommands = useLiveQuery(tradeCommands, fetchCommands, ["trade_commands"]);
+  const liveOpenTrades = useLiveQuery(openTrades, fetchTrades, ["trades"], undefined, SERVER_SEEDED);
+  const liveCommands = useLiveQuery(
+    tradeCommands,
+    fetchCommands,
+    ["trade_commands"],
+    undefined,
+    SERVER_SEEDED,
+  );
   const livePositionCommands = useLiveQuery(
     positionCommands,
     fetchPositionCommands,
     ["position_commands"],
+    undefined,
+    SERVER_SEEDED,
   );
 
   const commandByTradeId = useMemo(() => {

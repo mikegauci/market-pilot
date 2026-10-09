@@ -22,3 +22,21 @@ def compute_loop_sleep_sec(
     if next_heartbeat_in <= 0:
         return 0.0
     return min(sleep_for, next_heartbeat_in)
+
+
+# A failed cycle never reaches the heartbeat, so the heartbeat cap above would return 0 and the
+# loop would retry back-to-back against a database or broker that is already struggling.
+# Back off 5s, 10s, 20s, then hold at 30s so the heartbeat gap stays short once it recovers.
+CYCLE_ERROR_BACKOFF_SEC = 5.0
+CYCLE_ERROR_BACKOFF_MAX_SEC = 30.0
+
+
+def apply_error_backoff(sleep_for: float, consecutive_failures: int) -> float:
+    """Never retry a failed cycle immediately; wait longer the more cycles fail in a row."""
+    if consecutive_failures <= 0:
+        return sleep_for
+    backoff = min(
+        CYCLE_ERROR_BACKOFF_SEC * 2 ** (consecutive_failures - 1),
+        CYCLE_ERROR_BACKOFF_MAX_SEC,
+    )
+    return max(sleep_for, backoff)

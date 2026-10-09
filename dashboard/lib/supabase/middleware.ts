@@ -23,9 +23,9 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims verifies the JWT locally (no Auth round trip) and still refreshes expiring sessions.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims ?? null;
 
   const isLogin = request.nextUrl.pathname.startsWith("/login");
   const isAuthCallback = request.nextUrl.pathname.startsWith("/auth");

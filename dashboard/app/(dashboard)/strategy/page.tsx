@@ -11,10 +11,12 @@ import { buildScenarios } from "@/lib/strategy-scenarios";
 import { formatPercent } from "@/lib/utils";
 
 export default async function StrategyPage() {
-  const settings = await getSettings();
+  const [settings, latestPredictions] = await Promise.all([
+    getSettings(),
+    getLatestPredictionsBySymbol(),
+  ]);
   const minConfidence = settings?.minimum_jev_confidence ?? 0.85;
   const recordThreshold = settings?.signal_record_threshold ?? 0.75;
-  const latestPredictions = settings ? await getLatestPredictionsBySymbol() : [];
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">

@@ -36,7 +36,7 @@ export function useBotStatus(initialStatus: BotStatus): BotStatus {
       if (prev.ibkr_account_id !== next.ibkr_account_id) {
         clearTradeAccountScopeCache();
       }
-      return next;
+      return initialDataChanged(prev, next) ? next : prev;
     });
   }, []);
 
@@ -57,9 +57,7 @@ export function useBotStatus(initialStatus: BotStatus): BotStatus {
     };
   }, [refresh]);
 
-  useRealtimeRefresh(["bot_status"], () => {
-    void refresh();
-  });
+  useRealtimeRefresh(["bot_status"], refresh);
 
   return status;
 }

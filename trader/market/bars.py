@@ -181,6 +181,13 @@ def live_five_min_bars_for_flush(
     return [bar for bar in rolled if bar.ts >= first_safe]
 
 
+MAX_FLUSHED_BAR_CACHE = 20_000
+
+
+def _bar_values(bar: Bar) -> Tuple[float, ...]:
+    return (bar.open, bar.high, bar.low, bar.close, float(bar.volume))
+
+
 class BarStore:
     """Cache-first bar access with optional IBKR backfill."""
 
@@ -198,6 +205,8 @@ class BarStore:
         self.backfill_pacing_sec = backfill_pacing_sec
         self._trend_cache: Dict[str, TrendChanges] = {}
         self._bar_cache: Dict[Tuple[str, str], List[Bar]] = {}
+        # Last OHLCV written per live 5m bar, so each flush only sends bars that changed.
+        self._flushed_bar_values: Dict[Tuple[str, datetime], Tuple[float, ...]] = {}
 
     def _cache_key(self, symbol: str, bar_size: str) -> Tuple[str, str]:
         return (symbol.upper(), bar_size)
@@ -371,17 +380,32 @@ class BarStore:
             aggregator = minute_bars.get(symbol)
             if not aggregator.has_live_ticks():
                 continue
-            five_min = live_five_min_bars_for_flush(symbol, aggregator)
-            if not five_min:
+            changed = [
+                bar
+                for bar in live_five_min_bars_for_flush(symbol, aggregator)
+                if self._flushed_bar_values.get((bar.symbol, bar.ts)) != _bar_values(bar)
+            ]
+            if not changed:
                 continue
-            pending.extend(five_min)
+            pending.extend(changed)
             flushed_symbols.append(symbol)
         if not pending:
             return 0
         self.repository.upsert_bars(pending)
+        if len(self._flushed_bar_values) > MAX_FLUSHED_BAR_CACHE:
+            self._evict_old_flushed_bars(max(bar.ts for bar in pending))
+        for bar in pending:
+            self._flushed_bar_values[(bar.symbol, bar.ts)] = _bar_values(bar)
         for symbol in flushed_symbols:
             self.invalidate_bar_cache(symbol, BAR_SIZE_INTRADAY)
         return len(flushed_symbols)
+
+    def _evict_old_flushed_bars(self, newest_ts: datetime) -> None:
+        """Drop bars from earlier sessions; they are never rewritten, so tracking them is waste."""
+        cutoff = newest_ts - timedelta(days=1)
+        self._flushed_bar_values = {
+            key: values for key, values in self._flushed_bar_values.items() if key[1] >= cutoff
+        }
 
     def backfill_symbol(
         self,

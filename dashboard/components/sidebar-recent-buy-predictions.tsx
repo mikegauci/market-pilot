@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback } from "react";
 import { fetchRecentPredictions } from "@/lib/data-client";
 import { useLiveQuery } from "@/lib/hooks/use-live-query";
+import { LIVE_PREDICTIONS_POLL_MS } from "@/lib/live-data-config";
 import {
   formatJevProbabilityPercent,
   formatSkipReason,
@@ -44,7 +45,7 @@ export function SidebarRecentBuyPredictions() {
     () => fetchRecentPredictions(WINDOW_MINUTES, ROW_LIMIT),
     [],
   );
-  const rows = useLiveQuery([] as Prediction[], load, ["predictions"], undefined, {
+  const rows = useLiveQuery([] as Prediction[], load, ["predictions"], LIVE_PREDICTIONS_POLL_MS, {
     keepPreviousOnEmpty: true,
   });
 

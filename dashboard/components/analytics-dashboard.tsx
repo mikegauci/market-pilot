@@ -122,8 +122,11 @@ export function AnalyticsDashboard({
     loadHistory,
     ["portfolio_history"],
     ANALYTICS_PAGE_POLL_MS,
+    { skipInitialFetch: true },
   );
-  const liveTrades = useLiveQuery(closedTrades, loadTrades, ["trades"], ANALYTICS_PAGE_POLL_MS);
+  const liveTrades = useLiveQuery(closedTrades, loadTrades, ["trades"], ANALYTICS_PAGE_POLL_MS, {
+    skipInitialFetch: true,
+  });
 
   const filteredHistory = useMemo(
     () => filterPortfolioByRange(liveHistory, range),

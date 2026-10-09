@@ -1,11 +1,28 @@
 from __future__ import annotations
 
+import time
+
 from database.supabase_support import *  # noqa: F403
 from database.trade_account_scope import apply_trade_account_filter
 
+# Commands only count as stale after ~120s, so checking more often just adds an UPDATE per poll.
+RECLAIM_MIN_INTERVAL_SEC = 30.0
+
+
 class SupabaseCommandsMixin:
+    def _reclaim_due(self, table: str) -> bool:
+        """Throttle stale-command reclaim per table; the first call always runs."""
+        last = self.__dict__.get("_last_reclaim_mono", {})
+        return table not in last or time.monotonic() - last[table] >= RECLAIM_MIN_INTERVAL_SEC
+
+    def _reclaim_done(self, table: str) -> None:
+        """Record a successful reclaim, so a failed UPDATE is retried on the next poll."""
+        self.__dict__.setdefault("_last_reclaim_mono", {})[table] = time.monotonic()
+
     @_db_synchronized
     def reclaim_stale_trade_commands(self, stale_after_sec: float = 120.0) -> int:
+        if not self._reclaim_due("trade_commands"):
+            return 0
         cutoff = (
             datetime.now(timezone.utc) - timedelta(seconds=stale_after_sec)
         ).isoformat()
@@ -16,6 +33,7 @@ class SupabaseCommandsMixin:
             .lt("processed_at", cutoff)
             .execute()
         )
+        self._reclaim_done("trade_commands")
         return len(result.data or [])
 
     @_db_synchronized
@@ -58,6 +76,8 @@ class SupabaseCommandsMixin:
 
     @_db_synchronized
     def reclaim_stale_position_commands(self, stale_after_sec: float = 120.0) -> int:
+        if not self._reclaim_due("position_commands"):
+            return 0
         cutoff = (
             datetime.now(timezone.utc) - timedelta(seconds=stale_after_sec)
         ).isoformat()
@@ -68,6 +88,7 @@ class SupabaseCommandsMixin:
             .lt("processed_at", cutoff)
             .execute()
         )
+        self._reclaim_done("position_commands")
         return len(result.data or [])
 
     @_db_synchronized
@@ -110,6 +131,8 @@ class SupabaseCommandsMixin:
 
     @_db_synchronized
     def reclaim_stale_entry_commands(self, stale_after_sec: float = 120.0) -> int:
+        if not self._reclaim_due("entry_commands"):
+            return 0
         cutoff = (
             datetime.now(timezone.utc) - timedelta(seconds=stale_after_sec)
         ).isoformat()
@@ -120,6 +143,7 @@ class SupabaseCommandsMixin:
             .lt("processed_at", cutoff)
             .execute()
         )
+        self._reclaim_done("entry_commands")
         return len(result.data or [])
 
     @_db_synchronized

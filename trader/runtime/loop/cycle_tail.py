@@ -11,7 +11,7 @@ from runtime.heartbeat import run_heartbeat_cycle
 from runtime.loop.eval_cycle_state import EvalCycleScratch
 from runtime.state import TraderRuntimeState
 from runtime.status_log import log_trader_running
-from runtime.timing import compute_loop_sleep_sec, should_refresh
+from runtime.timing import apply_error_backoff, compute_loop_sleep_sec, should_refresh
 from runtime.trader_ops import interruptible_sleep
 
 if TYPE_CHECKING:
@@ -103,6 +103,7 @@ def finish_eval_cycle_sleep(
         settings.heartbeat_interval_sec,
         track_heartbeat=ctx.db is not None,
     )
+    sleep_for = apply_error_backoff(sleep_for, runtime.consecutive_cycle_failures)
     scratch.apply_to_context(ctx)
     if sleep_for > 0 and not runtime.shutdown_requested:
         interruptible_sleep(sleep_for, runtime)

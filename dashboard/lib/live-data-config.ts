@@ -6,6 +6,9 @@
 /** Default client poll for trading views (was 3s — too aggressive for hosted DB). */
 export const LIVE_DATA_POLL_MS = 10_000;
 
+/** Latest-per-symbol predictions scan a large table — poll less often than trades/positions. */
+export const LIVE_PREDICTIONS_POLL_MS = 30_000;
+
 /** Settings change rarely — avoid polling with trades/positions. */
 export const LIVE_SETTINGS_POLL_MS = 120_000;
 

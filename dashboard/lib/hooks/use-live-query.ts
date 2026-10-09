@@ -59,6 +59,8 @@ export function useLiveQuery<T>(
     keepPreviousOnNull?: boolean;
     keepPreviousOnEmpty?: boolean;
     resetKey?: string | number | null;
+    /** Initial value was just rendered on the server: wait for the first poll instead of refetching on mount. */
+    skipInitialFetch?: boolean;
   },
 ): T {
   const [data, setData] = useState(initial);
@@ -67,6 +69,7 @@ export function useLiveQuery<T>(
   const keepPreviousOnEmpty = options?.keepPreviousOnEmpty ?? false;
   const resetKey = options?.resetKey ?? null;
   const resetKeyRef = useRef(resetKey);
+  const skipInitialFetch = options?.skipInitialFetch ?? false;
 
   const refresh = useCallback(async () => {
     try {
@@ -124,18 +127,16 @@ export function useLiveQuery<T>(
   }, [initial, keepPreviousOnNull, keepPreviousOnEmpty]);
 
   useEffect(() => {
-    const kickoff = window.setTimeout(() => void refresh(), 0);
+    const kickoff = skipInitialFetch ? null : window.setTimeout(() => void refresh(), 0);
     const id = setInterval(() => void refresh(), pollIntervalMs);
     return () => {
-      window.clearTimeout(kickoff);
+      if (kickoff !== null) window.clearTimeout(kickoff);
       clearInterval(id);
     };
-  }, [refresh, pollIntervalMs]);
+  }, [refresh, pollIntervalMs, skipInitialFetch]);
 
   const realtimeTables = liveRealtimeTables(tables);
-  useRealtimeRefresh(realtimeTables, () => {
-    void refresh();
-  });
+  useRealtimeRefresh(realtimeTables, refresh);
 
   return data;
 }

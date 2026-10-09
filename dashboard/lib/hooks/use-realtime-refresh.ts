@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { REALTIME_DEBOUNCE_MS } from "@/lib/live-data-config";
 import { createClient } from "@/lib/supabase/client";
@@ -25,7 +25,11 @@ type ChannelEntry = {
   channel: RealtimeChannel;
   callbacks: Set<() => void>;
   refCount: number;
+  removeTimer: ReturnType<typeof setTimeout> | null;
 };
+
+/** Keep an unused channel briefly so navigating between pages reuses it instead of rejoining. */
+const CHANNEL_LINGER_MS = 5_000;
 
 const sharedChannels = new Map<string, ChannelEntry>();
 
@@ -52,31 +56,44 @@ function getOrCreateChannel(tableKey: string): ChannelEntry {
 
   channel.subscribe();
 
-  const entry: ChannelEntry = { channel, callbacks, refCount: 0 };
+  const entry: ChannelEntry = { channel, callbacks, refCount: 0, removeTimer: null };
   sharedChannels.set(tableKey, entry);
   return entry;
 }
 
 export function useRealtimeRefresh(tables: string[], onRefresh: () => void) {
   const tableKey = tables.slice().sort().join(",");
+  const hasTables = tables.length > 0;
+  // Subscribe once per table set; always call the latest callback.
+  const onRefreshRef = useRef(onRefresh);
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  });
 
   useEffect(() => {
-    if (tables.length === 0) {
+    if (!hasTables) {
       return;
     }
     const entry = getOrCreateChannel(tableKey);
-    entry.callbacks.add(onRefresh);
+    if (entry.removeTimer) {
+      clearTimeout(entry.removeTimer);
+      entry.removeTimer = null;
+    }
+    const callback = () => onRefreshRef.current();
+    entry.callbacks.add(callback);
     entry.refCount += 1;
 
     return () => {
-      entry.callbacks.delete(onRefresh);
+      entry.callbacks.delete(callback);
       entry.refCount -= 1;
 
-      if (entry.refCount <= 0) {
-        const supabase = createClient();
-        void supabase.removeChannel(entry.channel);
-        sharedChannels.delete(tableKey);
+      if (entry.refCount <= 0 && !entry.removeTimer) {
+        entry.removeTimer = setTimeout(() => {
+          if (entry.refCount > 0 || sharedChannels.get(tableKey) !== entry) return;
+          sharedChannels.delete(tableKey);
+          void createClient().removeChannel(entry.channel);
+        }, CHANNEL_LINGER_MS);
       }
     };
-  }, [tableKey, onRefresh, tables.length]);
+  }, [tableKey, hasTables]);
 }

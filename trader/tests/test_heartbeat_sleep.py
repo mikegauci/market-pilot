@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import unittest
 
-from runtime.timing import compute_loop_sleep_sec, should_refresh
+from runtime.timing import (
+    CYCLE_ERROR_BACKOFF_SEC,
+    apply_error_backoff,
+    compute_loop_sleep_sec,
+    should_refresh,
+)
 
 
 class TestComputeLoopSleep(unittest.TestCase):
@@ -49,6 +54,21 @@ class TestComputeLoopSleep(unittest.TestCase):
             track_heartbeat=False,
         )
         self.assertEqual(sleep_for, 300.0)
+
+
+class TestErrorBackoff(unittest.TestCase):
+    def test_failed_cycle_never_retries_immediately(self) -> None:
+        self.assertEqual(apply_error_backoff(0.0, 1), CYCLE_ERROR_BACKOFF_SEC)
+
+    def test_backoff_doubles_then_caps(self) -> None:
+        waits = [apply_error_backoff(0.0, n) for n in range(1, 8)]
+        self.assertEqual(waits, [5.0, 10.0, 20.0, 30.0, 30.0, 30.0, 30.0])
+
+    def test_failed_cycle_keeps_a_longer_sleep(self) -> None:
+        self.assertEqual(apply_error_backoff(60.0, 1), 60.0)
+
+    def test_healthy_cycle_is_unchanged(self) -> None:
+        self.assertEqual(apply_error_backoff(0.0, 0), 0.0)
 
 
 class TestShouldRefresh(unittest.TestCase):
