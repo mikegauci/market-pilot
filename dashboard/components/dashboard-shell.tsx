@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { BotStatusProvider } from "@/components/bot-status-provider";
@@ -100,32 +100,16 @@ export function DashboardShell({
           <DashboardLiveToasts settings={settings} />
           <div className="flex min-h-screen">
           <aside
-            aria-hidden={collapsed}
             className={cn(
-              "hidden w-64 shrink-0 min-h-screen flex-col overflow-y-auto border-r border-zinc-800 bg-zinc-900/50 p-4",
-              collapsed ? "lg:hidden" : "lg:flex",
+              "hidden shrink-0 min-h-screen flex-col overflow-y-auto overflow-x-hidden border-r border-zinc-800 bg-zinc-900/50 lg:flex",
+              collapsed ? "w-16 p-2" : "w-64 p-4",
             )}
           >
-            <DashboardNavContent />
+            <DashboardNavContent
+              collapsed={collapsed}
+              onToggleCollapsed={toggleCollapsed}
+            />
           </aside>
-
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            className={cn(
-              "fixed top-4 z-30 hidden h-8 w-8 items-center justify-center rounded-md border border-zinc-800 bg-zinc-900 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100 lg:inline-flex",
-              collapsed ? "left-4" : "left-[13.5rem]",
-            )}
-            aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
-            aria-expanded={!collapsed}
-            title={collapsed ? "Show sidebar" : "Hide sidebar"}
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="h-4 w-4" />
-            ) : (
-              <PanelLeftClose className="h-4 w-4" />
-            )}
-          </button>
 
           <div
             className={cn(
@@ -166,9 +150,7 @@ export function DashboardShell({
               <Logo size="sm" />
             </header>
 
-            <main className={cn("min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-8",
-                collapsed && "lg:pl-16",
-              )}>
+            <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
               {readOnly ? (
                 <p className="mb-4 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-400">
                   Read-only view — browse live data only. Sign in with your owner account to change
