@@ -230,9 +230,6 @@ export const ROTATION_RULES: StrategyIndicator[] = [
   },
 ];
 
-/** @deprecated Use JEV_INDICATORS + HARD_FILTER_RULES */
-export const STRATEGY_INDICATORS = [...JEV_INDICATORS, ...HARD_FILTER_RULES];
-
 export function withBenchmarkSymbol(
   items: StrategyIndicator[],
   benchmarkSymbol?: string,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from database.supabase_support import *  # noqa: F403
-from database.trade_account_scope import apply_trade_account_filter
 
 class SupabaseBotControlMixin:
     @_db_synchronized
@@ -88,16 +87,6 @@ class SupabaseBotControlMixin:
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         self.client.table("bot_status").update(payload).eq("id", 1).execute()
-
-    @_db_synchronized
-    def clear_shutdown_requested(self) -> None:
-        """Drop a dashboard stop request when the trader was not running."""
-        self.client.table("bot_status").update(
-            {
-                "shutdown_requested": False,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        ).eq("id", 1).execute()
 
     @_db_synchronized
     def get_last_heartbeat(self) -> Optional[str]:

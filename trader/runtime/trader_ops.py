@@ -57,20 +57,6 @@ def merge_watchlist_symbols(watchlist: list[str], benchmark: str = "") -> list[s
     return merged
 
 
-def apply_watchlist_update(
-    watchlist: List[str],
-    benchmark_symbol: str,
-    mock: MockMarketProvider,
-    ibkr: IBKRClient,
-    settings: Settings,
-) -> List[str]:
-    symbols = merge_watchlist_symbols(watchlist, benchmark_symbol)
-    mock.ensure_symbols(symbols)
-    if settings.data_source == DataSource.IBKR and ibkr.is_connected():
-        ibkr.sync_watchlist_subscriptions(symbols)
-    return symbols
-
-
 def sync_watchlist_symbols(
     all_symbols_list: list[str],
     mock: MockMarketProvider,

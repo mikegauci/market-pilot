@@ -119,13 +119,6 @@ export function getTakeProfitHints(
   return hints;
 }
 
-export function formatMaxHoldMinutes(minutes: number): string {
-  if (!Number.isFinite(minutes) || minutes <= 0) {
-    return "Off (brackets + Jev SELL)";
-  }
-  return `${minutes} min`;
-}
-
 export function getMaxHoldHints(minutes: number): StrategyHint[] {
   const hints: StrategyHint[] = [];
   const rec = STRATEGY_RECOMMENDATIONS.max_hold_minutes;

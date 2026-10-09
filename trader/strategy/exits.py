@@ -61,9 +61,6 @@ def jev_sell_exit_allowed(
 
 
 DEFAULT_PROFIT_TAKE_MAX = 0.80
-DEFAULT_PROFIT_TAKE_MIN_BAND_HITS = 3
-DEFAULT_PROFIT_TAKE_BAND_WINDOW = 10
-DEFAULT_PROFIT_TAKE_JEV_SELL_THRESHOLD = 0.70
 
 
 def take_profit_path_progress(trade: TradeRecord, price: float) -> Optional[float]:

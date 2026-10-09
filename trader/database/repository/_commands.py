@@ -4,7 +4,6 @@ import time
 
 from database.command_queue import STALE_PROCESSING_SEC
 from database.supabase_support import *  # noqa: F403
-from database.trade_account_scope import apply_trade_account_filter
 
 # Commands only count as stale after ~120s, so checking more often just adds an UPDATE per poll.
 RECLAIM_MIN_INTERVAL_SEC = 30.0

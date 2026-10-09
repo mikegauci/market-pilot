@@ -3,7 +3,6 @@ from __future__ import annotations
 import time
 
 from database.supabase_support import *  # noqa: F403
-from database.trade_account_scope import apply_trade_account_filter
 
 # Profiles are written once (baseline at creation); re-read occasionally in case of manual edits.
 ACCOUNT_PROFILE_CACHE_TTL_SEC = 600.0

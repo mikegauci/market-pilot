@@ -51,11 +51,6 @@ class IBKRConnectionMixin:
     def market_data_is_blocked(self) -> bool:
         return self._market_data_blocked
 
-    def market_data_mode(self) -> str:
-        if self._use_snapshot_quotes:
-            return "snapshot"
-        return "stream"
-
     def _on_ib_error(
         self,
         req_id: int,

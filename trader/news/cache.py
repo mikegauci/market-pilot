@@ -39,10 +39,6 @@ class TtlCache(Generic[T]):
     def is_stale(self, key: str) -> bool:
         return self.get(key) is None
 
-    def stale_keys(self, keys: list[str]) -> list[str]:
-        return [key for key in keys if self.is_stale(key)]
-
-
 class CooldownTracker:
     """Per-key cooldown after empty results or failed fetches."""
 

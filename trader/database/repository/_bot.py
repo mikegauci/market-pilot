@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from database.supabase_support import *  # noqa: F403
-from database.trade_account_scope import apply_trade_account_filter
 
 class SupabaseBotStatusMixin:
     @_db_synchronized

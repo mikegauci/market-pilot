@@ -1,43 +1,8 @@
 from __future__ import annotations
 
 from database.supabase_support import *  # noqa: F403
-from database.trade_account_scope import apply_trade_account_filter
 
 class SupabasePredictionsMixin:
-    def build_prediction_payload(
-        self,
-        state: MarketState,
-        prediction: JevPrediction,
-        *,
-        trade_created: bool = False,
-        trade_skip_reason: Optional[str] = None,
-    ) -> dict:
-        return _build_prediction_payload(
-            state,
-            prediction,
-            trade_created=trade_created,
-            trade_skip_reason=trade_skip_reason,
-        )
-
-    @_db_synchronized
-    def insert_prediction(
-        self,
-        state: MarketState,
-        prediction: JevPrediction,
-        trade_created: bool = False,
-        trade_skip_reason: Optional[str] = None,
-    ) -> None:
-        payload = self.build_prediction_payload(
-            state,
-            prediction,
-            trade_created=trade_created,
-            trade_skip_reason=trade_skip_reason,
-        )
-        self.client.table("predictions").insert(payload).execute()
-
-    def _prediction_payload(self, *args, **kwargs) -> dict:
-        """Backward-compatible alias for :meth:`build_prediction_payload`."""
-        return self.build_prediction_payload(*args, **kwargs)
 
     @_db_synchronized
     def insert_predictions_batch(

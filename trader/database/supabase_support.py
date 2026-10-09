@@ -31,7 +31,6 @@ from models.types import (
     TradeRecord,
     TradingMode,
 )
-from database.prediction_payload import build_prediction_payload as _build_prediction_payload
 from notify.telegram import notify_trade_closed, notify_trade_opened
 from database.trade_account_scope import (
     apply_trade_account_filter,
@@ -184,7 +183,6 @@ __all__ = [
     "TradingMode",
     "TypeVar",
     "AccountSummary",
-    "_build_prediction_payload",
     "_build_supabase_http_client",
     "_db_synchronized",
     "_ensure_utc_iso",

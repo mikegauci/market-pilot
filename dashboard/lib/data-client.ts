@@ -1,4 +1,3 @@
-import { ANALYTICS_SKIP_REASON_LIMIT } from "@/lib/analytics-data";
 import {
   normalizePredictionFeedRows,
 } from "@/lib/prediction-feed-normalize";
@@ -11,7 +10,6 @@ import {
   readActivePositionCommands,
   readActiveTradeCommands,
   readAllTrades,
-  readAnalyticsPredictions,
   readClosedTrades,
   readLatestPredictionsBySymbol,
   readLatestPortfolio,
@@ -22,7 +20,6 @@ import {
   readPredictionFeedPage,
   readSettings,
   readSymbolBars,
-  readTradedPredictions,
   readTradesForTradingDay,
 } from "@/lib/supabase/data-reads";
 import { createClient } from "@/lib/supabase/client";
@@ -102,16 +99,6 @@ export async function fetchMarketNews(limit = 100): Promise<MarketNewsRow[]> {
   const { data, error } = await readMarketNews(supabase, limit);
   if (error) {
     logFetchError("market_news", error.message);
-    return [];
-  }
-  return data;
-}
-
-export async function fetchTradedPredictions(limit = 10): Promise<Prediction[]> {
-  const supabase = createClient();
-  const { data, error } = await readTradedPredictions(supabase, limit);
-  if (error) {
-    logFetchError("predictions", error.message);
     return [];
   }
   return data;
@@ -205,18 +192,6 @@ export async function fetchClosedTrades(): Promise<Trade[]> {
   const { data, error } = await readClosedTrades(supabase);
   if (error) {
     logFetchError("trades", error.message);
-    return [];
-  }
-  return data;
-}
-
-export async function fetchAnalyticsPredictions(
-  limit = ANALYTICS_SKIP_REASON_LIMIT,
-): Promise<Prediction[]> {
-  const supabase = createClient();
-  const { data, error } = await readAnalyticsPredictions(supabase, limit);
-  if (error) {
-    logFetchError("predictions", error.message);
     return [];
   }
   return data;

@@ -219,19 +219,6 @@ export async function readMarketNews(
   return { data: (data ?? []) as MarketNewsRow[], error };
 }
 
-export async function readTradedPredictions(
-  supabase: SupabaseClient,
-  limit = 10,
-): Promise<SupabaseRead<Prediction[]>> {
-  const { data, error } = await supabase
-    .from("predictions")
-    .select("*")
-    .eq("trade_created", true)
-    .order("timestamp", { ascending: false })
-    .limit(limit);
-  return { data: (data ?? []) as Prediction[], error };
-}
-
 export async function readSymbolBars(
   supabase: SupabaseClient,
   symbol: string,

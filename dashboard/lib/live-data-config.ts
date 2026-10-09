@@ -21,7 +21,3 @@ export const LIVE_POLL_ONLY_TABLES = new Set(["predictions"]);
 export function liveRealtimeTables(tables: string[]): string[] {
   return tables.filter((table) => !LIVE_POLL_ONLY_TABLES.has(table));
 }
-
-export function hasLiveRealtimeTables(tables: string[]): boolean {
-  return liveRealtimeTables(tables).length > 0;
-}

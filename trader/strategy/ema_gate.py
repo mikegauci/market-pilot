@@ -18,10 +18,6 @@ def normalize_entry_ema_gate(raw: object, *, default: EntryEmaGate = "ema_20") -
     return default
 
 
-def entry_ema_gate_from_require_flag(require_above_ema20: bool) -> EntryEmaGate:
-    return "ema_20" if require_above_ema20 else "off"
-
-
 def check_entry_ema_gate(
     state: MarketState,
     gate: EntryEmaGate,

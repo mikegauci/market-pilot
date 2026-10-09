@@ -412,24 +412,6 @@ def close_ibkr_signal_exits(
     return closed_any, closed_trade_ids
 
 
-def collect_time_exit_symbols(
-    open_trades: List[TradeRecord],
-    max_hold_minutes: float,
-    *,
-    max_hold_for_symbol: Optional[Callable[[str], float]] = None,
-) -> set[str]:
-    symbols: set[str] = set()
-    for trade in open_trades:
-        hold_minutes = (
-            max_hold_for_symbol(trade.symbol)
-            if max_hold_for_symbol is not None
-            else max_hold_minutes
-        )
-        if hold_minutes > 0 and _trade_hold_expired(trade, hold_minutes):
-            symbols.add(trade.symbol)
-    return symbols
-
-
 def collect_profit_take_trade_ids(
     open_trades: List[TradeRecord],
     quotes_by_symbol: Dict[str, Quote],

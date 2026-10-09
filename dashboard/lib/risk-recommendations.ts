@@ -128,11 +128,6 @@ export function getRecommendedValuesForProfile(
   };
 }
 
-/** @deprecated Use getRecommendedValuesForProfile */
-export function getRecommendedValues(baselineEquity: number) {
-  return getRecommendedValuesForProfile(baselineEquity, "medium");
-}
-
 export function isNearRecommended(
   amount: number,
   equity: number,

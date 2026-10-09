@@ -34,8 +34,6 @@ import {
   readPredictionFeedPageForId,
   readPredictionFeedSymbols,
   readSettings,
-  readSymbolBars,
-  readTradedPredictions,
   readTradesForTradingDay,
 } from "@/lib/supabase/data-reads";
 import { canDashboardWrite } from "@/lib/dashboard-role";
@@ -43,7 +41,6 @@ import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import type {
   BotStatus,
   MarketNewsRow,
-  IbkrAccountProfile,
   PortfolioSnapshot,
   Position,
   EntryCommand,
@@ -51,7 +48,6 @@ import type {
   Prediction,
   SessionBriefRow,
   Settings,
-  SymbolBar,
   Trade,
   TradeCommand,
 } from "@/lib/types/database";
@@ -71,19 +67,6 @@ export async function getSettings(): Promise<Settings | null> {
   }
   const { data } = await readSettings(supabase);
   return data;
-}
-
-export async function getIbkrAccountProfile(
-  accountId: string,
-): Promise<IbkrAccountProfile | null> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("ibkr_account_profiles")
-    .select("*")
-    .eq("account_id", accountId)
-    .limit(1)
-    .maybeSingle();
-  return data as IbkrAccountProfile | null;
 }
 
 export async function getLatestPortfolio(): Promise<PortfolioSnapshot | null> {
@@ -259,17 +242,6 @@ export async function getTradesForTradingDay(
   return data;
 }
 
-export async function getAllTrades(status?: "open" | "closed" | "all"): Promise<Trade[]> {
-  const supabase = await createClient();
-  const { data } = await readAllTrades(supabase, status);
-  return data;
-}
-
-export async function getTradeAccountScope(): Promise<TradeAccountScope> {
-  const supabase = await createClient();
-  return resolveTradeAccountScope(supabase);
-}
-
 export type TradesPageLoad = {
   trades: Trade[];
   tradeScope: TradeAccountScope;
@@ -374,21 +346,5 @@ export async function getPredictionsPage(
 export async function getMarketNews(limit = 100): Promise<MarketNewsRow[]> {
   const supabase = await createClient();
   const { data } = await readMarketNews(supabase, limit);
-  return data;
-}
-
-export async function getTradedPredictions(limit = 10): Promise<Prediction[]> {
-  const supabase = await createClient();
-  const { data } = await readTradedPredictions(supabase, limit);
-  return data;
-}
-
-export async function getSymbolBars(
-  symbol: string,
-  barSize = "5 mins",
-  limit = 500,
-): Promise<SymbolBar[]> {
-  const supabase = await createClient();
-  const { data } = await readSymbolBars(supabase, symbol, barSize, limit);
   return data;
 }
