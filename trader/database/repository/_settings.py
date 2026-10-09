@@ -13,54 +13,6 @@ class SupabaseSettingsMixin:
             watchlist=risk.watchlist,
         )
 
-    _SETTINGS_SELECT_CORE = (
-        "minimum_jev_confidence, signal_record_threshold, risk_per_trade, "
-        "max_position_size, max_daily_loss, max_open_positions, "
-        "stop_loss_percentage, take_profit_percentage, max_hold_minutes, "
-        "min_hold_minutes, jev_sell_exit_threshold, reentry_cooldown_minutes, "
-        "min_volume_ratio, min_share_price, "
-        "account_capital, risk_sync_equity, watchlist, benchmark_symbol"
-    )
-    _SETTINGS_SELECT_WITH_PROFIT_TAKE = (
-        f"{_SETTINGS_SELECT_CORE}, "
-        "profit_take_enabled, profit_take_min_fraction, profit_take_max_fraction, "
-        "profit_take_min_band_hits, profit_take_band_window_cycles, "
-        "profit_take_jev_sell_threshold"
-    )
-    _SETTINGS_SELECT_WITH_LOSS_CUT = (
-        f"{_SETTINGS_SELECT_WITH_PROFIT_TAKE}, "
-        "loss_cut_enabled, loss_cut_min_fraction, loss_cut_max_fraction, "
-        "loss_cut_min_band_hits, loss_cut_band_window_cycles, "
-        "loss_cut_jev_sell_threshold"
-    )
-    _SETTINGS_SELECT_BASE = (
-        f"{_SETTINGS_SELECT_WITH_LOSS_CUT}, confirmation_cycles, confirmation_seconds"
-    )
-    _SETTINGS_SELECT_ROTATION = (
-        "watchlist_pool, watchlist_active, watchlist_rotation_enabled, "
-        "watchlist_active_size, watchlist_rotation_interval_minutes, "
-        "watchlist_max_swaps_per_rotation, watchlist_last_rotation_note, "
-        "watchlist_rotation_history, entry_blocked_symbols, entry_blocked_at"
-    )
-
-    @staticmethod
-    def _apply_profit_take_defaults(data: dict) -> None:
-        data.setdefault("profit_take_enabled", False)
-        data.setdefault("profit_take_min_fraction", 0.70)
-        data.setdefault("profit_take_max_fraction", 0.80)
-        data.setdefault("profit_take_min_band_hits", 3)
-        data.setdefault("profit_take_band_window_cycles", 10)
-        data.setdefault("profit_take_jev_sell_threshold", 0.70)
-
-    @staticmethod
-    def _apply_loss_cut_defaults(data: dict) -> None:
-        data.setdefault("loss_cut_enabled", False)
-        data.setdefault("loss_cut_min_fraction", 0.70)
-        data.setdefault("loss_cut_max_fraction", 0.90)
-        data.setdefault("loss_cut_min_band_hits", 3)
-        data.setdefault("loss_cut_band_window_cycles", 10)
-        data.setdefault("loss_cut_jev_sell_threshold", 0.0)
-
     @staticmethod
     def _parse_rotation_session_pct(data: dict) -> Optional[float]:
         raw = data.get("rotation_min_session_change_pct")
@@ -105,167 +57,36 @@ class SupabaseSettingsMixin:
         except Exception:
             return None
 
-    def _merge_optional_settings_columns(self, data: dict) -> None:
-        row = self._select_settings_row(
-            "max_entries_per_symbol_per_day, rotation_min_session_change_pct, "
-            "entry_ema_gate, max_rsi, max_spread_pct"
-        )
-        if row is None:
-            data.setdefault("max_entries_per_symbol_per_day", 3)
-        else:
-            if row.get("max_entries_per_symbol_per_day") is not None:
-                data["max_entries_per_symbol_per_day"] = row[
-                    "max_entries_per_symbol_per_day"
-                ]
-            else:
-                data.setdefault("max_entries_per_symbol_per_day", 3)
-            if "rotation_min_session_change_pct" in row:
-                raw_rotation = row.get("rotation_min_session_change_pct")
-                data["rotation_min_session_change_pct"] = (
-                    None if raw_rotation is None else float(raw_rotation)
-                )
-            if "entry_ema_gate" in row and row.get("entry_ema_gate") is not None:
-                data["entry_ema_gate"] = str(row["entry_ema_gate"]).strip().lower()
-            if "max_rsi" in row and row.get("max_rsi") is not None:
-                data["max_rsi"] = float(row["max_rsi"])
-            if "max_spread_pct" in row and row.get("max_spread_pct") is not None:
-                data["max_spread_pct"] = float(row["max_spread_pct"])
-
-        breakout_row = self._select_settings_row(
-            "breakout_enabled, breakout_max_rsi, breakout_window_minutes, "
-            "breakout_max_promotions_per_cycle, breakout_lookback_minutes, "
-            "breakout_min_volume_ratio, breakout_min_change_5m_pct"
-        )
-        if breakout_row is None:
-            return
-        if "breakout_enabled" in breakout_row:
-            data["breakout_enabled"] = bool(
-                breakout_row.get("breakout_enabled", True)
-            )
-        if (
-            "breakout_max_rsi" in breakout_row
-            and breakout_row.get("breakout_max_rsi") is not None
-        ):
-            data["breakout_max_rsi"] = float(breakout_row["breakout_max_rsi"])
-        if (
-            "breakout_window_minutes" in breakout_row
-            and breakout_row.get("breakout_window_minutes") is not None
-        ):
-            data["breakout_window_minutes"] = float(
-                breakout_row["breakout_window_minutes"]
-            )
-        if (
-            "breakout_max_promotions_per_cycle" in breakout_row
-            and breakout_row.get("breakout_max_promotions_per_cycle") is not None
-        ):
-            data["breakout_max_promotions_per_cycle"] = int(
-                breakout_row["breakout_max_promotions_per_cycle"]
-            )
-        if (
-            "breakout_lookback_minutes" in breakout_row
-            and breakout_row.get("breakout_lookback_minutes") is not None
-        ):
-            data["breakout_lookback_minutes"] = int(
-                breakout_row["breakout_lookback_minutes"]
-            )
-        if (
-            "breakout_min_volume_ratio" in breakout_row
-            and breakout_row.get("breakout_min_volume_ratio") is not None
-        ):
-            data["breakout_min_volume_ratio"] = float(
-                breakout_row["breakout_min_volume_ratio"]
-            )
-        if (
-            "breakout_min_change_5m_pct" in breakout_row
-            and breakout_row.get("breakout_min_change_5m_pct") is not None
-        ):
-            data["breakout_min_change_5m_pct"] = float(
-                breakout_row["breakout_min_change_5m_pct"]
-            )
+    # Optional columns where NULL means "not set": drop the key so get_risk_settings uses
+    # the built-in default and *_from_settings stays False (matches the trader env fallback).
+    _NULL_MEANS_UNSET = (
+        "max_entries_per_symbol_per_day",
+        "entry_ema_gate",
+        "max_rsi",
+        "max_spread_pct",
+        "breakout_max_rsi",
+        "breakout_window_minutes",
+        "breakout_max_promotions_per_cycle",
+        "breakout_lookback_minutes",
+        "breakout_min_volume_ratio",
+        "breakout_min_change_5m_pct",
+    )
 
     def _load_settings_row(self) -> dict:
-        data = self._select_settings_row(
-            f"{self._SETTINGS_SELECT_BASE}, min_dollar_volume, {self._SETTINGS_SELECT_ROTATION}"
-        )
-        if data is not None:
-            return data
-
-        logger.warning(
-            "Settings read without rotation columns — using defaults",
-        )
-        data = self._select_settings_row(f"{self._SETTINGS_SELECT_BASE}, min_dollar_volume")
-        if data is not None:
-            self._apply_rotation_defaults(data)
-            return data
-
-        logger.warning(
-            "Settings read without min_dollar_volume — using default",
-        )
-        data = self._select_settings_row(self._SETTINGS_SELECT_BASE)
-        if data is not None:
-            data.setdefault("min_dollar_volume", 250_000)
-            return data
-
-        logger.warning(
-            "Settings read without loss_cut columns — using defaults",
-        )
-        data = self._select_settings_row(
-            f"{self._SETTINGS_SELECT_WITH_PROFIT_TAKE}, confirmation_cycles, "
-            "confirmation_seconds, min_dollar_volume, "
-            f"{self._SETTINGS_SELECT_ROTATION}"
-        )
-        if data is not None:
-            self._apply_loss_cut_defaults(data)
-            return data
-
-        data = self._select_settings_row(
-            f"{self._SETTINGS_SELECT_WITH_PROFIT_TAKE}, confirmation_cycles, "
-            "confirmation_seconds, min_dollar_volume"
-        )
-        if data is not None:
-            self._apply_rotation_defaults(data)
-            self._apply_loss_cut_defaults(data)
-            return data
-
-        logger.warning(
-            "Settings read without profit_take columns — using defaults",
-        )
-        data = self._select_settings_row(
-            f"{self._SETTINGS_SELECT_CORE}, confirmation_cycles, confirmation_seconds, "
-            "min_dollar_volume"
-        )
-        if data is not None:
-            self._apply_profit_take_defaults(data)
-            self._apply_loss_cut_defaults(data)
-            return data
-
-        logger.warning(
-            "Settings read without confirmation_cycles/confirmation_seconds — using defaults",
-        )
-        data = self._select_settings_row(f"{self._SETTINGS_SELECT_CORE}, min_dollar_volume")
-        if data is not None:
-            data.setdefault("confirmation_cycles", 2)
-            data.setdefault("confirmation_seconds", 30)
-            self._apply_profit_take_defaults(data)
-            self._apply_loss_cut_defaults(data)
-            return data
-
-        data = self._select_settings_row(self._SETTINGS_SELECT_CORE)
-        if data is not None:
-            data.setdefault("min_dollar_volume", 250_000)
-            data.setdefault("confirmation_cycles", 2)
-            data.setdefault("confirmation_seconds", 30)
-            self._apply_profit_take_defaults(data)
-            self._apply_loss_cut_defaults(data)
-            return data
-
-        raise RuntimeError("Unable to load settings row from Supabase")
+        """One read of the settings row. Columns an older schema lacks are simply absent,
+        and get_risk_settings falls back to its defaults for them."""
+        data = self._select_settings_row("*")
+        if data is None:
+            raise RuntimeError("Unable to load settings row from Supabase")
+        for key in self._NULL_MEANS_UNSET:
+            if key in data and data[key] is None:
+                del data[key]
+        return data
 
     @_db_synchronized
     def get_risk_settings(self) -> RiskSettings:
         data = self._load_settings_row()
         self._apply_rotation_defaults(data)
-        self._merge_optional_settings_columns(data)
         watchlist = data.get("watchlist") or []
         risk_sync_equity = (
             float(data["risk_sync_equity"])

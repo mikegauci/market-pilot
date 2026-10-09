@@ -48,7 +48,7 @@ Run the trader with `python main.py` in `trader/`. Run the dashboard with `npm r
 - `risk/manager.py` handles sizing and limits. `risk_per_trade` is authoritative: notional = `risk_per_trade / stop_pct`, clipped by `max_position_size`. `stop_pct` comes from `resolve_stop_take_pct`. When ATR is available it is `atr_pct * stop_loss_atr_multiple`, clamped to `[min_stop_loss_pct, max_stop_loss_pct]`. Otherwise it falls back to `settings.stop_loss_percentage`. Take-profit follows the same pattern.
 - `broker/ibkr/` is the IBKR client, split by concern. `broker/execution.py` switches between simulated and IBKR bracket orders. `execution_mode` comes from the DB (dashboard toggle) and falls back to env. `broker/reconcile.py` syncs orphan IBKR positions.
 - `watchlist/` covers the candidate pool, the active list (about 12 names, rotated every 15 minutes, up to 2 swaps), breakout promotion, and phased bar backfill (critical first, then the deferred pool, one symbol per cycle).
-- `database/repository/` is `SupabaseRepository`, built from mixins (`_settings`, `_trades`, `_commands`, ...). **The `.select(...)` column lists are written by hand.** A new settings column won't load unless it is added there.
+- `database/repository/` is `SupabaseRepository`, built from mixins (`_settings`, `_trades`, `_commands`, ...). **Most `.select(...)` column lists are written by hand.** The settings row is read with `select("*")` in `_settings._load_settings_row`, so a new settings column loads automatically, but it is only used once `get_risk_settings` parses it (nullable optionals go in `_NULL_MEANS_UNSET`).
 - Day-trading invariants: no entries in the last 15 minutes before close, flatten every position in the last 10 minutes (including losers), and, when `DATA_SOURCE=ibkr`, outside RTH skip Jev and new entries but keep exits and heartbeats running. Mock mode skips this gate on purpose.
 
 ## Dashboard ↔ trader contract
@@ -63,7 +63,7 @@ Run the trader with `python main.py` in `trader/`. Run the dashboard with `npm r
 A new `settings` column touches every layer. See `.agents/skills/add-trading-setting/SKILL.md` for the full checklist. In short:
 - migration + MCP apply
 - `trader/models/types.py` `RiskSettings`
-- the `get_risk_settings` select string and parse in `trader/database/`
+- the `get_risk_settings` parse in `trader/database/repository/_settings.py` (and `_NULL_MEANS_UNSET` if NULL means "use the default")
 - `strategy/config.py` / `config.py` / `.env.example` if it is strategy-facing
 - `dashboard/lib/types/database.ts`, `normalize-settings.ts`, `validate-settings.ts`, `lib/settings-form-descriptions.ts` (both `SETTING_DESCRIPTIONS` and `SETTING_DESCRIPTIONS_FULL`; a missing key fails `next build`), `components/settings-form.tsx`
 - the README table

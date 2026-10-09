@@ -20,7 +20,7 @@ Copy and track:
 ```text
 - [ ] Supabase: new `supabase/migrations/*.sql` file, same SQL applied via MCP, verified with execute_sql
 - [ ] trader/models/types.py — RiskSettings (and StrategySettings if applicable)
-- [ ] trader/database/supabase.py — get_risk_settings select string + RiskSettings(...) parse
+- [ ] trader/database/repository/_settings.py — get_risk_settings RiskSettings(...) parse (row is read with select("*"))
 - [ ] trader/strategy/config.py — StrategyConfig + strategy_config_with_risk_overrides (if strategy-facing)
 - [ ] trader/config.py — strategy_* field + strategy_config() mapping (if env-tunable)
 - [ ] trader/.env.example — commented STRATEGY_* (if env-tunable)
@@ -51,9 +51,9 @@ If the dashboard reads/writes this column via anon + RLS, confirm existing `sett
 
 **`trader/models/types.py`**: add field on `RiskSettings` with the same default as SQL.
 
-**`trader/database/supabase.py`** — `get_risk_settings()`:
+**`trader/database/repository/_settings.py`** — `get_risk_settings()`:
 
-- Append the column name to the `.select(...)` string (hand-maintained; omitted columns never load from DB).
+- The settings row is read with `select("*")`, so no select string to update. If NULL should mean "use the default", add the column to `_NULL_MEANS_UNSET`. Add the column to `FULL_ROW` in `tests/settings_row_fixtures.py` and add the parsed field to each scenario in `tests/settings_golden.json`.
 - Map `data.get("column_name", default)` in the `RiskSettings(...)` constructor.
 
 Trader reloads risk settings each cycle; no process restart required for values already in Supabase (see project rule: do not restart the trader yourself).
@@ -94,7 +94,7 @@ Run the **preflight-checks** skill (`trader` pytest + `dashboard` test, lint, bu
 
 ## Common mistakes
 
-- Column in DB but not in `get_risk_settings()` select → trader always uses Python default.
+- Column in DB but not parsed in `get_risk_settings()` → trader always uses Python default.
 - Type on `Settings` but missing `normalizeSettings` default → runtime undefined or build errors.
 - MCP change without a new migration file → friends' databases never get the column, and the release drift check fails.
 - Editing an already-released migration instead of adding a new file → friends who already ran it stay on the old definition.
