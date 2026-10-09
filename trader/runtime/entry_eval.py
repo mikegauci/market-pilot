@@ -20,6 +20,7 @@ from runtime.sim_close import persist_simulated_closes
 from strategy.config import StrategyConfig
 from strategy.confirmation import ConfirmationTracker
 from strategy.filters import check_correlation_cap, check_entry_filters
+from strategy.momentum_shadow import with_momentum_shadow
 from strategy.signals import (
     is_sell_exit_eligible,
     is_trade_eligible,
@@ -79,7 +80,7 @@ def process_ready_states(
     if not ready_states:
         return result
 
-    pending_shadows: List[tuple[dict, MarketState, JevPrediction]] = []
+    pending_shadows: List[tuple[dict, MarketState, MarketState, JevPrediction]] = []
 
     for symbol, state in ready_states:
         prediction = predictions_by_symbol.get(symbol)
@@ -253,8 +254,9 @@ def process_ready_states(
                     logger.info("Risk: rejected %s — %s", symbol, decision.reason)
 
             if db:
+                snapshot_state = with_momentum_shadow(state, runtime_entry_strategy)
                 payload = build_prediction_payload(
-                    state,
+                    snapshot_state,
                     prediction,
                     trade_created=trade_created,
                     trade_skip_reason=trade_skip_reason,
@@ -264,13 +266,13 @@ def process_ready_states(
                     prediction,
                     record_threshold=risk_settings.signal_record_threshold,
                 ):
-                    pending_shadows.append((payload, state, prediction))
+                    pending_shadows.append((payload, state, snapshot_state, prediction))
                 logger.info("Prediction queued")
 
         except Exception as exc:
             logger.error("Post-Jev processing failed for %s: %s", symbol, exc)
 
-    for payload, state, prediction in pending_shadows:
+    for payload, state, snapshot_state, prediction in pending_shadows:
         if shadow_reader is None:
             continue
         try:
@@ -278,12 +280,11 @@ def process_ready_states(
             if shadow is None:
                 continue
             verdict, note = shadow
-            snapshot_state = replace(
-                state,
+            payload["market_snapshot"] = replace(
+                snapshot_state,
                 ai_shadow_verdict=verdict,
                 ai_shadow_note=note,
-            )
-            payload["market_snapshot"] = snapshot_state.to_dict()
+            ).to_dict()
         except Exception as exc:
             logger.warning("Shadow read failed for %s: %s", prediction.symbol, exc)
 

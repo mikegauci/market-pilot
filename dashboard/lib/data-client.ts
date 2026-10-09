@@ -20,8 +20,13 @@ import {
   readPredictionFeedPage,
   readSettings,
   readSymbolBars,
+  readTradeMomentumShadowRows,
   readTradesForTradingDay,
 } from "@/lib/supabase/data-reads";
+import {
+  matchTradeMomentumShadow,
+  type MomentumShadowEntry,
+} from "@/lib/momentum-shadow";
 import { createClient } from "@/lib/supabase/client";
 import type {
   MarketNewsRow,
@@ -165,6 +170,19 @@ export async function fetchAllTrades(): Promise<Trade[]> {
     return [];
   }
   return data;
+}
+
+/** Watch-only momentum verdict for each trade, keyed by trade id. */
+export async function fetchTradeMomentumShadow(
+  trades: Pick<Trade, "id" | "symbol" | "entry_time">[],
+): Promise<Map<string, MomentumShadowEntry>> {
+  const supabase = createClient();
+  const { data, error } = await readTradeMomentumShadowRows(supabase, trades);
+  if (error) {
+    logFetchError("predictions", error.message);
+    return new Map();
+  }
+  return matchTradeMomentumShadow(trades, data);
 }
 
 export async function fetchLatestPortfolio(): Promise<PortfolioSnapshot | null> {

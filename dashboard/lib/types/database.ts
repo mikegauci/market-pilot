@@ -145,6 +145,8 @@ export type MarketSnapshotNews = {
   tape_fetched_at?: string | null;
   ai_shadow_verdict?: "agree" | "hold" | "conflict" | string | null;
   ai_shadow_note?: string | null;
+  momentum_shadow_verdict?: "would_keep" | "would_block" | string | null;
+  momentum_shadow_note?: string | null;
 };
 
 export type MarketSnapshot = MarketSnapshotNews & {

@@ -105,6 +105,8 @@ class MarketState:
     news_still_relevant_for_open: Optional[bool] = None
     ai_shadow_verdict: Optional[str] = None
     ai_shadow_note: Optional[str] = None
+    momentum_shadow_verdict: Optional[str] = None
+    momentum_shadow_note: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         payload = asdict(self)

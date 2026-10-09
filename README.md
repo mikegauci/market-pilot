@@ -345,6 +345,7 @@ The trader applies additional gates before opening a position:
 | Max hold time | 15 min | Time-based exit (matches Jev horizon) |
 | Jev SELL exit | 75% | Close on high-confidence SELL |
 | Correlated positions | 2 max | Limit mega-cap tech stacking |
+| Momentum check (watch only) | 5m ≥ 0.15% and (volume ≥ 2× or EMA9 within 0.03% of EMA20) | **Never blocks.** Logs "would keep / would block" on each prediction; shown in the Predictions feed, as a tag on Trades, and as a scorecard on the Trades page (`STRATEGY_SHADOW_MOMENTUM_*`, 0 = off) |
 
 Tune via `STRATEGY_*` env vars in `trader/.env` (see `.env.example`).
 

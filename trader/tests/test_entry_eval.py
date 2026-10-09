@@ -191,7 +191,25 @@ class ProcessReadyStatesTests(unittest.TestCase):
         snapshot = result.prediction_rows[0]["market_snapshot"]
         self.assertEqual(snapshot.get("ai_shadow_verdict"), "agree")
         self.assertEqual(snapshot.get("ai_shadow_note"), "Looks aligned.")
+        self.assertEqual(snapshot.get("momentum_shadow_verdict"), "would_block")
         shadow_reader.read.assert_called_once()
+        read_state = shadow_reader.read.call_args.args[0]
+        self.assertIsNone(read_state.momentum_shadow_verdict)
+
+    def test_momentum_shadow_never_blocks_trade(self) -> None:
+        with patch("runtime.entry_eval.is_entry_window_open", return_value=True):
+            with patch("runtime.entry_eval.check_entry_filters") as mock_filters:
+                with patch("runtime.entry_eval.check_correlation_cap") as mock_corr:
+                    from strategy.filters import FilterResult
+
+                    mock_filters.return_value = FilterResult(passed=True, reason=None)
+                    mock_corr.return_value = FilterResult(passed=True, reason=None)
+                    result = self._run(prediction=_prediction())
+
+        row = result.prediction_rows[0]
+        self.assertTrue(row.get("trade_created"))
+        self.assertEqual(row["market_snapshot"].get("momentum_shadow_verdict"), "would_block")
+        self.db.insert_trade.assert_called_once()
 
     def test_ibkr_blocked_symbol_skips_entry(self) -> None:
         self.runtime.ibkr_entry_blocked.add("NVDA")

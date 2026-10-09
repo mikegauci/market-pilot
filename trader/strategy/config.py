@@ -60,6 +60,10 @@ class StrategyConfig:
     breakout_window_minutes: float = 10.0
     # RSI cap used instead of max_rsi while a name is inside its breakout window.
     breakout_max_rsi: float = 82.0
+    # Watch-only momentum check (logged on predictions, never blocks). 0 = off.
+    shadow_momentum_min_change_5m_pct: float = 0.15
+    shadow_momentum_min_volume_ratio: float = 2.0
+    shadow_momentum_fresh_cross_max_pct: float = 0.03
 
 
 _ROTATION_OVERRIDE_UNSET = object()

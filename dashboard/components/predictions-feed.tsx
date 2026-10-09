@@ -24,6 +24,7 @@ import {
 } from "@/lib/news-feed";
 import type { EvaluateOptions } from "@/lib/prediction-filters";
 import type { MarketSnapshot, Prediction } from "@/lib/types/database";
+import { MOMENTUM_SHADOW_DISCLAIMER, MOMENTUM_SHADOW_TITLE } from "@/lib/momentum-shadow";
 import {
   formatJevProbabilityPercent,
   formatSkipReason,
@@ -481,6 +482,26 @@ export function PredictionsFeed({
                                 </p>
                                 <p className="mt-1">{snapshot.ai_shadow_note}</p>
                                 <p className="mt-1 text-zinc-600">Logged with the prediction; does not change trades.</p>
+                              </div>
+                            ) : null}
+                            {snapshot?.momentum_shadow_verdict && snapshot.momentum_shadow_note ? (
+                              <div className="border-t border-zinc-800/60 pt-3 text-xs text-zinc-400">
+                                <p className="text-sm font-medium text-zinc-300">
+                                  {MOMENTUM_SHADOW_TITLE}
+                                </p>
+                                <p
+                                  className={`mt-1 ${
+                                    snapshot.momentum_shadow_verdict === "would_keep"
+                                      ? "text-emerald-400"
+                                      : "text-amber-400"
+                                  }`}
+                                >
+                                  {snapshot.momentum_shadow_verdict === "would_keep"
+                                    ? "Would keep"
+                                    : "Would have blocked"}
+                                </p>
+                                <p className="mt-1">{snapshot.momentum_shadow_note}</p>
+                                <p className="mt-1 text-zinc-600">{MOMENTUM_SHADOW_DISCLAIMER}</p>
                               </div>
                             ) : null}
                             {(snapshot?.news_top_headline ||

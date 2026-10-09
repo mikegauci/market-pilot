@@ -5,6 +5,7 @@ import {
   LATEST_PREDICTIONS_PER_SYMBOL_LIMIT,
 } from "@/lib/analytics-data";
 import { filterTradesByActiveIbkrAccount } from "@/lib/ibkr-trade-scope";
+import type { MomentumShadowPredictionRow } from "@/lib/momentum-shadow";
 import { resolveTradeAccountScope } from "@/lib/trade-account-scope";
 import { tradingDayStartUtc } from "@/lib/market-hours";
 import { normalizeSettings } from "@/lib/normalize-settings";
@@ -136,6 +137,29 @@ export async function readAllTrades(
   );
   const { data, error } = await scoped;
   return { data: (data ?? []) as Trade[], error };
+}
+
+/** Entry predictions for these trades, with the watch-only momentum verdict from the snapshot. */
+export async function readTradeMomentumShadowRows(
+  supabase: SupabaseClient,
+  trades: Pick<Trade, "symbol" | "entry_time">[],
+): Promise<SupabaseRead<MomentumShadowPredictionRow[]>> {
+  const times = trades.map((t) => Date.parse(t.entry_time)).filter((t) => !Number.isNaN(t));
+  if (times.length === 0) {
+    return { data: [], error: null };
+  }
+  const symbols = [...new Set(trades.map((t) => t.symbol))];
+  const { data, error } = await supabase
+    .from("predictions")
+    .select(
+      "symbol, timestamp, momentum_shadow_verdict:market_snapshot->>momentum_shadow_verdict, momentum_shadow_note:market_snapshot->>momentum_shadow_note",
+    )
+    .eq("trade_created", true)
+    .in("symbol", symbols)
+    .gte("timestamp", new Date(Math.min(...times) - 60_000).toISOString())
+    .lte("timestamp", new Date(Math.max(...times) + 60_000).toISOString())
+    .limit(1000);
+  return { data: (data ?? []) as MomentumShadowPredictionRow[], error };
 }
 
 export async function readActiveTradeCommands(

@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ClosePositionButton } from "@/components/close-position-button";
 import { TradeRecapButton } from "@/components/trade-recap-button";
 import { SortableTh } from "@/components/sortable-th";
@@ -13,8 +13,17 @@ import { overlaysForTrade } from "@/lib/chart-overlays";
 import {
   fetchActiveTradeCommands,
   fetchAllTrades,
+  fetchTradeMomentumShadow,
   fetchTradesForTradingDay,
 } from "@/lib/data-client";
+import {
+  MOMENTUM_SHADOW_DISCLAIMER,
+  MOMENTUM_SHADOW_TITLE,
+  momentumShadowLabel,
+  summarizeMomentumShadow,
+  type MomentumShadowEntry,
+  type MomentumShadowGroup,
+} from "@/lib/momentum-shadow";
 import {
   exitReasonFilterOptions,
   exitReasonLabel,
@@ -169,6 +178,25 @@ function StatusHeaderCell({
   );
 }
 
+function MomentumShadowTag({ entry }: { entry: MomentumShadowEntry | undefined }) {
+  if (!entry) return null;
+  const keep = entry.verdict === "would_keep";
+  return (
+    <div
+      className={`mt-0.5 text-xs ${keep ? "text-emerald-500/80" : "text-amber-400/80"}`}
+      title={[entry.note, MOMENTUM_SHADOW_DISCLAIMER].filter(Boolean).join(" ")}
+    >
+      Rule: {momentumShadowLabel(entry.verdict).toLowerCase()}
+    </div>
+  );
+}
+
+function momentumGroupText(label: string, group: MomentumShadowGroup): string {
+  const trades = group.count === 1 ? "trade" : "trades";
+  const wins = group.wins === 1 ? "win" : "wins";
+  return `${label}: ${group.count} ${trades}, ${group.wins} ${wins}, ${formatCurrency(group.netPnl)}`;
+}
+
 type Props = {
   trades: Trade[];
   tradeCommands?: TradeCommand[];
@@ -220,6 +248,26 @@ export function TradesTable({
     ["trade_commands"],
     undefined,
     { skipInitialFetch: true },
+  );
+
+  const [momentumByTradeId, setMomentumByTradeId] = useState<
+    Map<string, MomentumShadowEntry>
+  >(() => new Map());
+  const tradeIdsKey = useMemo(() => liveTrades.map((t) => t.id).join(","), [liveTrades]);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchTradeMomentumShadow(liveTrades).then((map) => {
+      if (!cancelled) setMomentumByTradeId(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Verdicts are fixed at entry, so refetch only when the set of trades changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tradeIdsKey]);
+  const momentumSummary = useMemo(
+    () => summarizeMomentumShadow(liveTrades, momentumByTradeId),
+    [liveTrades, momentumByTradeId],
   );
 
   const commandByTradeId = useMemo(() => {
@@ -319,6 +367,24 @@ export function TradesTable({
           </div>
         )}
       </div>
+      {showFilter && momentumSummary ? (
+        <div className="mt-3 rounded-md border border-zinc-800 px-3 py-2 text-xs text-zinc-400">
+          <p className="font-medium text-zinc-300">{MOMENTUM_SHADOW_TITLE}</p>
+          <p className="mt-1">
+            <span className="text-emerald-500/90">
+              {momentumGroupText("Would keep", momentumSummary.keep)}
+            </span>
+            {" · "}
+            <span className="text-amber-400/90">
+              {momentumGroupText("Would block", momentumSummary.block)}
+            </span>
+          </p>
+          <p className="mt-1 text-zinc-600">
+            Closed trades only. The bot ignores this check; it only records what a stricter
+            entry rule would have done.
+          </p>
+        </div>
+      ) : null}
       {filtered.length === 0 ? (
         <p className="mt-4 text-sm text-zinc-500">{emptyMessage}</p>
       ) : (
@@ -410,7 +476,10 @@ export function TradesTable({
                         </button>
                       </td>
                     ) : null}
-                    <td className="py-2 pr-3 font-medium">{t.symbol}</td>
+                    <td className="py-2 pr-3">
+                      <div className="font-medium">{t.symbol}</div>
+                      <MomentumShadowTag entry={momentumByTradeId.get(t.id)} />
+                    </td>
                     <td className="py-2 pr-3">
                       <Badge
                         className={
