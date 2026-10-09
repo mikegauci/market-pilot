@@ -1,8 +1,8 @@
 "use client";
 
-import { Menu, X } from "lucide-react";
+import { Menu, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { BotStatusProvider } from "@/components/bot-status-provider";
 import {
   DashboardNavContent,
@@ -25,6 +25,25 @@ type DashboardShellProps = {
   readOnly?: boolean;
 };
 
+const SIDEBAR_COLLAPSED_KEY = "dashboard-sidebar-collapsed";
+
+const collapsedListeners = new Set<() => void>();
+
+function subscribeCollapsed(listener: () => void) {
+  collapsedListeners.add(listener);
+  return () => {
+    collapsedListeners.delete(listener);
+  };
+}
+
+function getCollapsedSnapshot() {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function DashboardShell({
   children,
   botStatus,
@@ -37,6 +56,19 @@ export function DashboardShell({
   const pageTitle = getDashboardPageTitle(pathname);
 
   const closeMobile = useCallback(() => setMobileOpen(false), []);
+
+  const collapsed = useSyncExternalStore(
+    subscribeCollapsed,
+    getCollapsedSnapshot,
+    () => false,
+  );
+
+  const toggleCollapsed = useCallback(() => {
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "0" : "1");
+    } catch {}
+    collapsedListeners.forEach((listener) => listener());
+  }, [collapsed]);
 
   if (navPath !== pathname) {
     setNavPath(pathname);
@@ -67,9 +99,33 @@ export function DashboardShell({
         <OpenPositionsCountProvider>
           <DashboardLiveToasts settings={settings} />
           <div className="flex min-h-screen">
-          <aside className="hidden w-64 shrink-0 flex min-h-screen flex-col overflow-y-auto border-r border-zinc-800 bg-zinc-900/50 p-4 lg:flex">
+          <aside
+            aria-hidden={collapsed}
+            className={cn(
+              "hidden w-64 shrink-0 min-h-screen flex-col overflow-y-auto border-r border-zinc-800 bg-zinc-900/50 p-4",
+              collapsed ? "lg:hidden" : "lg:flex",
+            )}
+          >
             <DashboardNavContent />
           </aside>
+
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className={cn(
+              "fixed top-4 z-30 hidden h-8 w-8 items-center justify-center rounded-md border border-zinc-800 bg-zinc-900 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100 lg:inline-flex",
+              collapsed ? "left-4" : "left-[13.5rem]",
+            )}
+            aria-label={collapsed ? "Show sidebar" : "Hide sidebar"}
+            aria-expanded={!collapsed}
+            title={collapsed ? "Show sidebar" : "Hide sidebar"}
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-4 w-4" />
+            ) : (
+              <PanelLeftClose className="h-4 w-4" />
+            )}
+          </button>
 
           <div
             className={cn(
@@ -110,7 +166,9 @@ export function DashboardShell({
               <Logo size="sm" />
             </header>
 
-            <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+            <main className={cn("min-w-0 flex-1 overflow-auto p-4 sm:p-6 lg:p-8",
+                collapsed && "lg:pl-16",
+              )}>
               {readOnly ? (
                 <p className="mb-4 rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs text-zinc-400">
                   Read-only view — browse live data only. Sign in with your owner account to change
