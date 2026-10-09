@@ -1,6 +1,5 @@
 "use server";
 
-import { fetchActiveIbkrAccountId } from "@/lib/active-ibkr-account";
 import { filterTradesByActiveIbkrAccount } from "@/lib/ibkr-trade-scope";
 import { etDayBoundsUtc } from "@/lib/market-hours";
 import { buildSessionPacket } from "@/lib/session-brief/packet";
@@ -12,8 +11,10 @@ import { assertSessionDateAllowed } from "@/lib/session-brief/session-date";
 import { parseSessionBriefStats } from "@/lib/session-brief/stats";
 import { canDashboardWrite } from "@/lib/dashboard-role";
 import { readOnlyActionError } from "@/lib/require-dashboard-write.server";
+import { readSettings } from "@/lib/supabase/data-reads";
 import { createClient } from "@/lib/supabase/server";
-import type { SessionBriefRow, Settings, Trade } from "@/lib/types/database";
+import { resolveTradeAccountScope } from "@/lib/trade-account-scope";
+import type { SessionBriefRow, Trade } from "@/lib/types/database";
 
 export type GenerateSessionBriefResult =
   | { ok: true; row: SessionBriefRow }
@@ -55,7 +56,7 @@ async function fetchClosedTradesForSession(
     .order("exit_time", { ascending: false })
     .limit(500);
 
-  const accountId = await fetchActiveIbkrAccountId(supabase);
+  const { accountId, includeLegacy } = await resolveTradeAccountScope(supabase);
   if (!accountId) {
     const { data, error } = await baseQuery;
     if (error) {
@@ -64,7 +65,12 @@ async function fetchClosedTradesForSession(
     return { trades: (data ?? []) as Trade[], tradesIncomplete: true };
   }
 
-  const scopedQuery = await filterTradesByActiveIbkrAccount(supabase, accountId, baseQuery);
+  const scopedQuery = await filterTradesByActiveIbkrAccount(
+    supabase,
+    accountId,
+    baseQuery,
+    includeLegacy,
+  );
   const { data, error } = await scopedQuery;
   if (error) {
     throw new Error(error.message);
@@ -167,12 +173,8 @@ export async function generateSessionBrief(
     };
   }
 
-  const { data: settingsRow, error: settingsError } = await supabase
-    .from("settings")
-    .select("*")
-    .eq("id", 1)
-    .single();
-  if (settingsError || !settingsRow) {
+  const { data: settings, error: settingsError } = await readSettings(supabase);
+  if (settingsError || !settings) {
     return { ok: false, error: settingsError?.message ?? "Settings not found." };
   }
 
@@ -193,7 +195,7 @@ export async function generateSessionBrief(
     sessionDate: day,
     stats,
     trades,
-    settings: settingsRow as Settings,
+    settings,
   });
 
   if (tradesIncomplete) {
