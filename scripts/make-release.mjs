@@ -69,6 +69,7 @@ async function main() {
     ".",
     ":(exclude).cursor",
     ":(exclude).agents",
+    ":(exclude)CLAUDE.md",
     ":(exclude)supabase/migrations-archive",
   ], { cwd: root });
   if (archive.status !== 0) throw new Error("Could not build the zip.");
