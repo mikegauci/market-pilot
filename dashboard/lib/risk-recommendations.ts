@@ -90,6 +90,22 @@ export function resolveBaselineEquity(
   return 0;
 }
 
+/** Current and baseline equity as shown on the Settings page (and fed to the AI summary). */
+export function resolveSettingsEquities(
+  settings: { account_capital: number; risk_sync_equity?: number | null },
+  latestEquity: number | null | undefined,
+): { currentEquity: number; baselineEquity: number } {
+  const currentEquity = latestEquity ?? settings.account_capital;
+  return {
+    currentEquity,
+    baselineEquity: resolveBaselineEquity(
+      settings.risk_sync_equity,
+      currentEquity,
+      settings.account_capital,
+    ),
+  };
+}
+
 export function shouldAdvanceBaseline(
   currentEquity: number,
   baselineEquity: number | null | undefined,

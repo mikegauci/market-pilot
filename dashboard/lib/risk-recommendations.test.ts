@@ -4,6 +4,7 @@ import {
   detectMatchingProfile,
   getRecommendedValuesForProfile,
   resolveRiskProfile,
+  resolveSettingsEquities,
   validateProfileSelection,
 } from "@/lib/risk-recommendations";
 
@@ -85,5 +86,26 @@ describe("validateProfileSelection", () => {
     const message = validateProfileSelection(values, EQUITY, "medium");
     expect(message).toContain("High");
     expect(message).toContain("Medium");
+  });
+});
+
+describe("resolveSettingsEquities", () => {
+  it("uses the latest snapshot equity as current equity", () => {
+    expect(
+      resolveSettingsEquities({ account_capital: 10_000, risk_sync_equity: null }, 12_500),
+    ).toEqual({ currentEquity: 12_500, baselineEquity: 10_000 });
+  });
+
+  it("falls back to account capital when there is no snapshot", () => {
+    expect(
+      resolveSettingsEquities({ account_capital: 10_000, risk_sync_equity: null }, null),
+    ).toEqual({ currentEquity: 10_000, baselineEquity: 10_000 });
+  });
+
+  it("prefers the risk sync baseline when set", () => {
+    expect(
+      resolveSettingsEquities({ account_capital: 10_000, risk_sync_equity: 11_000 }, 12_500)
+        .baselineEquity,
+    ).toBe(11_000);
   });
 });

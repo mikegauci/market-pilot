@@ -4,13 +4,14 @@ import {
   checkOpenAiActionCooldown,
   OPENAI_COOLDOWN_MS,
 } from "@/lib/openai-action-cooldown";
-import { normalizeSettings, type SettingsRow } from "@/lib/normalize-settings";
 import { buildSettingsAiSummaryPacket } from "@/lib/settings-summary/packet";
 import { generateSettingsAiSummaryFromPacket } from "@/lib/settings-summary/openai.server";
 import type { SettingsAiSummary } from "@/lib/settings-summary/schema";
 import { requireOpenAiKey } from "@/lib/session-brief/openai.server";
 import { canDashboardWrite } from "@/lib/dashboard-role";
 import { readOnlyActionError } from "@/lib/require-dashboard-write.server";
+import { resolveSettingsEquities } from "@/lib/risk-recommendations";
+import { readLatestPortfolio, readSettings } from "@/lib/supabase/data-reads";
 import { createClient } from "@/lib/supabase/server";
 import type { BotStatus } from "@/lib/types/database";
 
@@ -49,32 +50,20 @@ export async function generateSettingsAiSummary(): Promise<GenerateSettingsAiSum
   }
 
   const [settingsRes, botRes, portfolioRes] = await Promise.all([
-    supabase.from("settings").select("*").eq("id", 1).single(),
+    readSettings(supabase),
     supabase.from("bot_status").select("*").eq("id", 1).single(),
-    supabase
-      .from("portfolio_history")
-      .select("equity")
-      .order("recorded_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    readLatestPortfolio(supabase),
   ]);
 
-  if (settingsRes.error || !settingsRes.data) {
+  const settings = settingsRes.data;
+  if (settingsRes.error || !settings) {
     return { ok: false, error: settingsRes.error?.message ?? "Settings not found." };
   }
 
-  const settings = normalizeSettings(settingsRes.data as SettingsRow);
-  if (!settings) {
-    return { ok: false, error: "Settings not found." };
-  }
-
-  const currentEquity = portfolioRes.data?.equity ?? settings.account_capital;
-  const baselineEquity =
-    settings.risk_sync_equity != null && settings.risk_sync_equity > 0
-      ? settings.risk_sync_equity
-      : currentEquity > 0
-        ? currentEquity
-        : settings.account_capital;
+  const { currentEquity, baselineEquity } = resolveSettingsEquities(
+    settings,
+    portfolioRes.data?.equity,
+  );
 
   const now = new Date();
   let packet;

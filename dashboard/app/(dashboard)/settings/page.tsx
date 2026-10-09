@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SettingsAiSummaryCard } from "@/components/settings-ai-summary-card";
 import { SettingsForm } from "@/components/settings-form";
-import { resolveBaselineEquity } from "@/lib/risk-recommendations";
+import { resolveSettingsEquities } from "@/lib/risk-recommendations";
 import {
   getLatestPortfolio,
   getLatestSessionBriefForUser,
@@ -18,11 +18,9 @@ export default async function SettingsPage() {
     return <p className="text-zinc-500">Settings not found.</p>;
   }
 
-  const currentEquity = portfolio?.equity ?? settings.account_capital;
-  const baselineEquity = resolveBaselineEquity(
-    settings.risk_sync_equity,
-    currentEquity,
-    settings.account_capital,
+  const { currentEquity, baselineEquity } = resolveSettingsEquities(
+    settings,
+    portfolio?.equity,
   );
   const currency = portfolio?.currency ?? "USD";
 
