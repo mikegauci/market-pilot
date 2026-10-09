@@ -1,6 +1,6 @@
 import type { SymbolBar } from "@/lib/types/database";
 
-/** Always fetch/store 5-minute candles; presets only change the default zoom window. */
+/** Always fetch/store 5-minute bars; presets only change the default zoom window. */
 export const CHART_BAR_SIZE = "5 mins";
 
 export const CHART_PRESETS = [

@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  CandlestickSeries,
+  BarSeries,
   ColorType,
   createChart,
   createSeriesMarkers,
@@ -121,7 +121,7 @@ export function SymbolChart({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Bar"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const markersApiRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const fittedViewKeyRef = useRef<string | null>(null);
@@ -175,13 +175,11 @@ export function SymbolChart({
       },
     });
 
-    const series = chart.addSeries(CandlestickSeries, {
+    const series = chart.addSeries(BarSeries, {
       upColor: "#10b981",
       downColor: "#ef4444",
-      borderUpColor: "#10b981",
-      borderDownColor: "#ef4444",
-      wickUpColor: "#10b981",
-      wickDownColor: "#ef4444",
+      openVisible: true,
+      thinBars: false,
     });
 
     chartRef.current = chart;
