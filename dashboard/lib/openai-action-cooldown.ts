@@ -19,7 +19,6 @@ export function checkOpenAiActionCooldown(
 
 export const OPENAI_COOLDOWN_MS = {
   skipExplain: 3_000,
-  morningBrief: 15_000,
   settingsAiSummary: 12_000,
   positionExplain: 5_000,
   symbolDayExplain: 8_000,

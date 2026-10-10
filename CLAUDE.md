@@ -57,7 +57,7 @@ Run the trader with `python main.py` in `trader/`. Run the dashboard with `npm r
 - The dashboard controls the trader only through DB rows. `bot_status` holds `enabled`, `trading_mode`, `execution_mode` and `shutdown_requested`. The trader re-reads them about every 5 seconds (`bot_control_refresh_interval_sec`) and re-reads `settings` about every 15 seconds. Setting `shutdown_requested` stops the trader (`cycle_sync.py`), so never write it, because that breaks the no-restart rule. `settings` has a single row `id = 1`. The command queues are `entry_commands`, `trade_commands` and `position_commands`: the dashboard inserts a row in `lib/actions.ts`, and the trader claims and completes it in `database/repository/_commands.py`.
 - Trader liveness comes from heartbeat age on `bot_status`.
 - Auth roles live in `app_metadata.dashboard_role` (`owner` or `viewer`), see `lib/dashboard-role.ts`. Every mutating server action must call `assertDashboardCanWrite` or a related check (`require-dashboard-write.server.ts`).
-- `lib/*/openai.server.ts` modules (morning brief, session brief, trade recap, skip/position/symbol-day explainers, settings summary) each follow the same pattern: `packet.ts` builds the input, `schema.ts` validates the output, and `actions.ts` exposes the server action.
+- `lib/*/openai.server.ts` modules (session brief, trade recap, skip/position/symbol-day explainers, settings summary) each follow the same pattern: `packet.ts` builds the input, `schema.ts` validates the output, and `actions.ts` exposes the server action.
 
 ### Adding a setting
 
