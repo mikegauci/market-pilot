@@ -57,6 +57,15 @@ describe("replaySkip", () => {
     expect(r.move_pct).toBe(0.1);
   });
 
+  it("treats max hold 0 as no time limit", () => {
+    const r = replaySkip({
+      ...base,
+      maxHoldMinutes: 0,
+      bars: [bar("2026-10-09T14:05:00Z", 100.5, 99.8), bar("2026-10-09T18:00:00Z", 102.1, 100)],
+    });
+    expect(r.outcome).toBe("take_profit");
+  });
+
   it("ignores a bar that crosses the hold deadline", () => {
     const r = replaySkip({
       ...base,

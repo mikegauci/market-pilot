@@ -54,10 +54,12 @@ export function replaySkip(params: ReplayParams): SkipReplay {
   };
   if (!Number.isFinite(entryMs) || !(entryPrice > 0)) return empty;
 
-  const deadlineMs = Math.min(
-    entryMs + params.maxHoldMinutes * 60_000,
-    params.sessionClose.getTime() - FLATTEN_BEFORE_CLOSE_MS,
-  );
+  const flattenMs = params.sessionClose.getTime() - FLATTEN_BEFORE_CLOSE_MS;
+  // Max hold 0 means no time limit (same as the trader), so only the end-of-day flatten applies.
+  const deadlineMs =
+    params.maxHoldMinutes > 0
+      ? Math.min(entryMs + params.maxHoldMinutes * 60_000, flattenMs)
+      : flattenMs;
   const bars = params.bars
     .filter((bar) => {
       const ts = new Date(bar.ts).getTime();
