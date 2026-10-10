@@ -76,9 +76,9 @@ type PacketView = Partial<
 type MissedRow = MissedOpportunityRow;
 
 const OUTCOME_LABEL: Record<MissedRow["outcome"], string> = {
-  take_profit: "Reached take-profit",
-  stop_loss: "Hit stop",
-  timed_out: "Timed out",
+  take_profit: "Would hit take-profit",
+  stop_loss: "Would hit stop",
+  timed_out: "Held to close",
   no_data: "No price data",
 };
 
@@ -230,15 +230,16 @@ function MissedOpportunities({
       ) : null}
       {rows.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[30rem] text-left text-xs">
+          <table className="w-full min-w-[34rem] text-left text-xs">
             <thead className="text-zinc-500">
               <tr>
                 <th className="py-1 pr-3 font-medium">Symbol</th>
                 <th className="py-1 pr-3 font-medium">Time</th>
                 <th className="py-1 pr-3 font-medium">Jev BUY</th>
                 <th className="py-1 pr-3 font-medium">Blocked by</th>
-                <th className="py-1 pr-3 font-medium">What happened next</th>
-                <th className="py-1 text-right font-medium">Best move</th>
+                <th className="py-1 pr-3 font-medium">If it had traded</th>
+                <th className="py-1 pr-3 text-right font-medium">Result</th>
+                <th className="py-1 text-right font-medium">Peak</th>
               </tr>
             </thead>
             <tbody className="text-zinc-300">
@@ -260,6 +261,9 @@ function MissedOpportunities({
                       {OUTCOME_LABEL[row.outcome]}
                     </span>
                   </td>
+                  <td className={cn("py-1.5 pr-3 text-right font-medium", moveTone(row.move_pct))}>
+                    {signedPercent(row.move_pct)}
+                  </td>
                   <td className={cn("py-1.5 text-right font-medium", moveTone(row.max_up_pct))}>
                     {signedPercent(row.max_up_pct)}
                   </td>
@@ -270,8 +274,10 @@ function MissedOpportunities({
         </div>
       ) : null}
       <p className="text-[11px] text-zinc-600">
-        Rough replay on 5-minute prices after each skip, using the stop-loss, take-profit and max-hold
-        settings from when this brief was generated. Not a real fill.
+        Nothing was bought. This replays 5-minute prices after each skip as if the bot had traded,
+        using the stop-loss, take-profit and max-hold settings from when this brief was generated.
+        Result is where that trade would have ended (a stop, a take-profit, or the price at the
+        close). Peak is the highest the price got along the way. Not a real fill.
       </p>
     </Section>
   );
