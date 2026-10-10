@@ -239,7 +239,7 @@ function MissedOpportunities({
       ) : null}
       {rows.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[34rem] text-left text-xs">
+          <table className="w-full min-w-[38rem] text-left text-xs">
             <thead className="text-zinc-500">
               <tr>
                 <th className="py-1 pr-3 font-medium">Symbol</th>
@@ -248,7 +248,8 @@ function MissedOpportunities({
                 <th className="py-1 pr-3 font-medium">Blocked by</th>
                 <th className="py-1 pr-3 font-medium">If it had traded</th>
                 <th className="py-1 pr-3 text-right font-medium">Result</th>
-                <th className="py-1 text-right font-medium">Peak</th>
+                <th className="py-1 pr-3 text-right font-medium">Peak</th>
+                <th className="py-1 text-right font-medium">Low</th>
               </tr>
             </thead>
             <tbody className="text-zinc-300">
@@ -273,8 +274,11 @@ function MissedOpportunities({
                   <td className={cn("py-1.5 pr-3 text-right font-medium", moveTone(row.move_pct))}>
                     {signedPercent(row.move_pct)}
                   </td>
-                  <td className={cn("py-1.5 text-right font-medium", moveTone(row.max_up_pct))}>
+                  <td className={cn("py-1.5 pr-3 text-right font-medium", moveTone(row.max_up_pct))}>
                     {signedPercent(row.max_up_pct)}
+                  </td>
+                  <td className={cn("py-1.5 text-right font-medium", moveTone(row.max_down_pct))}>
+                    {signedPercent(row.max_down_pct)}
                   </td>
                 </tr>
               ))}
@@ -287,8 +291,8 @@ function MissedOpportunities({
         using the stop-loss, take-profit, max-hold, soft-sell and soft-stop settings from when this
         brief was generated. Soft exits are approximated by the first bar that reaches the band, so
         the real bot (which also wants repeated hits and a Jev SELL signal) may exit later or not at
-        all. Result is where that trade would have ended. Peak is the highest the price got along
-        the way. Not a real fill.
+        all. Result is where that trade would have ended. Peak and Low are the highest and lowest the
+        price got before that exit. Not a real fill.
       </p>
     </Section>
   );
@@ -299,14 +303,16 @@ function HoldTable({ title, rows }: { title: string; rows: HoldCheckRow[] }) {
   return (
     <div className="overflow-x-auto">
       <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">{title}</p>
-      <table className="w-full min-w-[22rem] text-left text-xs">
+      <table className="w-full min-w-[28rem] text-left text-xs">
         <thead className="text-zinc-500">
           <tr>
             <th className="py-1 pr-3 font-medium">Symbol</th>
             <th className="py-1 pr-3 font-medium">Time</th>
             <th className="py-1 pr-3 font-medium">HOLD</th>
             <th className="py-1 pr-3 font-medium">If it had traded</th>
-            <th className="py-1 text-right font-medium">Result</th>
+            <th className="py-1 pr-3 text-right font-medium">Result</th>
+            <th className="py-1 pr-3 text-right font-medium">Peak</th>
+            <th className="py-1 text-right font-medium">Low</th>
           </tr>
         </thead>
         <tbody className="text-zinc-300">
@@ -320,8 +326,14 @@ function HoldTable({ title, rows }: { title: string; rows: HoldCheckRow[] }) {
                   {OUTCOME_LABEL[row.outcome]}
                 </span>
               </td>
-              <td className={cn("py-1.5 text-right font-medium", moveTone(row.move_pct))}>
+              <td className={cn("py-1.5 pr-3 text-right font-medium", moveTone(row.move_pct))}>
                 {signedPercent(row.move_pct)}
+              </td>
+              <td className={cn("py-1.5 pr-3 text-right font-medium", moveTone(row.max_up_pct))}>
+                {signedPercent(row.max_up_pct)}
+              </td>
+              <td className={cn("py-1.5 text-right font-medium", moveTone(row.max_down_pct))}>
+                {signedPercent(row.max_down_pct)}
               </td>
             </tr>
           ))}

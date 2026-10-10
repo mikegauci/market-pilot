@@ -54,6 +54,7 @@ export type HoldCheckRow = {
   outcome: SkipOutcome;
   move_pct: number | null;
   max_up_pct: number | null;
+  max_down_pct: number | null;
 };
 
 export type HoldCheck = {
@@ -254,6 +255,7 @@ function buildHoldCheck(
       outcome: replay.outcome,
       move_pct: replay.move_pct,
       max_up_pct: replay.max_up_pct,
+      max_down_pct: replay.max_down_pct,
     });
   }
   const results = rows.map((row) => row.move_pct ?? 0);
