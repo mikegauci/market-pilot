@@ -51,6 +51,12 @@ function directionLabel(direction: "raise" | "lower" | "keep"): string {
   return "Keep as is";
 }
 
+const DIRECTION_TONE: Record<"raise" | "lower" | "keep", string> = {
+  raise: "bg-emerald-500/15 text-emerald-300",
+  lower: "bg-amber-500/15 text-amber-300",
+  keep: "bg-zinc-700/40 text-zinc-300",
+};
+
 function formatSessionDayLabel(sessionDate: string): string {
   const d = new Date(`${sessionDate}T12:00:00`);
   return d.toLocaleDateString("en-GB", {
@@ -83,7 +89,72 @@ const OUTCOME_TONE: Record<MissedRow["outcome"], string> = {
   no_data: "bg-zinc-800/60 text-zinc-500",
 };
 
-const SECTION_TITLE = "text-xs font-medium uppercase tracking-wide text-zinc-500";
+type Tone = "sky" | "violet" | "amber" | "emerald" | "red";
+
+// Full class strings so Tailwind can see them.
+const TONES: Record<Tone, { panel: string; title: string; dot: string; marker: string }> = {
+  sky: {
+    panel: "border-sky-500/50 bg-sky-500/[0.04]",
+    title: "text-sky-300",
+    dot: "bg-sky-400",
+    marker: "marker:text-sky-500",
+  },
+  violet: {
+    panel: "border-violet-500/50 bg-violet-500/[0.04]",
+    title: "text-violet-300",
+    dot: "bg-violet-400",
+    marker: "marker:text-violet-500",
+  },
+  amber: {
+    panel: "border-amber-500/50 bg-amber-500/[0.04]",
+    title: "text-amber-300",
+    dot: "bg-amber-400",
+    marker: "marker:text-amber-500",
+  },
+  emerald: {
+    panel: "border-emerald-500/50 bg-emerald-500/[0.04]",
+    title: "text-emerald-300",
+    dot: "bg-emerald-400",
+    marker: "marker:text-emerald-500",
+  },
+  red: {
+    panel: "border-red-500/50 bg-red-500/[0.04]",
+    title: "text-red-300",
+    dot: "bg-red-400",
+    marker: "marker:text-red-500",
+  },
+};
+
+function Section({
+  title,
+  tone,
+  children,
+}: {
+  title: string;
+  tone: Tone;
+  children: React.ReactNode;
+}) {
+  const t = TONES[tone];
+  return (
+    <section className={cn("space-y-2 rounded-md border-l-2 px-3 py-3", t.panel)}>
+      <h4
+        className={cn(
+          "flex items-center gap-2 text-xs font-semibold uppercase tracking-wide",
+          t.title,
+        )}
+      >
+        <span className={cn("h-1.5 w-1.5 rounded-full", t.dot)} aria-hidden />
+        {title}
+      </h4>
+      {children}
+    </section>
+  );
+}
+
+function moveTone(value: number | null): string {
+  if (value == null || value === 0) return "text-zinc-500";
+  return value > 0 ? "text-emerald-300" : "text-red-300";
+}
 
 function signedPercent(value: number | null): string {
   if (value == null) return "—";
@@ -93,18 +164,34 @@ function signedPercent(value: number | null): string {
 function StatStrip({ packet }: { packet: PacketView }) {
   const stats = packet.trades?.stats;
   const tiles = [
-    { label: "Predictions", value: packet.predictions?.total?.toLocaleString() ?? "—" },
-    { label: "Trades opened", value: packet.predictions?.traded?.toLocaleString() ?? "—" },
+    {
+      label: "Predictions",
+      value: packet.predictions?.total?.toLocaleString() ?? "—",
+      tone: "text-sky-300",
+    },
+    {
+      label: "Trades opened",
+      value: packet.predictions?.traded?.toLocaleString() ?? "—",
+      tone: "text-violet-300",
+    },
     {
       label: "Win rate",
       value:
         stats?.closedCount && stats.winRate != null
           ? `${Math.round(stats.winRate * 100)}%`
           : "—",
+      tone:
+        stats?.closedCount && stats.winRate != null
+          ? stats.winRate >= 0.5
+            ? "text-emerald-300"
+            : "text-amber-300"
+          : "text-zinc-200",
     },
     {
       label: "Net P&L",
       value: stats?.closedCount && stats.totalPnl != null ? formatCurrency(stats.totalPnl) : "—",
+      tone:
+        stats?.closedCount && stats.totalPnl != null ? moveTone(stats.totalPnl) : "text-zinc-200",
     },
   ];
   return (
@@ -112,7 +199,7 @@ function StatStrip({ packet }: { packet: PacketView }) {
       {tiles.map((tile) => (
         <div key={tile.label} className="rounded-md bg-zinc-900/60 px-3 py-2">
           <p className="text-[11px] uppercase tracking-wide text-zinc-500">{tile.label}</p>
-          <p className="mt-0.5 text-sm font-medium text-zinc-200">{tile.value}</p>
+          <p className={cn("mt-0.5 text-base font-semibold", tile.tone)}>{tile.value}</p>
         </div>
       ))}
     </div>
@@ -128,10 +215,14 @@ function MissedOpportunities({
 }) {
   if (rows.length === 0 && summary.length === 0) return null;
   return (
-    <section className="space-y-2">
-      <h4 className={SECTION_TITLE}>Skipped, but could have worked</h4>
+    <Section title="Skipped, but could have worked" tone="emerald">
       {summary.length > 0 ? (
-        <ul className="list-inside list-disc space-y-1 text-sm leading-relaxed text-zinc-300">
+        <ul
+          className={cn(
+            "list-inside list-disc space-y-1 text-sm leading-relaxed text-zinc-300",
+            TONES.emerald.marker,
+          )}
+        >
           {summary.map((line, index) => (
             <li key={`missed-${index}`}>{line}</li>
           ))}
@@ -155,14 +246,23 @@ function MissedOpportunities({
                 <tr key={`${row.symbol}-${row.time}`} className="border-t border-zinc-800">
                   <td className="py-1.5 pr-3 font-medium text-zinc-200">{row.symbol}</td>
                   <td className="py-1.5 pr-3">{formatTimeHms(row.time)}</td>
-                  <td className="py-1.5 pr-3">{row.buy_pct}%</td>
-                  <td className="py-1.5 pr-3">{row.reason_label}</td>
+                  <td
+                    className={cn(
+                      "py-1.5 pr-3",
+                      row.buy_pct >= 90 ? "font-medium text-emerald-300" : "",
+                    )}
+                  >
+                    {row.buy_pct}%
+                  </td>
+                  <td className="py-1.5 pr-3 text-amber-300/90">{row.reason_label}</td>
                   <td className="py-1.5 pr-3">
                     <span className={cn("rounded px-1.5 py-0.5", OUTCOME_TONE[row.outcome])}>
                       {OUTCOME_LABEL[row.outcome]}
                     </span>
                   </td>
-                  <td className="py-1.5 text-right">{signedPercent(row.max_up_pct)}</td>
+                  <td className={cn("py-1.5 text-right font-medium", moveTone(row.max_up_pct))}>
+                    {signedPercent(row.max_up_pct)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -173,7 +273,7 @@ function MissedOpportunities({
         Rough replay on 5-minute prices after each skip, using the stop-loss, take-profit and max-hold
         settings from when this brief was generated. Not a real fill.
       </p>
-    </section>
+    </Section>
   );
 }
 
@@ -215,31 +315,38 @@ function BriefBody({
       {brief.what_happened.length > 0 || brief.exits.length > 0 ? (
         <div className="grid gap-5 md:grid-cols-2">
           {brief.what_happened.length > 0 ? (
-            <section className="space-y-2">
-              <h4 className={SECTION_TITLE}>What happened</h4>
-              <ul className="list-inside list-disc space-y-1 text-sm leading-relaxed text-zinc-300">
+            <Section title="What happened" tone="sky">
+              <ul
+                className={cn(
+                  "list-inside list-disc space-y-1 text-sm leading-relaxed text-zinc-300",
+                  TONES.sky.marker,
+                )}
+              >
                 {brief.what_happened.map((line, index) => (
                   <li key={`what-${index}`}>{line}</li>
                 ))}
               </ul>
-            </section>
+            </Section>
           ) : null}
           {brief.exits.length > 0 ? (
-            <section className="space-y-2">
-              <h4 className={SECTION_TITLE}>Exits</h4>
-              <ul className="list-inside list-disc space-y-1 text-sm text-zinc-300">
+            <Section title="Exits" tone="violet">
+              <ul
+                className={cn(
+                  "list-inside list-disc space-y-1 text-sm text-zinc-300",
+                  TONES.violet.marker,
+                )}
+              >
                 {brief.exits.map((line, index) => (
                   <li key={`exit-${index}`}>{line}</li>
                 ))}
               </ul>
-            </section>
+            </Section>
           ) : null}
         </div>
       ) : null}
 
       {brief.entry_blockers.length > 0 ? (
-        <section className="space-y-2">
-          <h4 className={SECTION_TITLE}>Entry blockers</h4>
+        <Section title="Entry blockers" tone="amber">
           <ul className="grid gap-3 text-sm text-zinc-300 sm:grid-cols-2 lg:grid-cols-3">
             {brief.entry_blockers.map((row, index) => {
               const replay = replayFor(row.reason);
@@ -250,12 +357,16 @@ function BriefBody({
                 >
                   <p className="font-medium text-zinc-200">
                     {row.reason}{" "}
-                    <span className="font-normal text-zinc-500">({row.count})</span>
+                    <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-300">
+                      {row.count}
+                    </span>
                   </p>
                   {replay && replay.tested > 0 ? (
                     <p className="mt-1 text-[11px] text-zinc-500">
-                      Replay: {replay.take_profit} reached take-profit, {replay.stop_loss} hit the
-                      stop (of {replay.tested} checked)
+                      Replay:{" "}
+                      <span className="text-emerald-300">{replay.take_profit} reached take-profit</span>,{" "}
+                      <span className="text-red-300">{replay.stop_loss} hit the stop</span> (of{" "}
+                      {replay.tested} checked)
                     </p>
                   ) : null}
                   <p className="mt-1 text-zinc-400">{row.takeaway}</p>
@@ -263,7 +374,7 @@ function BriefBody({
               );
             })}
           </ul>
-        </section>
+        </Section>
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-2">
@@ -272,32 +383,40 @@ function BriefBody({
           summary={brief.missed_opportunities_summary ?? []}
         />
         {wentWrong.length > 0 ? (
-          <section className="space-y-2">
-            <h4 className={SECTION_TITLE}>What went wrong</h4>
+          <Section title="What went wrong" tone="red">
             <ul className="space-y-2 text-sm text-zinc-300">
               {wentWrong.map((row, index) => (
-                <li key={`wrong-${index}`} className="rounded-md border border-zinc-800 px-3 py-2">
-                  <p className="font-medium text-zinc-200">{row.issue}</p>
+                <li
+                  key={`wrong-${index}`}
+                  className="rounded-md border border-red-500/30 px-3 py-2"
+                >
+                  <p className="font-medium text-red-200">{row.issue}</p>
                   <p className="mt-1 text-zinc-400">{row.evidence}</p>
                 </li>
               ))}
             </ul>
-          </section>
+          </Section>
         ) : null}
       </div>
 
       {brief.suggestions.length > 0 ? (
-        <section className="space-y-2">
-          <h4 className={SECTION_TITLE}>Settings to review</h4>
+        <Section title="Settings to review" tone="sky">
           <ul className="grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
             {brief.suggestions.map((row) => (
               <li
                 key={`${row.setting}-${row.direction}`}
-                className="rounded-md border border-zinc-800 px-3 py-2"
+                className="rounded-md border border-sky-500/30 px-3 py-2"
               >
-                <p className="font-medium text-zinc-200">
+                <p className="font-medium text-zinc-100">
                   {sessionBriefSettingLabel(row.setting)}{" "}
-                  <span className="text-emerald-400/90">({directionLabel(row.direction)})</span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                      DIRECTION_TONE[row.direction],
+                    )}
+                  >
+                    {directionLabel(row.direction)}
+                  </span>
                 </p>
                 <p className="mt-1 text-zinc-400">{row.why}</p>
                 {row.evidence ? (
@@ -309,7 +428,7 @@ function BriefBody({
           <p className="text-xs text-zinc-500">
             Known settings can be reviewed on Settings. Applying a step still needs Save.
           </p>
-        </section>
+        </Section>
       ) : null}
     </div>
   );
