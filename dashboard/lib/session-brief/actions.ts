@@ -1,8 +1,9 @@
 "use server";
 
 import { filterTradesByActiveIbkrAccount } from "@/lib/ibkr-trade-scope";
-import { etDayBoundsUtc } from "@/lib/market-hours";
-import { buildSessionPacket } from "@/lib/session-brief/packet";
+import { etDayBoundsUtc, etSessionCloseUtc } from "@/lib/market-hours";
+import { buildSessionPacket, symbolsNeedingBars } from "@/lib/session-brief/packet";
+import type { ReplayBar } from "@/lib/session-brief/replay";
 import {
   isAiActionFailure,
   loadSettingsForAi,
@@ -77,6 +78,40 @@ async function fetchClosedTradesForSession(
   return { trades: (data ?? []) as Trade[], tradesIncomplete: false };
 }
 
+const BARS_PAGE = 1000;
+
+async function fetchSessionBars(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  symbols: string[],
+  sessionDate: string,
+): Promise<Map<string, ReplayBar[]>> {
+  const bySymbol = new Map<string, ReplayBar[]>();
+  if (symbols.length === 0) return bySymbol;
+  const { startIso, endIso } = etDayBoundsUtc(sessionDate);
+  for (let from = 0; ; from += BARS_PAGE) {
+    const { data, error } = await supabase
+      .from("symbol_bars")
+      .select("symbol, ts, high, low, close")
+      .eq("bar_size", "5 mins")
+      .in("symbol", symbols)
+      .gte("ts", startIso)
+      .lt("ts", endIso)
+      .order("ts", { ascending: true })
+      .order("symbol", { ascending: true })
+      .range(from, from + BARS_PAGE - 1);
+    // Bars only add the "what happened next" replay; the brief still works without them.
+    // Drop everything on a failed page so a half-loaded day never looks like a full one.
+    if (error || !data) return new Map();
+    for (const row of data as { symbol: string; ts: string; high: number; low: number; close: number }[]) {
+      const list = bySymbol.get(row.symbol) ?? [];
+      list.push({ ts: row.ts, high: Number(row.high), low: Number(row.low), close: Number(row.close) });
+      bySymbol.set(row.symbol, list);
+    }
+    if (data.length < BARS_PAGE) break;
+  }
+  return bySymbol;
+}
+
 export async function generateSessionBrief(
   sessionDate?: string,
 ): Promise<GenerateSessionBriefResult> {
@@ -135,18 +170,26 @@ export async function generateSessionBrief(
 
       const { trades, tradesIncomplete } = await fetchClosedTradesForSession(supabase, day);
 
+      const barsBySymbol = await fetchSessionBars(
+        supabase,
+        symbolsNeedingBars(stats, trades),
+        day,
+      );
+
       const packet = buildSessionPacket({
         sessionDate: day,
         stats,
         trades,
         settings,
+        barsBySymbol,
+        sessionClose: etSessionCloseUtc(day),
       });
 
       if (tradesIncomplete) {
-        packet.settings_note +=
+        packet.trades_scope_warning =
           trades.length === 0 && stats.traded > 0
-            ? " Closed trades could not be scoped to the active broker account — trade section may be empty."
-            : " Trade list may not match the active broker account — verify against the Trades page.";
+            ? "Closed trades could not be matched to the active broker account, so the trade section may be empty."
+            : "The trade list may not match the active broker account. Check it against the Trades page.";
       }
 
       const briefResult = await generateSessionBriefFromPacket(packet);

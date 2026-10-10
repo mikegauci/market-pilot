@@ -11,12 +11,23 @@ const valid = {
   suggestions: [
     { setting: "Max spread", direction: "raise", why: "Spread skips dominated near-misses." },
   ],
-  caveats: ["Paper trading only; one day of data."],
+  missed_opportunities_summary: [],
+  what_went_wrong: [],
 };
 
 describe("parseSessionBrief", () => {
   it("accepts a well-formed brief", () => {
     expect(parseSessionBrief(valid).headline).toBe(valid.headline);
+  });
+
+  it("defaults the replay sections for briefs saved before they existed", () => {
+    const { missed_opportunities_summary, what_went_wrong, ...old } = valid;
+    void missed_opportunities_summary;
+    void what_went_wrong;
+    const parsed = parseSessionBrief({ ...old, caveats: ["Paper only"] });
+    expect(parsed.missed_opportunities_summary).toEqual([]);
+    expect(parsed.what_went_wrong).toEqual([]);
+    expect(parsed.suggestions[0]?.evidence).toBe("");
   });
 
   it("rejects malformed suggestions", () => {

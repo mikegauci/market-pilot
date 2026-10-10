@@ -154,6 +154,16 @@ export function etDayBoundsUtc(calendarDate: string): { startIso: string; endIso
   };
 }
 
+/** Regular-session close (16:00 ET) for one US Eastern calendar day, as a UTC Date. */
+export function etSessionCloseUtc(calendarDate: string): Date {
+  return atEtTime(calendarDate, MARKET_CLOSE_MINUTES / 60, 0);
+}
+
+/** Minutes since midnight US Eastern for an instant. */
+export function etMinutesOfDay(date: Date): number {
+  return getEtParts(date).minutesSinceMidnight;
+}
+
 export function getMarketStatus(date = new Date()): MarketStatus {
   const { isWeekday, minutesSinceMidnight } = getEtParts(date);
   const isOpen =

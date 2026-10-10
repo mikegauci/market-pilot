@@ -9,7 +9,8 @@ describe("parseBriefFromModelText", () => {
       entry_blockers: [{ reason: "Spread", count: 1, takeaway: "Wide quotes" }],
       exits: ["Mostly stops"],
       suggestions: [{ setting: "Max spread", direction: "keep", why: "Fine for now" }],
-      caveats: ["Paper only"],
+      missed_opportunities_summary: [],
+  what_went_wrong: [],
     });
 
     const parsed = parseBriefFromModelText(raw);

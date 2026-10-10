@@ -13,6 +13,8 @@ const stats: SessionBriefStats = {
       symbol: "NVDA",
       buy_probability: 0.82,
       trade_skip_reason: "below_trade_threshold",
+      ts: "2026-10-02T15:00:00.000Z",
+      price: 100,
     },
   ],
   eligible_blocked: [
@@ -57,11 +59,35 @@ describe("buildSessionPacket", () => {
       stats,
       trades,
       settings: settingsFixture(),
+      barsBySymbol: new Map(),
+      sessionClose: new Date("2026-10-02T20:00:00Z"),
     });
 
     expect(packet.predictions.skip_reasons[0]?.label).toBe("Spread too wide");
     expect(packet.trades.closed).toHaveLength(30);
     expect(JSON.stringify(packet)).not.toContain("DU1234567");
     expect(packet.settings.minimum_jev_confidence_pct).toBeGreaterThan(1);
+  });
+
+  it("replays skipped names and rolls outcomes up by reason", () => {
+    const packet = buildSessionPacket({
+      sessionDate: "2026-10-02",
+      stats,
+      trades: [],
+      settings: settingsFixture(),
+      barsBySymbol: new Map([
+        ["NVDA", [{ ts: "2026-10-02T15:05:00.000Z", high: 150, low: 100, close: 140 }]],
+      ]),
+      sessionClose: new Date("2026-10-02T20:00:00Z"),
+    });
+
+    const nvda = packet.missed_opportunities.rows.find((row) => row.symbol === "NVDA");
+    expect(nvda?.outcome).toBe("take_profit");
+    const aapl = packet.missed_opportunities.rows.find((row) => row.symbol === "AAPL");
+    expect(aapl?.outcome).toBe("no_data");
+    const below = packet.missed_opportunities.by_reason.find(
+      (row) => row.reason === "below_trade_threshold",
+    );
+    expect(below).toMatchObject({ tested: 1, take_profit: 1 });
   });
 });

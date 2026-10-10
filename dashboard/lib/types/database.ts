@@ -315,8 +315,17 @@ export type SessionBriefContent = {
   what_happened: string[];
   entry_blockers: { reason: string; count: number; takeaway: string }[];
   exits: string[];
-  suggestions: { setting: string; direction: "raise" | "lower" | "keep"; why: string }[];
-  caveats: string[];
+  suggestions: {
+    setting: string;
+    direction: "raise" | "lower" | "keep";
+    why: string;
+    evidence?: string;
+  }[];
+  /** Absent on briefs saved before the replay sections were added. */
+  missed_opportunities_summary?: string[];
+  what_went_wrong?: { issue: string; evidence: string }[];
+  /** Briefs saved earlier may still carry this; it is no longer shown. */
+  caveats?: string[];
 };
 
 export type SessionBriefRow = {

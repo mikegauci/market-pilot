@@ -4,7 +4,11 @@ export type SessionBriefSuggestion = {
   setting: string;
   direction: "raise" | "lower" | "keep";
   why: string;
+  /** The stat behind the suggestion, e.g. "4 of 6 volume-blocked names reached take-profit". */
+  evidence?: string;
 };
+
+export type SessionBriefIssue = { issue: string; evidence: string };
 
 export type SessionBriefEntryBlocker = {
   reason: string;
@@ -18,7 +22,8 @@ export type SessionBrief = {
   entry_blockers: SessionBriefEntryBlocker[];
   exits: string[];
   suggestions: SessionBriefSuggestion[];
-  caveats: string[];
+  missed_opportunities_summary: string[];
+  what_went_wrong: SessionBriefIssue[];
 };
 
 export const SESSION_BRIEF_JSON_SCHEMA = {
@@ -62,11 +67,24 @@ export const SESSION_BRIEF_JSON_SCHEMA = {
           },
           direction: { type: "string", enum: ["raise", "lower", "keep"] },
           why: { type: "string" },
+          evidence: { type: "string" },
         },
-        required: ["setting", "direction", "why"],
+        required: ["setting", "direction", "why", "evidence"],
       },
     },
-    caveats: { type: "array", items: { type: "string" } },
+    missed_opportunities_summary: { type: "array", items: { type: "string" } },
+    what_went_wrong: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          issue: { type: "string" },
+          evidence: { type: "string" },
+        },
+        required: ["issue", "evidence"],
+      },
+    },
   },
   required: [
     "headline",
@@ -74,7 +92,8 @@ export const SESSION_BRIEF_JSON_SCHEMA = {
     "entry_blockers",
     "exits",
     "suggestions",
-    "caveats",
+    "missed_opportunities_summary",
+    "what_went_wrong",
   ],
 } as const;
 
@@ -101,9 +120,21 @@ function isSuggestions(value: unknown): value is SessionBriefSuggestion[] {
       (row.direction === "raise" ||
         row.direction === "lower" ||
         row.direction === "keep") &&
-      typeof row.why === "string"
+      typeof row.why === "string" &&
+      (row.evidence === undefined || typeof row.evidence === "string")
     );
   });
+}
+
+function isIssues(value: unknown): value is SessionBriefIssue[] {
+  if (!Array.isArray(value)) return false;
+  return value.every(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      typeof (item as SessionBriefIssue).issue === "string" &&
+      typeof (item as SessionBriefIssue).evidence === "string",
+  );
 }
 
 export function parseSessionBrief(value: unknown): SessionBrief {
@@ -126,8 +157,22 @@ export function parseSessionBrief(value: unknown): SessionBrief {
   if (!isSuggestions(row.suggestions)) {
     throw new Error("Brief suggestions is invalid.");
   }
-  if (!isStringArray(row.caveats)) {
-    throw new Error("Brief caveats must be a string array.");
+  // Briefs saved before the replay sections existed lack these fields; default them.
+  const summary = row.missed_opportunities_summary ?? [];
+  const wrong = row.what_went_wrong ?? [];
+  if (!isStringArray(summary)) {
+    throw new Error("Brief missed_opportunities_summary must be a string array.");
   }
-  return row;
+  if (!isIssues(wrong)) {
+    throw new Error("Brief what_went_wrong is invalid.");
+  }
+  return {
+    headline: row.headline,
+    what_happened: row.what_happened,
+    entry_blockers: row.entry_blockers,
+    exits: row.exits,
+    suggestions: row.suggestions.map((item) => ({ ...item, evidence: item.evidence ?? "" })),
+    missed_opportunities_summary: summary,
+    what_went_wrong: wrong,
+  };
 }
