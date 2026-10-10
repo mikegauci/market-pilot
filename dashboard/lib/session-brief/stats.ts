@@ -12,12 +12,21 @@ export type SessionBriefMissRow = {
   price?: number | null;
 };
 
+export type SessionBriefHoldRow = {
+  symbol: string;
+  hold_probability: number;
+  ts: string | null;
+  price: number | null;
+};
+
 export type SessionBriefStats = {
   total: number;
   traded: number;
   skip_reasons: SessionBriefStatsRow[];
   near_misses: SessionBriefMissRow[];
   eligible_blocked: SessionBriefMissRow[];
+  /** Strongest Jev HOLD call per symbol per hour. Missing on briefs from before the HOLD check. */
+  hold_samples?: SessionBriefHoldRow[];
 };
 
 function normalizeMissRow(row: SessionBriefMissRow): SessionBriefMissRow {
@@ -25,6 +34,16 @@ function normalizeMissRow(row: SessionBriefMissRow): SessionBriefMissRow {
   return {
     ...row,
     buy_probability: Number(row.buy_probability),
+    ts: typeof row.ts === "string" ? row.ts : null,
+    price: price != null && Number.isFinite(price) ? price : null,
+  };
+}
+
+function normalizeHoldRow(row: SessionBriefHoldRow): SessionBriefHoldRow {
+  const price = row.price == null ? null : Number(row.price);
+  return {
+    symbol: row.symbol,
+    hold_probability: Number(row.hold_probability),
     ts: typeof row.ts === "string" ? row.ts : null,
     price: price != null && Number.isFinite(price) ? price : null,
   };
@@ -48,5 +67,6 @@ export function parseSessionBriefStats(value: unknown): SessionBriefStats {
     eligible_blocked: Array.isArray(row.eligible_blocked)
       ? row.eligible_blocked.map(normalizeMissRow)
       : [],
+    hold_samples: Array.isArray(row.hold_samples) ? row.hold_samples.map(normalizeHoldRow) : [],
   };
 }

@@ -17,7 +17,12 @@ import {
 import { sessionBriefSettingLabel } from "@/lib/session-brief/setting-diff";
 import type { SessionBriefContent } from "@/lib/types/database";
 import { cn, formatCurrency, formatDateTime, formatTimeHms } from "@/lib/utils";
-import type { MissedOpportunityRow, SessionBriefPacket } from "@/lib/session-brief/packet";
+import type {
+  HoldCheck,
+  HoldCheckRow,
+  MissedOpportunityRow,
+  SessionBriefPacket,
+} from "@/lib/session-brief/packet";
 
 type Props = {
   initialHistory: SessionBriefHistoryEntry[];
@@ -67,7 +72,7 @@ function formatSessionDayLabel(sessionDate: string): string {
 }
 
 type PacketView = Partial<
-  Pick<SessionBriefPacket, "trades_scope_warning" | "missed_opportunities">
+  Pick<SessionBriefPacket, "trades_scope_warning" | "missed_opportunities" | "hold_check">
 > & {
   predictions?: Partial<SessionBriefPacket["predictions"]>;
   trades?: { stats?: Partial<SessionBriefPacket["trades"]["stats"]> };
@@ -289,6 +294,73 @@ function MissedOpportunities({
   );
 }
 
+function HoldTable({ title, rows }: { title: string; rows: HoldCheckRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="overflow-x-auto">
+      <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">{title}</p>
+      <table className="w-full min-w-[22rem] text-left text-xs">
+        <thead className="text-zinc-500">
+          <tr>
+            <th className="py-1 pr-3 font-medium">Symbol</th>
+            <th className="py-1 pr-3 font-medium">Time</th>
+            <th className="py-1 pr-3 font-medium">HOLD</th>
+            <th className="py-1 pr-3 font-medium">If it had traded</th>
+            <th className="py-1 text-right font-medium">Result</th>
+          </tr>
+        </thead>
+        <tbody className="text-zinc-300">
+          {rows.map((row) => (
+            <tr key={`${row.symbol}-${row.time}`} className="border-t border-zinc-800">
+              <td className="py-1.5 pr-3 font-medium text-zinc-200">{row.symbol}</td>
+              <td className="py-1.5 pr-3">{row.time ? formatTimeHms(row.time) : "—"}</td>
+              <td className="py-1.5 pr-3">{row.hold_pct}%</td>
+              <td className="py-1.5 pr-3">
+                <span className={cn("rounded px-1.5 py-0.5", OUTCOME_TONE[row.outcome])}>
+                  {OUTCOME_LABEL[row.outcome]}
+                </span>
+              </td>
+              <td className={cn("py-1.5 text-right font-medium", moveTone(row.move_pct))}>
+                {signedPercent(row.move_pct)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function HoldCheckSection({ check }: { check: HoldCheck }) {
+  if (check.tested === 0) return null;
+  const share = Math.round((check.profitable / check.tested) * 100);
+  return (
+    <Section title="If Jev's HOLD calls had been traded" tone="violet">
+      <p className="text-sm leading-relaxed text-zinc-300">
+        Of {check.tested} HOLD calls checked (the strongest per stock per hour),{" "}
+        <span className="font-medium text-emerald-300">{check.profitable} would have made money</span>
+        ,{" "}
+        <span className="font-medium text-red-300">{check.losing} would have lost</span>
+        {check.flat > 0 ? `, ${check.flat} would have been flat` : ""}. {share}% were winners, with an
+        average result of{" "}
+        <span className={cn("font-medium", moveTone(check.avg_result_pct))}>
+          {signedPercent(check.avg_result_pct)}
+        </span>
+        . A HOLD that often would have won suggests Jev is being too cautious.
+      </p>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <HoldTable title="Biggest winners" rows={check.best} />
+        <HoldTable title="Biggest losers" rows={check.worst} />
+      </div>
+      <p className="text-[11px] text-zinc-600">
+        Nothing was bought. Same rough replay as above, using your stop, take-profit and soft-exit
+        settings. {check.no_data > 0 ? `${check.no_data} calls had no price data and are left out. ` : ""}
+        Not a real fill.
+      </p>
+    </Section>
+  );
+}
+
 function BriefBody({
   brief,
   input,
@@ -388,6 +460,8 @@ function BriefBody({
           </ul>
         </Section>
       ) : null}
+
+      {packet.hold_check ? <HoldCheckSection check={packet.hold_check} /> : null}
 
       <div className="grid gap-5 xl:grid-cols-2">
         <MissedOpportunities

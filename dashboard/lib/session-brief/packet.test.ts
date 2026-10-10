@@ -90,4 +90,46 @@ describe("buildSessionPacket", () => {
     );
     expect(below).toMatchObject({ tested: 1, take_profit: 1 });
   });
+
+  it("replays HOLD samples and counts winners and losers", () => {
+    const packet = buildSessionPacket({
+      sessionDate: "2026-10-02",
+      stats: {
+        ...stats,
+        hold_samples: [
+          { symbol: "NVDA", hold_probability: 0.9, ts: "2026-10-02T15:00:00.000Z", price: 100 },
+          { symbol: "AMD", hold_probability: 0.8, ts: "2026-10-02T15:00:00.000Z", price: 100 },
+          { symbol: "MSFT", hold_probability: 0.7, ts: "2026-10-02T15:00:00.000Z", price: 100 },
+        ],
+      },
+      trades: [],
+      settings: settingsFixture(),
+      barsBySymbol: new Map([
+        ["NVDA", [{ ts: "2026-10-02T15:05:00.000Z", high: 150, low: 100, close: 140 }]],
+        ["AMD", [{ ts: "2026-10-02T15:05:00.000Z", high: 100.1, low: 90, close: 91 }]],
+      ]),
+      sessionClose: new Date("2026-10-02T20:00:00Z"),
+    });
+
+    expect(packet.hold_check).toMatchObject({
+      tested: 2,
+      profitable: 1,
+      losing: 1,
+      no_data: 1,
+    });
+    expect(packet.hold_check?.best[0]?.symbol).toBe("NVDA");
+    expect(packet.hold_check?.worst[0]?.symbol).toBe("AMD");
+  });
+
+  it("omits the HOLD check when there are no samples", () => {
+    const packet = buildSessionPacket({
+      sessionDate: "2026-10-02",
+      stats,
+      trades: [],
+      settings: settingsFixture(),
+      barsBySymbol: new Map(),
+      sessionClose: new Date("2026-10-02T20:00:00Z"),
+    });
+    expect(packet.hold_check).toBeUndefined();
+  });
 });

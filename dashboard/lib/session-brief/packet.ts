@@ -15,7 +15,11 @@ import {
   type TimeBucket,
 } from "@/lib/session-brief/replay";
 import type { Settings, Trade } from "@/lib/types/database";
-import type { SessionBriefMissRow, SessionBriefStats } from "@/lib/session-brief/stats";
+import type {
+  SessionBriefHoldRow,
+  SessionBriefMissRow,
+  SessionBriefStats,
+} from "@/lib/session-brief/stats";
 
 const MAX_TRADES = 30;
 
@@ -41,6 +45,27 @@ export type MissedOpportunityRow = {
   move_pct: number | null;
   max_up_pct: number | null;
   max_down_pct: number | null;
+};
+
+export type HoldCheckRow = {
+  symbol: string;
+  time: string | null;
+  hold_pct: number;
+  outcome: SkipOutcome;
+  move_pct: number | null;
+  max_up_pct: number | null;
+};
+
+export type HoldCheck = {
+  /** HOLD calls with price data that were replayed as if the bot had bought. */
+  tested: number;
+  profitable: number;
+  losing: number;
+  flat: number;
+  no_data: number;
+  avg_result_pct: number | null;
+  best: HoldCheckRow[];
+  worst: HoldCheckRow[];
 };
 
 export type MissedByReason = {
@@ -77,6 +102,8 @@ export type SessionBriefPacket = {
       skip_reason: string | null;
     }[];
   };
+  /** Replay of Jev HOLD calls as if the bot had bought. Absent on older briefs. */
+  hold_check?: HoldCheck;
   missed_opportunities: {
     /** Rough replay of today's stop / take-profit on 5-minute bars after each skip. Not real fills. */
     rows: MissedOpportunityRow[];
@@ -120,6 +147,7 @@ export type SessionBriefPacket = {
 export function symbolsNeedingBars(stats: SessionBriefStats, trades: Trade[]): string[] {
   const set = new Set<string>();
   for (const row of [...stats.near_misses, ...stats.eligible_blocked]) set.add(row.symbol);
+  for (const row of stats.hold_samples ?? []) set.add(row.symbol);
   for (const trade of trades) set.add(trade.symbol);
   return [...set];
 }
@@ -185,6 +213,66 @@ function buildMissedOpportunities(
   return {
     rows: out,
     by_reason: [...byReason.values()].sort((a, b) => b.tested - a.tested),
+  };
+}
+
+const HOLD_LIST_SIZE = 10;
+
+function buildHoldCheck(
+  samples: SessionBriefHoldRow[],
+  barsBySymbol: Map<string, ReplayBar[]>,
+  settings: Settings,
+  sessionClose: Date,
+): HoldCheck | undefined {
+  if (samples.length === 0) return undefined;
+  const rows: HoldCheckRow[] = [];
+  let noData = 0;
+  for (const sample of samples) {
+    if (!sample.ts || !sample.price) {
+      noData += 1;
+      continue;
+    }
+    const replay = replaySkip({
+      entryTs: sample.ts,
+      entryPrice: sample.price,
+      bars: barsBySymbol.get(sample.symbol) ?? [],
+      stopPct: settings.stop_loss_percentage,
+      takePct: settings.take_profit_percentage,
+      maxHoldMinutes: settings.max_hold_minutes,
+      softSellFraction: settings.profit_take_enabled ? settings.profit_take_min_fraction : null,
+      softStopFraction: settings.loss_cut_enabled ? settings.loss_cut_min_fraction : null,
+      sessionClose,
+    });
+    if (replay.outcome === "no_data" || replay.move_pct == null) {
+      noData += 1;
+      continue;
+    }
+    rows.push({
+      symbol: sample.symbol,
+      time: sample.ts,
+      hold_pct: buyPercent(sample.hold_probability),
+      outcome: replay.outcome,
+      move_pct: replay.move_pct,
+      max_up_pct: replay.max_up_pct,
+    });
+  }
+  const results = rows.map((row) => row.move_pct ?? 0);
+  const avg = results.length
+    ? Math.round((results.reduce((sum, value) => sum + value, 0) / results.length) * 100) / 100
+    : null;
+  const byResult = [...rows].sort((a, b) => (b.move_pct ?? 0) - (a.move_pct ?? 0));
+  return {
+    tested: rows.length,
+    profitable: results.filter((value) => value > 0).length,
+    losing: results.filter((value) => value < 0).length,
+    flat: results.filter((value) => value === 0).length,
+    no_data: noData,
+    avg_result_pct: avg,
+    best: byResult.filter((row) => (row.move_pct ?? 0) > 0).slice(0, HOLD_LIST_SIZE),
+    worst: byResult
+      .filter((row) => (row.move_pct ?? 0) < 0)
+      .reverse()
+      .slice(0, HOLD_LIST_SIZE),
   };
 }
 
@@ -260,6 +348,12 @@ export function buildSessionPacket(input: {
         skip_reason: row.trade_skip_reason,
       })),
     },
+    hold_check: buildHoldCheck(
+      input.stats.hold_samples ?? [],
+      input.barsBySymbol,
+      input.settings,
+      input.sessionClose,
+    ),
     missed_opportunities: buildMissedOpportunities(
       [...input.stats.near_misses, ...input.stats.eligible_blocked],
       input.barsBySymbol,
