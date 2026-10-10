@@ -66,6 +66,36 @@ describe("replaySkip", () => {
     expect(r.outcome).toBe("take_profit");
   });
 
+  it("soft-sells when a bar reaches the soft-sell band", () => {
+    const r = replaySkip({
+      ...base,
+      softSellFraction: 0.65,
+      bars: [bar("2026-10-09T14:05:00Z", 101.4, 99.9, 101.2)],
+    });
+    expect(r.outcome).toBe("soft_sell");
+    expect(r.move_pct).toBe(1.3);
+  });
+
+  it("soft-stops when a bar reaches the soft-stop band", () => {
+    const r = replaySkip({
+      ...base,
+      softStopFraction: 0.75,
+      bars: [bar("2026-10-09T14:05:00Z", 100.1, 99.2, 99.4)],
+    });
+    expect(r.outcome).toBe("soft_stop");
+    expect(r.move_pct).toBe(-0.75);
+  });
+
+  it("ignores soft bands when they are off", () => {
+    const r = replaySkip({
+      ...base,
+      softSellFraction: null,
+      softStopFraction: 0,
+      bars: [bar("2026-10-09T14:05:00Z", 101.4, 99.2, 100.5)],
+    });
+    expect(r.outcome).toBe("timed_out");
+  });
+
   it("ignores a bar that crosses the hold deadline", () => {
     const r = replaySkip({
       ...base,

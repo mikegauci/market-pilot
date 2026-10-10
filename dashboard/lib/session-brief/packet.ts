@@ -49,6 +49,8 @@ export type MissedByReason = {
   tested: number;
   take_profit: number;
   stop_loss: number;
+  soft_sell: number;
+  soft_stop: number;
   timed_out: number;
   no_data: number;
 };
@@ -144,6 +146,8 @@ function buildMissedOpportunities(
             stopPct: settings.stop_loss_percentage,
             takePct: settings.take_profit_percentage,
             maxHoldMinutes: settings.max_hold_minutes,
+            softSellFraction: settings.profit_take_enabled ? settings.profit_take_min_fraction : null,
+            softStopFraction: settings.loss_cut_enabled ? settings.loss_cut_min_fraction : null,
             sessionClose,
           })
         : { outcome: "no_data" as const, move_pct: null, max_up_pct: null, max_down_pct: null };
@@ -169,6 +173,8 @@ function buildMissedOpportunities(
         tested: 0,
         take_profit: 0,
         stop_loss: 0,
+        soft_sell: 0,
+        soft_stop: 0,
         timed_out: 0,
         no_data: 0,
       };

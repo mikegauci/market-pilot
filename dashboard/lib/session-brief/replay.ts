@@ -8,7 +8,13 @@ export type ReplayBar = {
   close: number;
 };
 
-export type SkipOutcome = "take_profit" | "stop_loss" | "timed_out" | "no_data";
+export type SkipOutcome =
+  | "take_profit"
+  | "stop_loss"
+  | "soft_sell"
+  | "soft_stop"
+  | "timed_out"
+  | "no_data";
 
 export type SkipReplay = {
   outcome: SkipOutcome;
@@ -26,6 +32,12 @@ export type ReplayParams = {
   stopPct: number;
   takePct: number;
   maxHoldMinutes: number;
+  /**
+   * Early-exit bands as a fraction (0-1) of the way from entry to take-profit / stop.
+   * Null or 0 turns the band off. A bar reaching the band exits at the band price.
+   */
+  softSellFraction?: number | null;
+  softStopFraction?: number | null;
   /** Regular-session close; positions are flattened 10 minutes before it. */
   sessionClose: Date;
 };
@@ -41,7 +53,9 @@ function pctFrom(entry: number, price: number): number {
 /**
  * Rough replay of the bot's bracket (fixed % stop and take-profit, max hold,
  * end-of-day flatten) on 5-minute bars that start at or after the entry time.
- * A bar that touches both levels counts as the stop. Ignores fills and spread.
+ * Soft sell / soft stop approximate the trader's early exits by the first bar that reaches the
+ * band (the trader also needs repeated band hits and a Jev SELL signal, which are not stored).
+ * A bar that touches both sides counts as the loss. Ignores fills and spread.
  */
 export function replaySkip(params: ReplayParams): SkipReplay {
   const entryMs = new Date(params.entryTs).getTime();
@@ -71,18 +85,33 @@ export function replaySkip(params: ReplayParams): SkipReplay {
 
   const stopPrice = entryPrice * (1 - params.stopPct);
   const takePrice = entryPrice * (1 + params.takePct);
+  const softStopFraction = params.softStopFraction ?? 0;
+  const softSellFraction = params.softSellFraction ?? 0;
+  const softStopPrice =
+    softStopFraction > 0 ? entryPrice * (1 - params.stopPct * softStopFraction) : null;
+  const softSellPrice =
+    softSellFraction > 0 ? entryPrice * (1 + params.takePct * softSellFraction) : null;
   let maxHigh = -Infinity;
   let minLow = Infinity;
 
   for (const bar of bars) {
     maxHigh = Math.max(maxHigh, bar.high);
     minLow = Math.min(minLow, bar.low);
-    const hitStop = bar.low <= stopPrice;
-    const hitTake = bar.high >= takePrice;
-    if (hitStop || hitTake) {
+    // Loss side first, so a bar touching both sides counts as the loss.
+    let exit: { outcome: SkipOutcome; move: number } | null = null;
+    if (bar.low <= stopPrice) {
+      exit = { outcome: "stop_loss", move: -params.stopPct * 100 };
+    } else if (softStopPrice != null && bar.low <= softStopPrice) {
+      exit = { outcome: "soft_stop", move: -params.stopPct * softStopFraction * 100 };
+    } else if (bar.high >= takePrice) {
+      exit = { outcome: "take_profit", move: params.takePct * 100 };
+    } else if (softSellPrice != null && bar.high >= softSellPrice) {
+      exit = { outcome: "soft_sell", move: params.takePct * softSellFraction * 100 };
+    }
+    if (exit) {
       return {
-        outcome: hitStop ? "stop_loss" : "take_profit",
-        move_pct: round2(hitStop ? -params.stopPct * 100 : params.takePct * 100),
+        outcome: exit.outcome,
+        move_pct: round2(exit.move),
         max_up_pct: round2(pctFrom(entryPrice, maxHigh)),
         max_down_pct: round2(pctFrom(entryPrice, minLow)),
       };

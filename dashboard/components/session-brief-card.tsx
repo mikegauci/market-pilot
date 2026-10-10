@@ -77,14 +77,18 @@ type MissedRow = MissedOpportunityRow;
 
 const OUTCOME_LABEL: Record<MissedRow["outcome"], string> = {
   take_profit: "Would hit take-profit",
+  soft_sell: "Would soft-sell",
   stop_loss: "Would hit stop",
+  soft_stop: "Would soft-stop",
   timed_out: "Held to close",
   no_data: "No price data",
 };
 
 const OUTCOME_TONE: Record<MissedRow["outcome"], string> = {
   take_profit: "bg-emerald-500/15 text-emerald-300",
+  soft_sell: "bg-emerald-500/10 text-emerald-300",
   stop_loss: "bg-red-500/15 text-red-300",
+  soft_stop: "bg-red-500/10 text-red-300",
   timed_out: "bg-zinc-700/40 text-zinc-300",
   no_data: "bg-zinc-800/60 text-zinc-500",
 };
@@ -275,9 +279,11 @@ function MissedOpportunities({
       ) : null}
       <p className="text-[11px] text-zinc-600">
         Nothing was bought. This replays 5-minute prices after each skip as if the bot had traded,
-        using the stop-loss, take-profit and max-hold settings from when this brief was generated.
-        Result is where that trade would have ended (a stop, a take-profit, or the price at the
-        close). Peak is the highest the price got along the way. Not a real fill.
+        using the stop-loss, take-profit, max-hold, soft-sell and soft-stop settings from when this
+        brief was generated. Soft exits are approximated by the first bar that reaches the band, so
+        the real bot (which also wants repeated hits and a Jev SELL signal) may exit later or not at
+        all. Result is where that trade would have ended. Peak is the highest the price got along
+        the way. Not a real fill.
       </p>
     </Section>
   );
@@ -370,8 +376,8 @@ function BriefBody({
                   {replay && replay.tested > 0 ? (
                     <p className="mt-1 text-[11px] text-zinc-500">
                       Replay:{" "}
-                      <span className="text-emerald-300">{replay.take_profit} reached take-profit</span>,{" "}
-                      <span className="text-red-300">{replay.stop_loss} hit the stop</span> (of{" "}
+                      <span className="text-emerald-300">{replay.take_profit + replay.soft_sell} reached take-profit</span>,{" "}
+                      <span className="text-red-300">{replay.stop_loss + replay.soft_stop} hit the stop</span> (of{" "}
                       {replay.tested} checked)
                     </p>
                   ) : null}
