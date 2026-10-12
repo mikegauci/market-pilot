@@ -39,6 +39,14 @@ function parseEntryEmaGate(formData: FormData): EntryEmaGate {
   return gate;
 }
 
+function parseEntryMode(formData: FormData): "jev" | "orb" {
+  const raw = String(formData.get("entry_mode") ?? "jev").trim().toLowerCase();
+  if (raw !== "jev" && raw !== "orb") {
+    throw new Error(`${labelFor("entry_mode")} must be Jev or opening range breakout`);
+  }
+  return raw;
+}
+
 function parseRequiredNumber(formData: FormData, name: string): number {
   const value = Number(formData.get(name));
   if (!Number.isFinite(value)) {
@@ -91,6 +99,15 @@ function labelFor(name: string): string {
     loss_cut_jev_sell_threshold: "Early loss cut Jev SELL (%)",
     reentry_cooldown_minutes: "Re-entry cooldown (minutes)",
     max_entries_per_symbol_per_day: "Max entries per symbol (day)",
+    max_trades_per_day: "Max trades per day",
+    min_reward_risk: "Min reward-to-risk",
+    breakeven_at_r: "Break-even exit (× risk)",
+    entry_mode: "Entry style",
+    orb_range_minutes: "Opening range (minutes)",
+    orb_entry_cutoff_minutes: "Opening range entry window (minutes)",
+    orb_jev_veto: "Jev veto",
+    in_play_min_rvol: "Min relative volume (×)",
+    in_play_min_gap_pct: "Min overnight gap (%)",
     rotation_min_session_change_pct: "Rotation session % floor",
     confirmation_cycles: "Confirmation cycles",
     confirmation_seconds: "Confirmation seconds",
@@ -131,6 +148,15 @@ export type ParsedSettings = {
   jev_sell_exit_threshold: number;
   reentry_cooldown_minutes: number;
   max_entries_per_symbol_per_day: number;
+  max_trades_per_day: number;
+  min_reward_risk: number;
+  breakeven_at_r: number | null;
+  entry_mode: "jev" | "orb";
+  orb_range_minutes: number;
+  orb_entry_cutoff_minutes: number;
+  orb_jev_veto: boolean;
+  in_play_min_rvol: number | null;
+  in_play_min_gap_pct: number | null;
   rotation_min_session_change_pct: number | null;
   entry_ema_gate: EntryEmaGate;
   max_rsi: number;
@@ -232,6 +258,15 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     formData,
     "max_entries_per_symbol_per_day",
   );
+  const max_trades_per_day = parseRequiredNumber(formData, "max_trades_per_day");
+  const min_reward_risk = parseRequiredNumber(formData, "min_reward_risk");
+  const breakeven_at_r_input = parseRequiredNumber(formData, "breakeven_at_r");
+  const entry_mode = parseEntryMode(formData);
+  const orb_range_minutes = parseRequiredNumber(formData, "orb_range_minutes");
+  const orb_entry_cutoff_minutes = parseRequiredNumber(formData, "orb_entry_cutoff_minutes");
+  const orb_jev_veto = String(formData.get("orb_jev_veto") ?? "") === "on";
+  const in_play_min_rvol_input = parseRequiredNumber(formData, "in_play_min_rvol");
+  const in_play_min_gap_pct_input = parseRequiredNumber(formData, "in_play_min_gap_pct");
   const rotation_min_session_change_pct = parseOptionalRotationSessionPct(formData);
   const entry_ema_gate = parseEntryEmaGate(formData);
   const max_rsi = parseRequiredNumber(formData, "max_rsi");
@@ -394,6 +429,54 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
   ) {
     throw new Error("Max entries per symbol (day) must be a whole number from 0 to 20");
   }
+  if (!Number.isInteger(max_trades_per_day) || max_trades_per_day < 0 || max_trades_per_day > 100) {
+    throw new Error(`${labelFor("max_trades_per_day")} must be a whole number from 0 to 100`);
+  }
+  if (!Number.isFinite(min_reward_risk) || min_reward_risk < 0 || min_reward_risk > 5) {
+    throw new Error(`${labelFor("min_reward_risk")} must be from 0 to 5 (0 = off)`);
+  }
+  if (
+    !Number.isFinite(breakeven_at_r_input) ||
+    breakeven_at_r_input < 0 ||
+    breakeven_at_r_input > 5 ||
+    (breakeven_at_r_input > 0 && breakeven_at_r_input < 0.25)
+  ) {
+    throw new Error(`${labelFor("breakeven_at_r")} must be 0 (off) or from 0.25 to 5`);
+  }
+  if (
+    !Number.isInteger(orb_range_minutes) ||
+    orb_range_minutes < 5 ||
+    orb_range_minutes > 60 ||
+    orb_range_minutes % 5 !== 0
+  ) {
+    throw new Error(`${labelFor("orb_range_minutes")} must be a multiple of 5 from 5 to 60`);
+  }
+  if (
+    !Number.isInteger(orb_entry_cutoff_minutes) ||
+    orb_entry_cutoff_minutes < 10 ||
+    orb_entry_cutoff_minutes > 330
+  ) {
+    throw new Error(
+      `${labelFor("orb_entry_cutoff_minutes")} must be a whole number from 10 to 330`,
+    );
+  }
+  if (orb_entry_cutoff_minutes <= orb_range_minutes) {
+    throw new Error("Opening range entry window must be longer than the opening range");
+  }
+  if (
+    !Number.isFinite(in_play_min_rvol_input) ||
+    in_play_min_rvol_input < 0 ||
+    in_play_min_rvol_input > 50
+  ) {
+    throw new Error(`${labelFor("in_play_min_rvol")} must be from 0 to 50 (0 = off)`);
+  }
+  if (
+    !Number.isFinite(in_play_min_gap_pct_input) ||
+    in_play_min_gap_pct_input < 0 ||
+    in_play_min_gap_pct_input > 50
+  ) {
+    throw new Error(`${labelFor("in_play_min_gap_pct")} must be from 0 to 50 (0 = off)`);
+  }
   if (!Number.isInteger(confirmation_cycles) || confirmation_cycles < 1 || confirmation_cycles > 10) {
     throw new Error("Confirmation cycles must be a whole number from 1 to 10");
   }
@@ -547,6 +630,15 @@ export function parseSettingsForm(formData: FormData): ParsedSettings {
     jev_sell_exit_threshold,
     reentry_cooldown_minutes,
     max_entries_per_symbol_per_day,
+    max_trades_per_day,
+    min_reward_risk,
+    breakeven_at_r: breakeven_at_r_input > 0 ? breakeven_at_r_input : null,
+    entry_mode,
+    orb_range_minutes,
+    orb_entry_cutoff_minutes,
+    orb_jev_veto,
+    in_play_min_rvol: in_play_min_rvol_input > 0 ? in_play_min_rvol_input : null,
+    in_play_min_gap_pct: in_play_min_gap_pct_input > 0 ? in_play_min_gap_pct_input : null,
     rotation_min_session_change_pct,
     entry_ema_gate,
     max_rsi,

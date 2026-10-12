@@ -42,6 +42,12 @@ const SKIP_REASON_LABELS: Record<string, string> = {
   price_below_ema20: "Price below EMA-20",
   ema_warming_up: "EMA warming up",
   max_entries_per_symbol: "Max entries per symbol (day)",
+  orb_range_not_ready: "Opening range not ready",
+  orb_no_breakout: "No breakout yet",
+  orb_window_closed: "Opening window closed",
+  orb_extended: "Breakout already extended",
+  orb_jev_veto: "Jev veto",
+  orb_already_traded: "Already traded today",
 };
 
 export function formatSkipReason(reason: string | null | undefined): string | null {
@@ -60,6 +66,8 @@ export function formatSkipReason(reason: string | null | undefined): string | nu
   if (reason.startsWith("news_block_tag")) return "Blocked news tag";
   if (reason.startsWith("news_earnings_window")) return "Earnings window";
   if (reason.startsWith("correlation_cap")) return "Correlation cap";
+  if (reason.startsWith("daily_trade_limit")) return "Daily trade limit hit";
+  if (reason.startsWith("not_in_play")) return "Not a stock in play";
   if (reason.startsWith("ibkr_cooldown")) return "Broker cooldown";
   if (reason.startsWith("ibkr_ineligible")) return "Broker ineligible (KID / permission)";
   if (reason.startsWith("ibkr_insufficient_buying_power")) return "Insufficient buying power";

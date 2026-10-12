@@ -252,7 +252,7 @@ class TestMaxEntriesPerSymbol(unittest.TestCase):
         self.assertFalse(decision.approved)
         self.assertIn("max_entries_per_symbol", decision.reason or "")
 
-    def test_register_and_remove_trade_adjusts_daily_entry_count(self) -> None:
+    def test_closing_a_trade_does_not_give_back_a_daily_entry(self) -> None:
         settings = RiskSettings(
             minimum_jev_confidence=0.85,
             signal_record_threshold=0.75,
@@ -289,7 +289,8 @@ class TestMaxEntriesPerSymbol(unittest.TestCase):
         manager.register_open_trade(trade)
         self.assertEqual(manager._entries_today["NVDA"], 1)
         manager.remove_open_trade("t1")
-        self.assertEqual(manager._entries_today["NVDA"], 0)
+        self.assertEqual(manager._entries_today["NVDA"], 1)
+        self.assertEqual(manager._total_entries_today, 1)
 
 
 class TestStrategyConfigOverrides(unittest.TestCase):

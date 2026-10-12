@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Set
 
+from runtime.orb_state import OrbDayState
+
 
 @dataclass
 class TraderRuntimeState:
@@ -25,3 +27,4 @@ class TraderRuntimeState:
     minute_seed_attempt_mono: Dict[str, float] = field(default_factory=dict)
     breakout_until_mono: Dict[str, float] = field(default_factory=dict)
     deferred_backfill_queue: List[str] = field(default_factory=list)
+    orb: OrbDayState = field(default_factory=OrbDayState)

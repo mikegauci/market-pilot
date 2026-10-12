@@ -311,3 +311,37 @@ def loss_cut_should_exit(
         return True
 
     return False
+
+
+def breakeven_armed(trade: TradeRecord, high_water: Optional[float], at_r: Optional[float]) -> bool:
+    """True once price has traveled at_r x initial risk above entry."""
+    if at_r is None or at_r <= 0 or high_water is None:
+        return False
+    risk = trade.entry_price - trade.stop_loss
+    if trade.entry_price <= 0 or risk <= 0:
+        return False
+    return high_water >= trade.entry_price + at_r * risk
+
+
+def breakeven_exit_price(trade: TradeRecord) -> float:
+    """Entry plus round-trip commissions per share, so the exit nets about zero."""
+    if trade.quantity <= 0:
+        return trade.entry_price
+    entry_comm = float(getattr(trade, "entry_commission", 0) or 0)
+    exit_comm = max(0.35, trade.quantity * 0.0035)
+    return trade.entry_price + (entry_comm + exit_comm) / trade.quantity
+
+
+def breakeven_should_exit(
+    trade: TradeRecord,
+    price: float,
+    high_water: Optional[float],
+    settings: RiskSettings,
+) -> bool:
+    """Exit near entry (covering commissions) after a +N x R run fades back.
+
+    Slippage on the market exit can still cost a little, so this is break-even, not a guarantee."""
+    at_r = getattr(settings, "breakeven_at_r", None)
+    if not breakeven_armed(trade, high_water, at_r):
+        return False
+    return price <= breakeven_exit_price(trade)

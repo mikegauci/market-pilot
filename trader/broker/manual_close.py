@@ -37,7 +37,7 @@ def _resolve_trade(
     open_trades = db.get_open_trades(ibkr_account_id)
     trade = next((t for t in open_trades if t.id == trade_id), None)
     if trade is not None:
-        risk_manager.register_open_trade(trade)
+        risk_manager.register_open_trade(trade, count_entry=False)
     return trade
 
 

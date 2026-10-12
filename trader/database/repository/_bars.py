@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from database.supabase_support import *  # noqa: F403
 
+DEFAULT_INTRADAY_LOOKBACK_DAYS = 8
+MAX_BAR_ROWS = 5000
+
+
 class SupabaseBarsMixin:
     def _query_bars(
         self,
@@ -11,19 +15,31 @@ class SupabaseBarsMixin:
         since: Optional[datetime] = None,
         until: Optional[datetime] = None,
     ) -> List[Bar]:
-        query = (
-            self.client.table("symbol_bars")
-            .select("symbol, bar_size, ts, open, high, low, close, volume")
-            .eq("symbol", symbol.upper())
-            .eq("bar_size", bar_size)
-        )
-        if since is not None:
-            query = query.gte("ts", _ensure_utc_iso(since))
-        if until is not None:
-            query = query.lte("ts", _ensure_utc_iso(until))
-        result = query.order("ts").limit(2000).execute()
+        if since is None and bar_size != "1 day":
+            # Intraday history grows every session; PostgREST caps a response at 1000 rows and
+            # we sort oldest-first, so an unbounded read would silently drop today's bars.
+            since = datetime.now(timezone.utc) - timedelta(days=DEFAULT_INTRADAY_LOOKBACK_DAYS)
+        rows: list = []
+        page_size = 1000
+        offset = 0
+        while True:
+            query = (
+                self.client.table("symbol_bars")
+                .select("symbol, bar_size, ts, open, high, low, close, volume")
+                .eq("symbol", symbol.upper())
+                .eq("bar_size", bar_size)
+            )
+            if since is not None:
+                query = query.gte("ts", _ensure_utc_iso(since))
+            if until is not None:
+                query = query.lte("ts", _ensure_utc_iso(until))
+            page = query.order("ts").range(offset, offset + page_size - 1).execute().data or []
+            rows.extend(page)
+            if len(page) < page_size or len(rows) >= MAX_BAR_ROWS:
+                break
+            offset += page_size
         bars: List[Bar] = []
-        for row in result.data or []:
+        for row in rows:
             bars.append(
                 Bar(
                     symbol=str(row["symbol"]).upper(),

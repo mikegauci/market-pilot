@@ -172,6 +172,21 @@ class RiskSettings:
     reentry_cooldown_minutes: float = 45.0
     # Max new entries per symbol per US trading day. 0 = off.
     max_entries_per_symbol_per_day: int = 3
+    # Max bot entries per US trading day across all symbols. 0 = off. Manual entries are exempt.
+    max_trades_per_day: int = 0
+    # Take-profit distance is at least stop distance x this value. 0 = off.
+    min_reward_risk: float = 0.0
+    # Once price reaches +N x risk, exit at entry if it falls back. None = off.
+    breakeven_at_r: Optional[float] = None
+    # Entry signal: "jev" (Jev BUY probability) or "orb" (opening range breakout, no Jev).
+    entry_mode: str = "jev"
+    orb_range_minutes: int = 5
+    orb_entry_cutoff_minutes: int = 90
+    # ORB mode only: when True, a sell-dominant Jev reading vetoes the breakout.
+    orb_jev_veto: bool = False
+    # "Stocks in play" gates for ORB mode. None = off.
+    in_play_min_rvol: Optional[float] = 2.0
+    in_play_min_gap_pct: Optional[float] = None
     # Watchlist rotation: min session % vs RTH open. None = off, 0 = require >= 0%.
     rotation_min_session_change_pct: Optional[float] = 0.0
     # When False, rotation floor comes from env StrategyConfig (optional column not loaded).

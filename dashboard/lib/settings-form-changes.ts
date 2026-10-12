@@ -97,6 +97,20 @@ function formatDraftValue(
     case "min_hold_minutes":
     case "reentry_cooldown_minutes":
       return (value as number) <= 0 ? "off" : `${value} min`;
+    case "orb_range_minutes":
+    case "orb_entry_cutoff_minutes":
+      return `${value} min`;
+    case "max_trades_per_day":
+    case "min_reward_risk":
+      return (value as number) <= 0 ? "off" : String(value);
+    case "breakeven_at_r":
+    case "in_play_min_rvol":
+    case "in_play_min_gap_pct":
+      return value == null ? "off" : String(value);
+    case "entry_mode":
+      return value === "orb" ? "Opening range breakout" : "Jev predictions";
+    case "orb_jev_veto":
+      return value ? "On" : "Off";
     case "watchlist":
     case "watchlist_pool":
       return formatWatchlist(value as string[]);
@@ -122,6 +136,15 @@ export function settingsToFormDraft(settings: Settings): SettingsFormDraft {
     jev_sell_exit_threshold: settings.jev_sell_exit_threshold ?? 0.95,
     reentry_cooldown_minutes: settings.reentry_cooldown_minutes ?? 45,
     max_entries_per_symbol_per_day: settings.max_entries_per_symbol_per_day ?? 3,
+    max_trades_per_day: settings.max_trades_per_day ?? 0,
+    min_reward_risk: settings.min_reward_risk ?? 0,
+    breakeven_at_r: settings.breakeven_at_r ?? null,
+    entry_mode: settings.entry_mode === "orb" ? "orb" : "jev",
+    orb_range_minutes: settings.orb_range_minutes ?? 5,
+    orb_entry_cutoff_minutes: settings.orb_entry_cutoff_minutes ?? 90,
+    orb_jev_veto: settings.orb_jev_veto ?? false,
+    in_play_min_rvol: settings.in_play_min_rvol === undefined ? 2 : settings.in_play_min_rvol,
+    in_play_min_gap_pct: settings.in_play_min_gap_pct ?? null,
     rotation_min_session_change_pct: settings.rotation_min_session_change_pct ?? null,
     entry_ema_gate: normalizeEntryEmaGate(settings.entry_ema_gate),
     max_rsi: settings.max_rsi ?? 70,
@@ -275,6 +298,15 @@ const DRAFT_KEYS = [
   "jev_sell_exit_threshold",
   "reentry_cooldown_minutes",
   "max_entries_per_symbol_per_day",
+  "max_trades_per_day",
+  "min_reward_risk",
+  "breakeven_at_r",
+  "entry_mode",
+  "orb_range_minutes",
+  "orb_entry_cutoff_minutes",
+  "orb_jev_veto",
+  "in_play_min_rvol",
+  "in_play_min_gap_pct",
   "rotation_min_session_change_pct",
   "entry_ema_gate",
   "max_rsi",
@@ -321,7 +353,12 @@ function valuesEqual(
   if (key === "watchlist" || key === "watchlist_pool") {
     return symbolsEqual(a as string[], b as string[]);
   }
-  if (key === "rotation_min_session_change_pct") {
+  if (
+    key === "rotation_min_session_change_pct" ||
+    key === "breakeven_at_r" ||
+    key === "in_play_min_rvol" ||
+    key === "in_play_min_gap_pct"
+  ) {
     const left = a as number | null;
     const right = b as number | null;
     if (left == null && right == null) return true;
@@ -350,6 +387,15 @@ export function buildMainSettingsFormDraft(input: {
   jevSellExitPct: number;
   reentryCooldownMinutes: number;
   maxEntriesPerSymbol: number;
+  maxTradesPerDay: number;
+  minRewardRisk: number;
+  breakevenAtR: number;
+  entryMode: SettingsFormDraft["entry_mode"];
+  orbRangeMinutes: number;
+  orbEntryCutoffMinutes: number;
+  orbJevVeto: boolean;
+  inPlayMinRvol: number;
+  inPlayMinGapPct: number;
   entryEmaGate: SettingsFormDraft["entry_ema_gate"];
   maxRsi: number;
   maxSpreadPct: number;
@@ -388,6 +434,15 @@ export function buildMainSettingsFormDraft(input: {
     jev_sell_exit_threshold: input.jevSellExitPct / 100,
     reentry_cooldown_minutes: input.reentryCooldownMinutes,
     max_entries_per_symbol_per_day: input.maxEntriesPerSymbol,
+    max_trades_per_day: input.maxTradesPerDay,
+    min_reward_risk: input.minRewardRisk,
+    breakeven_at_r: input.breakevenAtR > 0 ? input.breakevenAtR : null,
+    entry_mode: input.entryMode,
+    orb_range_minutes: input.orbRangeMinutes,
+    orb_entry_cutoff_minutes: input.orbEntryCutoffMinutes,
+    orb_jev_veto: input.orbJevVeto,
+    in_play_min_rvol: input.inPlayMinRvol > 0 ? input.inPlayMinRvol : null,
+    in_play_min_gap_pct: input.inPlayMinGapPct > 0 ? input.inPlayMinGapPct : null,
     entry_ema_gate: input.entryEmaGate,
     max_rsi: input.maxRsi,
     max_spread_pct: input.maxSpreadPct / 100,

@@ -28,6 +28,7 @@ const FILTER_PREFIXES = [
   "price_below_ema9",
   "ema_warming_up",
   "max_entries_per_symbol",
+  "not_in_play",
   "benchmark_headwind",
   "spy_headwind",
   "news_sentiment_bearish",
@@ -46,6 +47,7 @@ const RISK_REASONS = new Set([
   "correlation_cap",
   "reentry_cooldown",
   "entry_blocked",
+  "daily_trade_limit",
 ]);
 
 const IBKR_REASON_PREFIXES = [
@@ -70,6 +72,7 @@ export function normalizeSkipReasonKey(reason: string | null | undefined): strin
   if (reason.startsWith("awaiting_confirmation")) return "awaiting_confirmation";
   if (reason.startsWith("reentry_cooldown")) return "reentry_cooldown";
   if (reason.startsWith("correlation_cap")) return "correlation_cap";
+  if (reason.startsWith("daily_trade_limit")) return "daily_trade_limit";
   for (const prefix of IBKR_REASON_PREFIXES) {
     if (reason.startsWith(prefix)) return prefix;
   }
@@ -94,6 +97,14 @@ export function skipReasonLabel(key: string): string {
     price_below_ema9: "Price below EMA-9",
     ema_warming_up: "EMA warming up",
     max_entries_per_symbol: "Max entries per symbol (day)",
+    daily_trade_limit: "Daily trade limit hit",
+    not_in_play: "Not a stock in play",
+    orb_range_not_ready: "Opening range not ready",
+    orb_no_breakout: "No breakout yet",
+    orb_window_closed: "Opening window closed",
+    orb_extended: "Breakout already extended",
+    orb_jev_veto: "Jev veto",
+    orb_already_traded: "Already traded today",
     benchmark_headwind: "Benchmark headwind",
     spy_headwind: "SPY headwind",
     news_sentiment_bearish: "Bearish news",

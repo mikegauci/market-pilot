@@ -52,6 +52,24 @@ export const SETTING_DESCRIPTIONS_FULL = {
     "After any exit in a symbol — stop, take profit, Jev SELL, time cap, or manual close — block new entries in that symbol for this many minutes (0 = off). Applies whether the trade was a win or a loss.",
   max_entries_per_symbol_per_day:
     "Cap how many new trades the bot may open in the same symbol per US trading day (0 = off). Helps after repeated stop-outs.",
+  max_trades_per_day:
+    "You cap how many new trades the bot can open in one day across all symbols (0 = off). Fewer trades means fewer commissions and fewer weaker setups. Trades you place by hand are never blocked.",
+  min_reward_risk:
+    "You require the profit target to be at least this many times farther from your entry than the stop-loss (0 = off), so winning trades can be larger than losing ones. A value of 2 puts the target twice as far away as the stop.",
+  breakeven_at_r:
+    "After a trade has gained this many times the amount it risked, the bot sells at your entry price if the price falls back there, so a trade that was working does not turn into a loss (0 = off). A value of 1 means once the gain equals the original risk.",
+  entry_mode:
+    "You choose what triggers a buy: Jev's prediction, or the opening range breakout, which buys when a stock moves above the high of its first few minutes after the open. Opening range breakout mode does not call Jev unless you turn on the Jev veto.",
+  orb_range_minutes:
+    "You set how long after the 9:30 ET open the bot measures each stock's high and low before it watches for a breakout. A shorter range reacts sooner; a longer one is steadier. Must be a multiple of 5.",
+  orb_entry_cutoff_minutes:
+    "You stop opening range buys this many minutes after the 9:30 ET open (90 = 11:00). Trades already open are still managed, and everything is still closed before the end of the day.",
+  orb_jev_veto:
+    "When on, the bot still asks Jev about each breakout and skips the buy if Jev's strongest reading is SELL. When off, opening range mode never calls Jev.",
+  in_play_min_rvol:
+    "You only trade stocks drawing unusual attention: their volume in the opening range must be at least this many times their normal volume for the same minutes (0 = off). The bot also picks its watchlist for the day from the stocks with the highest ratio.",
+  in_play_min_gap_pct:
+    "You require a stock to open at least this many percent above or below yesterday's close before it counts as in play (0 = off). If you set both this and relative volume, a stock must pass both.",
   rotation_min_session_change_pct:
     "While rotation is on: names below this % vs today's price when the market opened are not promoted to the active list. Blank = off. 0 = flat or green since open.",
   entry_ema_gate:
@@ -112,6 +130,15 @@ export const SETTING_DESCRIPTIONS = {
   reentry_cooldown_minutes:
     "After any exit, wait N minutes before a new entry in that symbol (0 = off).",
   max_entries_per_symbol_per_day: "Max new entries per symbol per day (0 = off).",
+  max_trades_per_day: "Most new trades the bot may open each day (0 = off).",
+  min_reward_risk: "Profit target must be at least this many times the stop distance (0 = off).",
+  breakeven_at_r: "Exit at your entry price if a trade fades after gaining this much (0 = off).",
+  entry_mode: "Choose Jev predictions or the opening range breakout to decide buys.",
+  orb_range_minutes: "Minutes after the open used to measure each stock's opening range.",
+  orb_entry_cutoff_minutes: "No opening range buys after this many minutes from the open.",
+  orb_jev_veto: "Skip a breakout when Jev currently reads SELL.",
+  in_play_min_rvol: "Opening volume must be this many times normal for the stock to count (0 = off).",
+  in_play_min_gap_pct: "Stock must open this far above or below yesterday's close (0 = off).",
   rotation_min_session_change_pct:
     "Rotation only: min % since market open (blank = off, 0 = flat or up).",
   entry_ema_gate: "Require price above EMA-9, EMA-20, or Off.",

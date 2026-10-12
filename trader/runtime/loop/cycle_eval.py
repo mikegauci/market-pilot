@@ -22,6 +22,7 @@ from news.enrich import enrich_market_state_with_news
 from news.client import NewsService
 from risk.manager import RiskManager
 from runtime.entry_eval import process_ready_states
+from runtime.orb_entry import orb_filter_config, process_orb_states
 from runtime.eval_symbols import build_eval_symbols, eval_allow_five_min_fallback
 from runtime.jev_fetch import fetch_jev_predictions
 from runtime.loop.eval_cycle_state import EvalCycleScratch
@@ -118,6 +119,8 @@ def run_cycle_eval_and_exits_after_jev(
     if news_service and scratch.eval_symbols:
         news_service.refresh_stale(scratch.eval_symbols)
 
+    orb_mode = scratch.risk_settings.entry_mode == "orb"
+    entry_filter_config = orb_filter_config(strategy_config) if orb_mode else strategy_config
     ready_states: List[Tuple[str, MarketState]] = []
     for symbol in scratch.eval_symbols:
         quote = scratch.quotes_by_symbol.get(symbol)
@@ -168,7 +171,7 @@ def run_cycle_eval_and_exits_after_jev(
             entry_filter = check_entry_filters(
                 state,
                 breakout_entry_config(
-                    strategy_config,
+                    entry_filter_config,
                     sym_upper,
                     runtime.breakout_until_mono,
                     time.monotonic(),
@@ -176,7 +179,8 @@ def run_cycle_eval_and_exits_after_jev(
             )
             if not entry_filter.passed:
                 logger.info(
-                    "Filter: skipped Jev for %s — %s",
+                    "Filter: skipped %s for %s — %s",
+                    "ORB" if orb_mode else "Jev",
                     symbol,
                     entry_filter.reason,
                 )
@@ -185,42 +189,70 @@ def run_cycle_eval_and_exits_after_jev(
                 )
                 continue
 
+        if orb_mode:
+            # ORB needs no Jev; open positions are managed by price rules, not Jev SELL.
+            if not is_open_position:
+                ready_states.append((symbol, state))
+            continue
+
         if jev is None:
             continue
 
         ready_states.append((symbol, state))
 
     scratch.ready_states = ready_states
-    if jev is not None and ready_states:
+    jev_wanted = (not orb_mode) or scratch.risk_settings.orb_jev_veto
+    if jev is not None and jev_wanted and ready_states:
         scratch.predictions_by_symbol = fetch_jev_predictions(
             jev, ready_states, settings.jev_max_workers
         )
     if scratch.predictions_by_symbol:
         scratch.jev_connected_this_cycle = True
         scratch.jev_connected = True
-    elif ready_states and jev is not None:
+    elif ready_states and jev is not None and jev_wanted:
+        scratch.jev_connected = False
+    elif not jev_wanted:
+        # ORB mode without the veto never calls Jev: don't leave a stale "connected" status.
         scratch.jev_connected = False
 
-    eval_outcome = process_ready_states(
-        ready_states=ready_states,
-        predictions_by_symbol=scratch.predictions_by_symbol,
-        db=db,
-        risk_manager=risk_manager,
-        risk_settings=scratch.risk_settings,
-        strategy_config=strategy_config,
-        runtime_entry_strategy=strategy_config,
-        bar_store=bar_store,
-        quotes_by_symbol=scratch.quotes_by_symbol,
-        confirmation_tracker=confirmation_tracker,
-        bot_enabled=scratch.bot_enabled,
-        execution_mode=scratch.execution_mode,
-        ibkr=ibkr,
-        settings=settings,
-        active_ibkr_account_id=active_ibkr_account_id,
-        daily_pnl_account_id=scratch.daily_pnl_account_id,
-        runtime=runtime,
-        shadow_reader=shadow_reader,
-    )
+    if orb_mode:
+        eval_outcome = process_orb_states(
+            ready_states=ready_states,
+            predictions_by_symbol=scratch.predictions_by_symbol,
+            db=db,
+            risk_manager=risk_manager,
+            risk_settings=scratch.risk_settings,
+            strategy_config=entry_filter_config,
+            quotes_by_symbol=scratch.quotes_by_symbol,
+            confirmation_tracker=confirmation_tracker,
+            bot_enabled=scratch.bot_enabled,
+            execution_mode=scratch.execution_mode,
+            ibkr=ibkr,
+            settings=settings,
+            active_ibkr_account_id=active_ibkr_account_id,
+            runtime=runtime,
+        )
+    else:
+        eval_outcome = process_ready_states(
+            ready_states=ready_states,
+            predictions_by_symbol=scratch.predictions_by_symbol,
+            db=db,
+            risk_manager=risk_manager,
+            risk_settings=scratch.risk_settings,
+            strategy_config=strategy_config,
+            runtime_entry_strategy=strategy_config,
+            bar_store=bar_store,
+            quotes_by_symbol=scratch.quotes_by_symbol,
+            confirmation_tracker=confirmation_tracker,
+            bot_enabled=scratch.bot_enabled,
+            execution_mode=scratch.execution_mode,
+            ibkr=ibkr,
+            settings=settings,
+            active_ibkr_account_id=active_ibkr_account_id,
+            daily_pnl_account_id=scratch.daily_pnl_account_id,
+            runtime=runtime,
+            shadow_reader=shadow_reader,
+        )
     scratch.prediction_rows = scratch.prediction_rows + eval_outcome.prediction_rows
     if eval_outcome.portfolio_dirty:
         scratch.portfolio_dirty = True
@@ -259,6 +291,16 @@ def run_cycle_eval_and_exits_after_jev(
         ):
             scratch.portfolio_dirty = True
 
+        closed_breakeven_sim = risk_manager.check_breakeven_exits(scratch.quotes_by_symbol)
+        if persist_simulated_closes(
+            db,
+            risk_manager,
+            closed_breakeven_sim,
+            daily_pnl_account_id=scratch.daily_pnl_account_id,
+            quotes_by_symbol=scratch.quotes_by_symbol,
+        ):
+            scratch.portfolio_dirty = True
+
     if (
         risk_manager
         and db
@@ -288,6 +330,9 @@ def run_cycle_eval_and_exits_after_jev(
             jev_sell_symbols=scratch.jev_sell_symbols,
             profit_take_trade_ids=profit_take_trade_ids,
             loss_cut_trade_ids=loss_cut_trade_ids,
+            breakeven_trade_ids=risk_manager.collect_breakeven_trade_ids(
+                scratch.quotes_by_symbol, execution_mode="ibkr"
+            ),
             fill_timeout_sec=settings.ibkr_fill_timeout_sec,
             ibkr_account_id=scratch.daily_pnl_account_id,
         )

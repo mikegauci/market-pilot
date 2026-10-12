@@ -2,6 +2,7 @@
 
 import {
   AreaSeries,
+  CandlestickSeries,
   ColorType,
   createChart,
   createSeriesMarkers,
@@ -28,6 +29,8 @@ type Props = {
   viewKey?: string;
   /** Initial visible window from newest bar; null = show all (fit). */
   visibleLookbackMs?: number | null;
+  /** Candlesticks (default) or a closing-price area line. */
+  chartStyle?: "candles" | "line";
 };
 
 function toChartTime(ts: string): UTCTimestamp {
@@ -126,6 +129,15 @@ function trendColors(bars: SymbolBar[], visibleLookbackMs: number | null) {
   return Number(last.close) >= Number(first.close) ? TREND_COLORS.up : TREND_COLORS.down;
 }
 
+const CANDLE_OPTIONS = {
+  upColor: "#10b981",
+  downColor: "#ef4444",
+  borderUpColor: "#10b981",
+  borderDownColor: "#ef4444",
+  wickUpColor: "#10b981",
+  wickDownColor: "#ef4444",
+} as const;
+
 function barsFingerprint(bars: SymbolBar[]): string {
   if (bars.length === 0) return "";
   const first = bars[0];
@@ -140,10 +152,11 @@ export function SymbolChart({
   height = 240,
   viewKey = "",
   visibleLookbackMs = null,
+  chartStyle = "candles",
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Area"> | ISeriesApi<"Candlestick"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const markersApiRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const fittedViewKeyRef = useRef<string | null>(null);
@@ -197,10 +210,10 @@ export function SymbolChart({
       },
     });
 
-    const series = chart.addSeries(AreaSeries, {
-      ...TREND_COLORS.up,
-      lineWidth: 2,
-    });
+    const series =
+      chartStyle === "candles"
+        ? chart.addSeries(CandlestickSeries, CANDLE_OPTIONS)
+        : chart.addSeries(AreaSeries, { ...TREND_COLORS.up, lineWidth: 2 });
 
     chartRef.current = chart;
     seriesRef.current = series;
@@ -225,7 +238,7 @@ export function SymbolChart({
       priceLinesRef.current = [];
       markersApiRef.current = null;
     };
-  }, [height]);
+  }, [height, chartStyle]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -247,13 +260,25 @@ export function SymbolChart({
     const previousRange = chart.timeScale().getVisibleLogicalRange();
 
     if (barsChanged || shouldResetView) {
-      series.setData(
-        bars.map((bar) => ({
-          time: toChartTime(bar.ts),
-          value: Number(bar.close),
-        })),
-      );
-      series.applyOptions(trendColors(bars, visibleLookbackMs));
+      if (chartStyle === "candles") {
+        (series as ISeriesApi<"Candlestick">).setData(
+          bars.map((bar) => ({
+            time: toChartTime(bar.ts),
+            open: Number(bar.open),
+            high: Number(bar.high),
+            low: Number(bar.low),
+            close: Number(bar.close),
+          })),
+        );
+      } else {
+        (series as ISeriesApi<"Area">).setData(
+          bars.map((bar) => ({
+            time: toChartTime(bar.ts),
+            value: Number(bar.close),
+          })),
+        );
+        (series as ISeriesApi<"Area">).applyOptions(trendColors(bars, visibleLookbackMs));
+      }
       lastBarsFpRef.current = barsFp;
     }
 
@@ -296,7 +321,7 @@ export function SymbolChart({
     } else if (barsChanged && previousRange) {
       chart.timeScale().setVisibleLogicalRange(previousRange);
     }
-  }, [bars, overlays, markers, viewKey, visibleLookbackMs]);
+  }, [bars, overlays, markers, viewKey, visibleLookbackMs, chartStyle]);
 
   if (bars.length === 0) {
     return (

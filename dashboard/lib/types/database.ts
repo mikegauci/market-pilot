@@ -38,6 +38,24 @@ export type Settings = {
   reentry_cooldown_minutes: number;
   /** Max new entries per symbol per US trading day (0 = off). */
   max_entries_per_symbol_per_day: number;
+  /** Max bot entries per US trading day across all symbols (0 = off). */
+  max_trades_per_day: number;
+  /** Take profit is at least this many times the stop distance (0 = off). */
+  min_reward_risk: number;
+  /** After price runs this many times the risk, exit at entry if it falls back (null = off). */
+  breakeven_at_r: number | null;
+  /** Entry signal: Jev predictions or the rule-based opening range breakout. */
+  entry_mode: "jev" | "orb";
+  /** Opening range length in minutes (multiple of 5). */
+  orb_range_minutes: number;
+  /** No opening range entries after this many minutes from the open. */
+  orb_entry_cutoff_minutes: number;
+  /** Opening range mode: skip a breakout when Jev reads SELL. */
+  orb_jev_veto: boolean;
+  /** Opening range mode: minimum relative volume of the opening window (null = off). */
+  in_play_min_rvol: number | null;
+  /** Opening range mode: minimum overnight gap in % either way (null = off). */
+  in_play_min_gap_pct: number | null;
   /** Watchlist rotation: min session % vs RTH open (null = off, 0 = non-negative session). */
   rotation_min_session_change_pct: number | null;
   /** Consecutive eligible Jev BUY eval cycles required before entry. */

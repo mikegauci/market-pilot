@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SymbolChart } from "@/components/symbol-chart";
 import { fetchSymbolBars } from "@/lib/data-client";
+import { openingRangeOverlays } from "@/lib/opening-range";
+import { useOrbRangeMinutes } from "@/lib/use-orb-range-minutes";
 import {
   CHART_BAR_SIZE,
   CHART_PRESETS,
@@ -99,10 +101,11 @@ export function SymbolChartPanel({
   const [error, setError] = useState<string | null>(null);
   const [preset, setPreset] = useState<ChartPreset>(DEFAULT_CHART_PRESET);
   const [showOverlays, setShowOverlays] = useState(true);
+  const [chartStyle, setChartStyle] = useState<"candles" | "line">("candles");
+  const orbRangeMinutes = useOrbRangeMinutes();
 
   // Charts always use 5m bars; barSize prop is accepted but not switched in the UI.
   const resolvedBarSize = barSize === "1 day" ? CHART_BAR_SIZE : barSize;
-  const hasOverlayLines = overlays.length > 0;
 
   useEffect(() => {
     if (!lazy) return;
@@ -144,7 +147,8 @@ export function SymbolChartPanel({
         const data = await fetchSymbolBars(
           symbol,
           resolvedBarSize,
-          barFetchLimitForPreset(preset),
+          // A full session of 5m bars, so the 9:30 opening range stays loaded all day.
+          Math.max(barFetchLimitForPreset(preset), orbRangeMinutes ? 120 : 0),
         );
         if (cancelled) return;
         const next = applyChartFetchResult(null, { ok: true, bars: data });
@@ -174,7 +178,7 @@ export function SymbolChartPanel({
       cancelled = true;
       window.clearInterval(pollId);
     };
-  }, [symbol, resolvedBarSize, isVisible, refreshIntervalMs, preset]);
+  }, [symbol, resolvedBarSize, isVisible, refreshIntervalMs, preset, orbRangeMinutes]);
 
   function handlePresetChange(next: string) {
     if (isChartPreset(next)) {
@@ -201,7 +205,13 @@ export function SymbolChartPanel({
     }).format(date);
   }, [lastBarTs]);
 
-  const activeOverlays = showOverlays ? overlays : [];
+  const rangeOverlays = useMemo(
+    () => (orbRangeMinutes ? openingRangeOverlays(displayBars, orbRangeMinutes) : []),
+    [displayBars, orbRangeMinutes],
+  );
+  const allOverlays = useMemo(() => [...overlays, ...rangeOverlays], [overlays, rangeOverlays]);
+  const hasOverlayLines = allOverlays.length > 0;
+  const activeOverlays = showOverlays ? allOverlays : [];
   const showPlaceholder = lazy && !isVisible && bars.length === 0 && !error;
 
   return (
@@ -224,6 +234,15 @@ export function SymbolChartPanel({
                   options={CHART_PRESETS}
                   value={preset}
                   onChange={handlePresetChange}
+                />
+                <SegmentedControl
+                  ariaLabel="Chart style"
+                  options={[
+                    { value: "candles", label: "Candles" },
+                    { value: "line", label: "Line" },
+                  ]}
+                  value={chartStyle}
+                  onChange={setChartStyle}
                 />
                 {hasOverlayLines ? (
                   <button
@@ -266,6 +285,7 @@ export function SymbolChartPanel({
                 height={height}
                 viewKey={viewKey}
                 visibleLookbackMs={lookbackMs}
+                chartStyle={chartStyle}
               />
               {asOfLabel ? (
                 <p className="mt-1 text-[10px] text-zinc-600">

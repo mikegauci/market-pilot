@@ -55,6 +55,64 @@ class EntryEvalResult:
     jev_sell_symbols: Set[str] = field(default_factory=set)
 
 
+def attempt_open_trade(
+    trade,
+    symbol: str,
+    *,
+    confirmation_tracker: ConfirmationTracker,
+    db: SupabaseRepository,
+    risk_manager: RiskManager,
+    execution_mode: ExecutionMode,
+    ibkr: IBKRClient,
+    settings: Settings,
+    runtime: TraderRuntimeState,
+    quotes_by_symbol: Dict[str, Quote],
+    active_ibkr_account_id: Optional[str],
+) -> Tuple[bool, Optional[str]]:
+    """Place an approved entry. Returns (opened, skip_reason)."""
+    skip_reason: Optional[str] = None
+    open_result = None
+    try:
+        open_result = open_approved_trade(
+            trade,
+            execution_mode=execution_mode,
+            ibkr=ibkr,
+            db=db,
+            risk_manager=risk_manager,
+            settings=settings,
+            runtime=runtime,
+            quotes_by_symbol=quotes_by_symbol,
+            active_ibkr_account_id=active_ibkr_account_id,
+            fill_timeout_sec=settings.ibkr_fill_timeout_sec,
+            on_opened=lambda opened: confirmation_tracker.reset(opened.symbol),
+        )
+    except Exception as exc:
+        skip_reason = str(exc)
+        logger.error("Entry failed for %s: %s", symbol, exc)
+    if open_result is None:
+        return False, skip_reason
+    if open_result.opened:
+        return True, None
+    if open_result.skip_reason:
+        skip_reason = open_result.skip_reason
+        if skip_reason.startswith("ibkr_order_failed"):
+            logger.error("IBKR order failed for %s: %s", symbol, skip_reason)
+            if "PendingSubmit" in skip_reason or "whyHeld" in skip_reason:
+                logger.error(
+                    "Hint: if orders stay PendingSubmit, disable "
+                    "order confirmations in TWS/Gateway "
+                    "(Global Config → Presets → Confirmations)."
+                )
+        elif skip_reason == "ibkr_not_connected":
+            logger.warning(
+                "Execution mode ibkr but IBKR not connected — skipping %s",
+                symbol,
+            )
+        else:
+            logger.info("Skipping %s entry — %s", symbol, skip_reason)
+    return False, skip_reason
+
+
 def process_ready_states(
     *,
     ready_states: List[Tuple[str, MarketState]],
@@ -197,58 +255,23 @@ def process_ready_states(
                     atr_pct=atr_pct,
                 )
                 if decision.approved and decision.trade:
-                    trade = decision.trade
-                    open_result = None
-                    try:
-                        open_result = open_approved_trade(
-                            trade,
-                            execution_mode=execution_mode,
-                            ibkr=ibkr,
-                            db=db,
-                            risk_manager=risk_manager,
-                            settings=settings,
-                            runtime=runtime,
-                            quotes_by_symbol=quotes_by_symbol,
-                            active_ibkr_account_id=active_ibkr_account_id,
-                            fill_timeout_sec=settings.ibkr_fill_timeout_sec,
-                            on_opened=lambda opened: confirmation_tracker.reset(
-                                opened.symbol
-                            ),
-                        )
-                    except Exception as exc:
-                        trade_skip_reason = str(exc)
-                        logger.error("Entry failed for %s: %s", symbol, exc)
-                    if open_result is not None:
-                        if open_result.opened:
-                            trade_created = True
-                            result.portfolio_dirty = True
-                        elif open_result.skip_reason:
-                            trade_skip_reason = open_result.skip_reason
-                            if open_result.skip_reason.startswith("ibkr_order_failed"):
-                                logger.error(
-                                    "IBKR order failed for %s: %s",
-                                    symbol,
-                                    open_result.skip_reason,
-                                )
-                                if "PendingSubmit" in open_result.skip_reason or "whyHeld" in (
-                                    open_result.skip_reason
-                                ):
-                                    logger.error(
-                                        "Hint: if orders stay PendingSubmit, disable "
-                                        "order confirmations in TWS/Gateway "
-                                        "(Global Config → Presets → Confirmations)."
-                                    )
-                            elif open_result.skip_reason == "ibkr_not_connected":
-                                logger.warning(
-                                    "Execution mode ibkr but IBKR not connected — skipping %s",
-                                    symbol,
-                                )
-                            else:
-                                logger.info(
-                                    "Skipping %s entry — %s",
-                                    symbol,
-                                    open_result.skip_reason,
-                                )
+                    trade_created, open_skip_reason = attempt_open_trade(
+                        decision.trade,
+                        symbol,
+                        confirmation_tracker=confirmation_tracker,
+                        db=db,
+                        risk_manager=risk_manager,
+                        execution_mode=execution_mode,
+                        ibkr=ibkr,
+                        settings=settings,
+                        runtime=runtime,
+                        quotes_by_symbol=quotes_by_symbol,
+                        active_ibkr_account_id=active_ibkr_account_id,
+                    )
+                    if trade_created:
+                        result.portfolio_dirty = True
+                    elif open_skip_reason:
+                        trade_skip_reason = open_skip_reason
                 elif not decision.approved:
                     trade_skip_reason = decision.reason
                     logger.info("Risk: rejected %s — %s", symbol, decision.reason)

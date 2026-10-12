@@ -43,8 +43,10 @@ def run_cycle_rotation_and_bar_flush(
     scratch: EvalCycleScratch,
     runtime: TraderRuntimeState,
 ) -> None:
+    # ORB mode picks the day's stocks in play itself (runtime/orb_runtime.py): no rotation/breakouts.
     if (
         db
+        and scratch.risk_settings.entry_mode != "orb"
         and scratch.risk_settings.watchlist_rotation_enabled
         and scratch.risk_settings.watchlist_pool
     ):

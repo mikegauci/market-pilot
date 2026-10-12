@@ -26,6 +26,7 @@ from runtime.loop.cycle_rotation import run_cycle_rotation_and_bar_flush
 from runtime.loop.cycle_sync import run_cycle_sync
 from runtime.loop.cycle_tail import finish_eval_cycle_sleep, run_cycle_heartbeat_and_status
 from runtime.loop.eval_cycle_state import EvalCycleScratch
+from runtime.orb_runtime import run_cycle_orb_prep
 from runtime.state import TraderRuntimeState
 from strategy.config import StrategyConfig
 from strategy.confirmation import ConfirmationTracker
@@ -123,6 +124,15 @@ def run_eval_cycle(
             risk_manager=ctx.risk_manager,
             confirmation_tracker=ctx.confirmation_tracker,
             strategy_config=scratch.strategy_config,
+            scratch=scratch,
+            runtime=runtime,
+        )
+
+        run_cycle_orb_prep(
+            db=db,
+            settings=settings,
+            ibkr=ctx.ibkr,
+            bar_store=ctx.bar_store,
             scratch=scratch,
             runtime=runtime,
         )

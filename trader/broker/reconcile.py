@@ -154,7 +154,7 @@ def reconcile_orphan_ibkr_positions(
         except Exception:
             pass
         db.insert_trade(trade)
-        risk_manager.register_open_trade(trade)
+        risk_manager.register_open_trade(trade, count_entry=False)
         reconciled += 1
         logger.info(
             "Reconciled orphan IBKR position: %s x %.0f @ $%.2f (SL $%.2f / TP $%.2f)",

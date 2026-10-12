@@ -65,7 +65,22 @@ FULL_ROW = {
     "breakout_lookback_minutes": 15,
     "breakout_min_volume_ratio": 2.0,
     "breakout_min_change_5m_pct": 0.2,
+    "max_trades_per_day": 4,
+    "min_reward_risk": 2.0,
+    "breakeven_at_r": 1.0,
+    "entry_mode": " ORB ",
+    "orb_range_minutes": 15,
+    "orb_entry_cutoff_minutes": 120,
+    "orb_jev_veto": True,
+    "in_play_min_rvol": 2.5,
+    "in_play_min_gap_pct": 1.5,
 }
+
+NEW_SETTING_KEYS = (
+    "max_trades_per_day", "min_reward_risk", "breakeven_at_r", "entry_mode",
+    "orb_range_minutes", "orb_entry_cutoff_minutes", "orb_jev_veto",
+    "in_play_min_rvol", "in_play_min_gap_pct",
+)
 
 
 def with_nulls() -> dict:
@@ -84,6 +99,9 @@ def with_nulls() -> dict:
         "breakout_lookback_minutes",
         "breakout_min_volume_ratio",
         "breakout_min_change_5m_pct",
+        "breakeven_at_r",
+        "in_play_min_rvol",
+        "in_play_min_gap_pct",
     ):
         row[key] = None
     return row
@@ -101,19 +119,20 @@ def legacy_without(*prefixes: str) -> dict:
 SCENARIOS = {
     "full": lambda: copy.deepcopy(FULL_ROW),
     "nulls": with_nulls,
-    "no_breakout": lambda: legacy_without("breakout_"),
+    "no_breakout": lambda: legacy_without("breakout_", *NEW_SETTING_KEYS),
     "no_loss_cut_rotation": lambda: legacy_without(
         "loss_cut_", "watchlist_pool", "watchlist_active", "watchlist_rotation",
         "watchlist_max_swaps", "watchlist_last_rotation", "entry_blocked",
         "max_entries_per_symbol_per_day", "rotation_min_session_change_pct",
         "entry_ema_gate", "max_rsi", "max_spread_pct", "breakout_",
+        *NEW_SETTING_KEYS,
     ),
     "core_only": lambda: legacy_without(
         "profit_take_", "loss_cut_", "confirmation_", "min_dollar_volume",
         "watchlist_pool", "watchlist_active", "watchlist_rotation", "watchlist_max_swaps",
         "watchlist_last_rotation", "entry_blocked", "max_entries_per_symbol_per_day",
         "rotation_min_session_change_pct", "entry_ema_gate", "max_rsi", "max_spread_pct",
-        "breakout_",
+        "breakout_", *NEW_SETTING_KEYS,
     ),
 }
 

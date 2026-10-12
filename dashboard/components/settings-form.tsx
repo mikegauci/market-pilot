@@ -146,6 +146,19 @@ export function SettingsForm({
   const [maxEntriesPerSymbol, setMaxEntriesPerSymbol] = useState(
     settings.max_entries_per_symbol_per_day ?? 3,
   );
+  const [maxTradesPerDay, setMaxTradesPerDay] = useState(settings.max_trades_per_day ?? 0);
+  const [minRewardRisk, setMinRewardRisk] = useState(settings.min_reward_risk ?? 0);
+  const [breakevenAtR, setBreakevenAtR] = useState(settings.breakeven_at_r ?? 0);
+  const [entryMode, setEntryMode] = useState<"jev" | "orb">(
+    settings.entry_mode === "orb" ? "orb" : "jev",
+  );
+  const [orbRangeMinutes, setOrbRangeMinutes] = useState(settings.orb_range_minutes ?? 5);
+  const [orbEntryCutoffMinutes, setOrbEntryCutoffMinutes] = useState(
+    settings.orb_entry_cutoff_minutes ?? 90,
+  );
+  const [orbJevVeto, setOrbJevVeto] = useState(settings.orb_jev_veto ?? false);
+  const [inPlayMinRvol, setInPlayMinRvol] = useState(settings.in_play_min_rvol ?? 0);
+  const [inPlayMinGapPct, setInPlayMinGapPct] = useState(settings.in_play_min_gap_pct ?? 0);
   const [entryEmaGate, setEntryEmaGate] = useState<EntryEmaGate>(
     normalizeEntryEmaGate(settings.entry_ema_gate ?? DEFAULT_ENTRY_EMA_GATE),
   );
@@ -272,6 +285,15 @@ export function SettingsForm({
         jevSellExitPct,
         reentryCooldownMinutes,
         maxEntriesPerSymbol,
+        maxTradesPerDay,
+        minRewardRisk,
+        breakevenAtR,
+        entryMode,
+        orbRangeMinutes,
+        orbEntryCutoffMinutes,
+        orbJevVeto,
+        inPlayMinRvol,
+        inPlayMinGapPct,
         entryEmaGate,
         maxRsi,
         maxSpreadPct,
@@ -309,6 +331,15 @@ export function SettingsForm({
       jevSellExitPct,
       reentryCooldownMinutes,
       maxEntriesPerSymbol,
+      maxTradesPerDay,
+      minRewardRisk,
+      breakevenAtR,
+      entryMode,
+      orbRangeMinutes,
+      orbEntryCutoffMinutes,
+      orbJevVeto,
+      inPlayMinRvol,
+      inPlayMinGapPct,
       entryEmaGate,
       maxRsi,
       maxSpreadPct,
@@ -470,6 +501,136 @@ export function SettingsForm({
       </SettingsSection>
 
       <SettingsSection
+        id="entry-style"
+        title="Entry style"
+        description="What triggers a buy: Jev's prediction, or a rule-based breakout from the stock's first minutes of trading."
+      >
+        <SettingsFieldGroup>
+          <SettingsField
+            id="entry_mode"
+            fieldKey="entry_mode"
+            label="Entry style"
+            description={SETTING_DESCRIPTIONS.entry_mode}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.entry_mode}
+          >
+            <select
+              id="entry_mode"
+              name="entry_mode"
+              value={entryMode}
+              onChange={(event) => setEntryMode(event.target.value === "orb" ? "orb" : "jev")}
+              className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100"
+              disabled={readOnly}
+            >
+              <option value="jev">Jev predictions</option>
+              <option value="orb">Opening range breakout (no Jev needed)</option>
+            </select>
+          </SettingsField>
+        </SettingsFieldGroup>
+        <SettingsCollapsible
+          summary="Opening range breakout settings"
+          detail={entryMode === "orb" ? "In use" : "Not in use"}
+          defaultOpen={entryMode === "orb"}
+        >
+          <SettingsFieldGroup className="mt-3">
+          <SettingsField
+            id="orb_range_minutes"
+            fieldKey="orb_range_minutes"
+            label="Opening range (minutes)"
+            description={SETTING_DESCRIPTIONS.orb_range_minutes}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.orb_range_minutes}
+          >
+            <SettingsNumberInput
+              id="orb_range_minutes"
+              name="orb_range_minutes"
+              step="5"
+              min={5}
+              max={60}
+              integer
+              value={orbRangeMinutes}
+              onChange={setOrbRangeMinutes}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="orb_entry_cutoff_minutes"
+            fieldKey="orb_entry_cutoff_minutes"
+            label="Opening range entry window (minutes)"
+            description={SETTING_DESCRIPTIONS.orb_entry_cutoff_minutes}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.orb_entry_cutoff_minutes}
+          >
+            <SettingsNumberInput
+              id="orb_entry_cutoff_minutes"
+              name="orb_entry_cutoff_minutes"
+              step="1"
+              min={10}
+              max={330}
+              integer
+              value={orbEntryCutoffMinutes}
+              onChange={setOrbEntryCutoffMinutes}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="in_play_min_rvol"
+            fieldKey="in_play_min_rvol"
+            label="Min relative volume (×)"
+            description={SETTING_DESCRIPTIONS.in_play_min_rvol}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.in_play_min_rvol}
+          >
+            <SettingsNumberInput
+              id="in_play_min_rvol"
+              name="in_play_min_rvol"
+              step="0.5"
+              min={0}
+              max={50}
+              value={inPlayMinRvol}
+              onChange={setInPlayMinRvol}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="in_play_min_gap_pct"
+            fieldKey="in_play_min_gap_pct"
+            label="Min overnight gap (%)"
+            description={SETTING_DESCRIPTIONS.in_play_min_gap_pct}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.in_play_min_gap_pct}
+          >
+            <SettingsNumberInput
+              id="in_play_min_gap_pct"
+              name="in_play_min_gap_pct"
+              step="0.5"
+              min={0}
+              max={50}
+              value={inPlayMinGapPct}
+              onChange={setInPlayMinGapPct}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="orb_jev_veto"
+            fieldKey="orb_jev_veto"
+            label="Jev veto"
+            description={SETTING_DESCRIPTIONS.orb_jev_veto}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.orb_jev_veto}
+          >
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
+              <input
+                type="checkbox"
+                id="orb_jev_veto"
+                name="orb_jev_veto"
+                value="on"
+                checked={orbJevVeto}
+                onChange={(event) => setOrbJevVeto(event.target.checked)}
+                className="rounded border-zinc-700"
+              />
+              <span className="text-xs">Skip a breakout when Jev reads SELL</span>
+            </label>
+          </SettingsField>
+          </SettingsFieldGroup>
+        </SettingsCollapsible>
+      </SettingsSection>
+
+      <SettingsSection
         id="risk-limits"
         title="Risk & limits"
         description="Capital at risk per trade, position caps, and daily loss guardrails."
@@ -525,6 +686,61 @@ export function SettingsForm({
               integer
               value={maxOpenPositions}
               onChange={setMaxOpenPositions}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="max_trades_per_day"
+            fieldKey="max_trades_per_day"
+            label="Max trades per day"
+            description={SETTING_DESCRIPTIONS.max_trades_per_day}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.max_trades_per_day}
+          >
+            <SettingsNumberInput
+              id="max_trades_per_day"
+              name="max_trades_per_day"
+              step="1"
+              min={0}
+              max={100}
+              integer
+              value={maxTradesPerDay}
+              onChange={setMaxTradesPerDay}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="min_reward_risk"
+            fieldKey="min_reward_risk"
+            label="Min reward-to-risk"
+            description={SETTING_DESCRIPTIONS.min_reward_risk}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.min_reward_risk}
+          >
+            <SettingsNumberInput
+              id="min_reward_risk"
+              name="min_reward_risk"
+              step="0.5"
+              min={0}
+              max={5}
+              value={minRewardRisk}
+              onChange={setMinRewardRisk}
+              required
+            />
+          </SettingsField>
+          <SettingsField
+            id="breakeven_at_r"
+            fieldKey="breakeven_at_r"
+            label="Break-even exit (× risk)"
+            description={SETTING_DESCRIPTIONS.breakeven_at_r}
+            descriptionTitle={SETTING_DESCRIPTIONS_FULL.breakeven_at_r}
+          >
+            <SettingsNumberInput
+              id="breakeven_at_r"
+              name="breakeven_at_r"
+              step="0.25"
+              min={0}
+              max={5}
+              value={breakevenAtR}
+              onChange={setBreakevenAtR}
               required
             />
           </SettingsField>

@@ -44,3 +44,19 @@ def build_filter_skip_payload(state: MarketState, reason: str) -> dict:
         "trade_created": False,
         "trade_skip_reason": reason,
     }
+
+
+def build_rule_payload(
+    state: MarketState,
+    *,
+    trade_created: bool = False,
+    trade_skip_reason: Optional[str] = None,
+) -> dict:
+    """Prediction row for a rule-based entry mode (ORB). No Jev call was made.
+
+    Zero probabilities are placeholders, as in build_filter_skip_payload.
+    """
+    payload = build_filter_skip_payload(state, trade_skip_reason or "")
+    payload["trade_created"] = trade_created
+    payload["trade_skip_reason"] = None if trade_created else trade_skip_reason
+    return payload

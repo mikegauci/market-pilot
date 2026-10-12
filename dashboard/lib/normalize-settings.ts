@@ -11,6 +11,15 @@ export type SettingsRow = Omit<
   | "jev_sell_exit_threshold"
   | "reentry_cooldown_minutes"
   | "max_entries_per_symbol_per_day"
+  | "max_trades_per_day"
+  | "min_reward_risk"
+  | "breakeven_at_r"
+  | "entry_mode"
+  | "orb_range_minutes"
+  | "orb_entry_cutoff_minutes"
+  | "orb_jev_veto"
+  | "in_play_min_rvol"
+  | "in_play_min_gap_pct"
   | "entry_ema_gate"
   | "max_rsi"
   | "max_spread_pct"
@@ -56,6 +65,15 @@ export type SettingsRow = Omit<
       | "jev_sell_exit_threshold"
       | "reentry_cooldown_minutes"
       | "max_entries_per_symbol_per_day"
+      | "max_trades_per_day"
+      | "min_reward_risk"
+      | "breakeven_at_r"
+      | "entry_mode"
+      | "orb_range_minutes"
+      | "orb_entry_cutoff_minutes"
+      | "orb_jev_veto"
+      | "in_play_min_rvol"
+      | "in_play_min_gap_pct"
       | "entry_ema_gate"
       | "max_rsi"
       | "max_spread_pct"
@@ -110,6 +128,15 @@ export function normalizeSettings(raw: SettingsRow | null): Settings | null {
     jev_sell_exit_threshold: raw.jev_sell_exit_threshold ?? 0.95,
     reentry_cooldown_minutes: raw.reentry_cooldown_minutes ?? 45,
     max_entries_per_symbol_per_day: raw.max_entries_per_symbol_per_day ?? 3,
+    max_trades_per_day: raw.max_trades_per_day ?? 0,
+    min_reward_risk: raw.min_reward_risk ?? 0,
+    breakeven_at_r: raw.breakeven_at_r ?? null,
+    entry_mode: raw.entry_mode === "orb" ? "orb" : "jev",
+    orb_range_minutes: raw.orb_range_minutes ?? 5,
+    orb_entry_cutoff_minutes: raw.orb_entry_cutoff_minutes ?? 90,
+    orb_jev_veto: raw.orb_jev_veto ?? false,
+    in_play_min_rvol: raw.in_play_min_rvol === undefined ? 2 : raw.in_play_min_rvol,
+    in_play_min_gap_pct: raw.in_play_min_gap_pct ?? null,
     rotation_min_session_change_pct:
       raw.rotation_min_session_change_pct !== undefined
         ? (raw.rotation_min_session_change_pct ?? null)

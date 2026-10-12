@@ -119,6 +119,33 @@ class SupabaseSettingsMixin:
             max_entries_per_symbol_per_day=int(
                 data.get("max_entries_per_symbol_per_day", 3)
             ),
+            max_trades_per_day=max(0, int(data.get("max_trades_per_day", 0) or 0)),
+            min_reward_risk=max(0.0, float(data.get("min_reward_risk", 0) or 0)),
+            breakeven_at_r=(
+                float(data["breakeven_at_r"])
+                if data.get("breakeven_at_r") is not None
+                else None
+            ),
+            entry_mode=(
+                "orb"
+                if str(data.get("entry_mode") or "jev").strip().lower() == "orb"
+                else "jev"
+            ),
+            orb_range_minutes=max(5, int(data.get("orb_range_minutes", 5) or 5)),
+            orb_entry_cutoff_minutes=max(
+                10, int(data.get("orb_entry_cutoff_minutes", 90) or 90)
+            ),
+            orb_jev_veto=bool(data.get("orb_jev_veto", False)),
+            in_play_min_rvol=(
+                float(data.get("in_play_min_rvol", 2.0))
+                if data.get("in_play_min_rvol", 2.0) is not None
+                else None
+            ),
+            in_play_min_gap_pct=(
+                float(data["in_play_min_gap_pct"])
+                if data.get("in_play_min_gap_pct") is not None
+                else None
+            ),
             rotation_min_session_change_pct=(
                 SupabaseSettingsMixin._parse_rotation_session_pct(data)
                 if "rotation_min_session_change_pct" in data

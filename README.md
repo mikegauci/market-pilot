@@ -256,6 +256,15 @@ UPDATE bot_status SET enabled = true WHERE id = 1;
 | `loss_cut_min_band_hits` | 3 | In-band eval samples within the lookback window required to exit |
 | `loss_cut_band_window_cycles` | 10 | Rolling window of eval cycles for band-touch counting |
 | `loss_cut_jev_sell_threshold` | 0 | Optional soft Jev SELL (dominant) for early loss exit; 0 = off. Requires progress ≥ min fraction |
+| `max_trades_per_day` | 0 | Max bot entries per US trading day across all symbols; 0 = off. Manual entries are never blocked. Skip reason `daily_trade_limit` |
+| `min_reward_risk` | 0 | Take profit is at least stop distance × this value; 0 = off |
+| `breakeven_at_r` | NULL | After price reaches +N × initial risk, exit at entry if it falls back (`exit_reason = breakeven`); NULL = off |
+| `entry_mode` | `jev` | `jev` = Jev BUY signals; `orb` = opening range breakout (no Jev calls, see below) |
+| `orb_range_minutes` | 5 | Opening range length after 9:30 ET (multiple of 5) |
+| `orb_entry_cutoff_minutes` | 90 | No ORB entries after this many minutes from the open |
+| `orb_jev_veto` | false | ORB mode only: ask Jev and skip a breakout when Jev reads SELL |
+| `in_play_min_rvol` | 2.0 | ORB "stocks in play": opening-window volume ÷ same window on prior days; NULL = off |
+| `in_play_min_gap_pct` | NULL | ORB "stocks in play": minimum overnight gap % (either direction); NULL = off |
 | `account_capital` | 1000 | Fallback capital when IBKR offline |
 
 When IBKR is connected, **effective capital** uses your paper account `NetLiquidation` (e.g. €1M). Tune absolute limits in Supabase or the dashboard Settings page.
@@ -341,6 +350,8 @@ The trader applies additional gates before opening a position:
 | Max RSI | Settings → Entry filters | Normal entry cap for all symbols |
 | Breakout max RSI | Settings → Watchlist | Temporary higher cap for ~10 min after a breakout promotion only; at or below Max RSI gives no extra room |
 | Max entries / symbol / day | 3 (settings) | Limits repeat stop/re-entry churn (0 = off) |
+| Max trades / day | 0 (settings) | Global cap on bot entries per day (0 = off) |
+| Min reward-to-risk | 0 (settings) | Raises take profit to at least stop × N (0 = off) |
 | SPY 5m change | ≥ −0.3% | Avoid broad-market headwinds |
 | Max hold time | 15 min | Time-based exit (matches Jev horizon) |
 | Jev SELL exit | 75% | Close on high-confidence SELL |
@@ -348,6 +359,17 @@ The trader applies additional gates before opening a position:
 | Momentum check (watch only) | 5m ≥ 0.15% and (volume ≥ 2× or EMA9 within 0.03% of EMA20) | **Never blocks.** Logs "would keep / would block" on each prediction; shown in the Predictions feed, as a tag on Trades, and as a scorecard on the Trades page (`STRATEGY_SHADOW_MOMENTUM_*`, 0 = off) |
 
 Tune via `STRATEGY_*` env vars in `trader/.env` (see `.env.example`).
+
+### Opening range breakout (`entry_mode = orb`)
+
+A rule-based alternative to Jev. Long only, no Jev API calls (unless `orb_jev_veto` is on).
+
+1. After the opening range closes (9:30 + `orb_range_minutes` ET), the trader fetches 5 days of IBKR 5-minute bars once per candidate symbol (pool + active list). Live tick volume is unreliable around the open, so history is the source for both today's window and the baseline.
+2. Each symbol gets a relative volume (opening-window volume ÷ the average of the same window on up to 5 prior days, at least 2 required) and an overnight gap %. Symbols passing `in_play_min_rvol` / `in_play_min_gap_pct` ("stocks in play") are ranked and the top `watchlist_active_size` become the day's active list. Rotation and breakout promotion are paused in this mode.
+3. Entry: price above the opening-range high (and not more than one range size beyond it), before the `orb_entry_cutoff_minutes` cutoff, confirmed by the usual confirmation cycles/seconds. RSI and EMA gates are skipped (breakouts are overbought by definition); spread, liquidity, news and correlation gates still apply.
+4. Stop at the range low (clamped to the strategy min/max stop %), take profit at `min_reward_risk` × stop (2 when unset). Exits: stop, target, optional break-even, early profit take/loss cut bands, end-of-day flatten.
+
+ORB skip reasons: `orb_range_not_ready`, `orb_window_closed`, `not_in_play (...)`, `orb_no_breakout`, `orb_extended`, `orb_jev_veto`.
 
 ## Running Phase 4 (IBKR Paper Orders)
 

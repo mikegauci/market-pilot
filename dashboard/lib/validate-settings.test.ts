@@ -33,6 +33,14 @@ const baseFields = {
   jev_sell_exit_threshold: "95",
   reentry_cooldown_minutes: "45",
   max_entries_per_symbol_per_day: "3",
+  max_trades_per_day: "0",
+  min_reward_risk: "0",
+  breakeven_at_r: "0",
+  entry_mode: "jev",
+  orb_range_minutes: "5",
+  orb_entry_cutoff_minutes: "90",
+  in_play_min_rvol: "2",
+  in_play_min_gap_pct: "0",
   rotation_min_session_change_pct: "0",
   entry_ema_gate: "ema_20",
   max_rsi: "70",
@@ -240,5 +248,59 @@ describe("parseSettingsForm exit tuning", () => {
       form({ ...baseFields, rotation_min_session_change_pct: "" }),
     );
     expect(parsed.rotation_min_session_change_pct).toBeNull();
+  });
+});
+
+describe("parseSettingsForm entry style and trade limits", () => {
+  it("parses opening range settings and treats 0 as off for optional values", () => {
+    const parsed = parseSettingsForm(
+      form({
+        ...baseFields,
+        entry_mode: "orb",
+        max_trades_per_day: "5",
+        min_reward_risk: "2",
+        breakeven_at_r: "1",
+        orb_range_minutes: "15",
+        orb_entry_cutoff_minutes: "120",
+        orb_jev_veto: "on",
+        in_play_min_rvol: "2.5",
+        in_play_min_gap_pct: "0",
+      }),
+    );
+    expect(parsed.entry_mode).toBe("orb");
+    expect(parsed.max_trades_per_day).toBe(5);
+    expect(parsed.min_reward_risk).toBe(2);
+    expect(parsed.breakeven_at_r).toBe(1);
+    expect(parsed.orb_range_minutes).toBe(15);
+    expect(parsed.orb_entry_cutoff_minutes).toBe(120);
+    expect(parsed.orb_jev_veto).toBe(true);
+    expect(parsed.in_play_min_rvol).toBe(2.5);
+    expect(parsed.in_play_min_gap_pct).toBeNull();
+  });
+
+  it("maps zero to off for break-even and relative volume", () => {
+    const parsed = parseSettingsForm(
+      form({ ...baseFields, breakeven_at_r: "0", in_play_min_rvol: "0" }),
+    );
+    expect(parsed.breakeven_at_r).toBeNull();
+    expect(parsed.in_play_min_rvol).toBeNull();
+    expect(parsed.orb_jev_veto).toBe(false);
+  });
+
+  it("rejects an invalid entry style, range length, or window", () => {
+    expect(() => parseSettingsForm(form({ ...baseFields, entry_mode: "scalp" }))).toThrow(
+      /Entry style/,
+    );
+    expect(() => parseSettingsForm(form({ ...baseFields, orb_range_minutes: "7" }))).toThrow(
+      /multiple of 5/,
+    );
+    expect(() =>
+      parseSettingsForm(
+        form({ ...baseFields, orb_range_minutes: "30", orb_entry_cutoff_minutes: "30" }),
+      ),
+    ).toThrow(/longer than the opening range/);
+    expect(() => parseSettingsForm(form({ ...baseFields, breakeven_at_r: "0.1" }))).toThrow(
+      /Break-even/,
+    );
   });
 });

@@ -15,7 +15,7 @@ from strategy.exits import (
 from market.hours import trading_calendar_date
 from risk.pnl import close_pnl, entry_commission
 from strategy.config import StrategyConfig
-from strategy.exits import loss_cut_should_exit, profit_take_should_exit
+from strategy.exits import breakeven_should_exit, loss_cut_should_exit, profit_take_should_exit
 from strategy.profit_take_tracker import ProfitTakeBandTracker
 
 from models.types import (
@@ -56,6 +56,10 @@ class RiskManager:
         self._daily_pnl_trading_date = trading_calendar_date()
         self._last_exit_at: Dict[str, datetime] = {}
         self._entries_today: Dict[str, int] = {}
+        # All entries opened today (bot + manual). Closes never lower it.
+        self._total_entries_today: int = 0
+        # Highest quote seen per open trade id (for the breakeven exit).
+        self._price_high_water: Dict[str, float] = {}
         self._ibkr_buying_power: Optional[float] = None
 
     def update_capital(self, effective_capital: float, currency: str = "USD") -> None:
@@ -82,6 +86,7 @@ class RiskManager:
             self._daily_pnl_trading_date = today
             self.daily_realized_pnl = 0.0
             self._entries_today = {}
+            self._total_entries_today = 0
 
     def sync_daily_realized_for_trading_day(self, load_realized_pnl: Callable[[], float]) -> None:
         """On a new trading day, reload realized P&L from persisted trades.
@@ -92,6 +97,8 @@ class RiskManager:
         if today != self._daily_pnl_trading_date:
             self._daily_pnl_trading_date = today
             self.daily_realized_pnl = load_realized_pnl()
+            self._entries_today = {}
+            self._total_entries_today = 0
 
     def hydrate_symbol_entry_counts(self, counts_by_symbol: Dict[str, int]) -> None:
         """Seed per-symbol entry counts for the current US trading day."""
@@ -100,6 +107,7 @@ class RiskManager:
             for symbol, count in counts_by_symbol.items()
             if str(symbol).strip()
         }
+        self._total_entries_today = sum(self._entries_today.values())
 
     def hydrate_reentry_cooldowns(self, exits_by_symbol: Dict[str, datetime]) -> None:
         """Seed per-symbol exit timestamps (e.g. from DB on startup)."""
@@ -221,7 +229,19 @@ class RiskManager:
                     atr_pct * strategy_config.take_profit_atr_multiple,
                 ),
             )
-        return stop_pct, take_pct
+        return stop_pct, RiskManager.apply_reward_risk_floor(stop_pct, take_pct, settings)
+
+    @staticmethod
+    def apply_reward_risk_floor(
+        stop_pct: float,
+        take_pct: float,
+        settings: RiskSettings,
+    ) -> float:
+        """Raise take-profit to at least stop x min_reward_risk (0 = off)."""
+        min_rr = float(getattr(settings, "min_reward_risk", 0) or 0)
+        if min_rr > 0 and stop_pct > 0:
+            return max(take_pct, stop_pct * min_rr)
+        return take_pct
 
     @staticmethod
     def estimate_ibkr_commission(quantity: float, *, round_trip: bool = True) -> float:
@@ -231,7 +251,7 @@ class RiskManager:
     def evaluate_entry(
         self,
         state: MarketState,
-        prediction: JevPrediction,
+        prediction: Optional[JevPrediction],
         bot_enabled: bool,
         quotes_by_symbol: Dict[str, Quote],
         *,
@@ -239,6 +259,8 @@ class RiskManager:
         atr_pct: Optional[float] = None,
         manual: bool = False,
         quantity_override: Optional[float] = None,
+        stop_pct_override: Optional[float] = None,
+        take_pct_override: Optional[float] = None,
     ) -> TradeDecision:
         if not bot_enabled and not manual:
             return TradeDecision(False, "bot_disabled")
@@ -271,11 +293,29 @@ class RiskManager:
                     f"max_entries_per_symbol ({self._entries_today.get(key, 0)}/{max_entries})",
                 )
 
+        max_total = int(getattr(self.settings, "max_trades_per_day", 0) or 0)
+        if max_total > 0 and not manual:
+            self._ensure_current_trading_day()
+            if self._total_entries_today >= max_total:
+                return TradeDecision(
+                    False,
+                    f"daily_trade_limit ({self._total_entries_today}/{max_total})",
+                )
+
         if len(self.open_trades) >= self.settings.max_open_positions:
             return TradeDecision(False, "max_open_positions")
 
         strat = strategy_config or StrategyConfig()
         stop_pct, take_pct = self.resolve_stop_take_pct(strat, self.settings, atr_pct)
+        if stop_pct_override is not None and stop_pct_override > 0:
+            stop_pct = stop_pct_override
+            take_pct = self.apply_reward_risk_floor(
+                stop_pct,
+                take_pct_override if take_pct_override else take_pct,
+                self.settings,
+            )
+        elif take_pct_override is not None and take_pct_override > 0:
+            take_pct = self.apply_reward_risk_floor(stop_pct, take_pct_override, self.settings)
 
         if quantity_override is not None:
             quantity = math.floor(float(quantity_override))
@@ -321,23 +361,28 @@ class RiskManager:
             take_profit=take_profit,
             status="open",
             paper_or_live=self.trading_mode.value,
-            jev_buy_probability=prediction.buy,
+            jev_buy_probability=prediction.buy if prediction is not None else None,
             entry_commission=estimated_commission / 2,
         )
         return TradeDecision(True, "approved", trade=trade)
 
-    def register_open_trade(self, trade: TradeRecord) -> None:
+    def entries_today(self, symbol: str) -> int:
+        self._ensure_current_trading_day()
+        return self._entries_today.get(symbol.upper(), 0)
+
+    def register_open_trade(self, trade: TradeRecord, *, count_entry: bool = True) -> None:
+        """Track an open trade. ``count_entry=False`` re-registers a trade already counted
+        (loaded from the DB, or an adopted broker position) so daily caps are not inflated."""
         self.open_trades.append(trade)
         self._ensure_current_trading_day()
+        if not count_entry:
+            return
         key = trade.symbol.upper()
         self._entries_today[key] = self._entries_today.get(key, 0) + 1
+        self._total_entries_today += 1
 
     def remove_open_trade(self, trade_id: str) -> None:
-        removed = [t for t in self.open_trades if t.id == trade_id]
-        if removed:
-            key = removed[0].symbol.upper()
-            if self._entries_today.get(key, 0) > 0:
-                self._entries_today[key] -= 1
+        # Entry counts are "opened today": closing a trade never gives an entry back.
         self.open_trades = [t for t in self.open_trades if t.id != trade_id]
 
     def record_closed_pnl(self, net_pnl: float) -> None:
@@ -396,6 +441,65 @@ class RiskManager:
             closed.append(self._build_closed_trade(trade, exit_price, reason))
 
         self.open_trades = remaining
+        return closed
+
+    def _update_high_water(self, quotes_by_symbol: Dict[str, Quote]) -> None:
+        open_ids = {t.id for t in self.open_trades}
+        for trade_id in list(self._price_high_water):
+            if trade_id not in open_ids:
+                del self._price_high_water[trade_id]
+        for trade in self.open_trades:
+            quote = quotes_by_symbol.get(trade.symbol)
+            if quote is None or quote.price is None:
+                continue
+            prior = self._price_high_water.get(trade.id, trade.entry_price)
+            self._price_high_water[trade.id] = max(prior, quote.price)
+
+    def collect_breakeven_trade_ids(
+        self,
+        quotes_by_symbol: Dict[str, Quote],
+        *,
+        execution_mode: str,
+    ) -> set[str]:
+        """Trade ids of ``execution_mode`` ("ibkr" or "simulated") whose breakeven exit fired."""
+        if getattr(self.settings, "breakeven_at_r", None) is None:
+            self._price_high_water.clear()
+            return set()
+        self._update_high_water(quotes_by_symbol)
+        ids: set[str] = set()
+        for trade in self.open_trades:
+            if (trade.execution_mode == "ibkr") != (execution_mode == "ibkr"):
+                continue
+            quote = quotes_by_symbol.get(trade.symbol)
+            if quote is None or quote.price is None:
+                continue
+            if breakeven_should_exit(
+                trade,
+                quote.price,
+                self._price_high_water.get(trade.id),
+                self.settings,
+            ):
+                ids.add(trade.id)
+        return ids
+
+    def check_breakeven_exits(self, quotes_by_symbol: Dict[str, Quote]) -> List[ClosedTrade]:
+        """Simulated breakeven exit (IBKR trades go through close_ibkr_signal_exits)."""
+        ids = self.collect_breakeven_trade_ids(quotes_by_symbol, execution_mode="simulated")
+        if not ids:
+            return []
+        closed: List[ClosedTrade] = []
+        for trade in list(self.open_trades):
+            if trade.id not in ids:
+                continue
+            quote = quotes_by_symbol.get(trade.symbol)
+            if quote is None or quote.price is None:
+                continue
+            exit_price = quote.bid if quote.bid is not None else quote.price
+            closed.append(self._build_closed_trade(trade, exit_price, "breakeven"))
+            self._price_high_water.pop(trade.id, None)
+        closed_ids = {item.trade_id for item in closed}
+        if closed_ids:
+            self.open_trades = [t for t in self.open_trades if t.id not in closed_ids]
         return closed
 
     def check_profit_take_exits(

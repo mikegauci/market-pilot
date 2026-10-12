@@ -344,6 +344,7 @@ def close_ibkr_signal_exits(
     jev_sell_symbols: Optional[set[str]] = None,
     profit_take_trade_ids: Optional[set[str]] = None,
     loss_cut_trade_ids: Optional[set[str]] = None,
+    breakeven_trade_ids: Optional[set[str]] = None,
     fill_timeout_sec: float = 30.0,
     ibkr_account_id: Optional[str] = None,
 ) -> tuple[bool, set[str]]:
@@ -356,6 +357,7 @@ def close_ibkr_signal_exits(
     jev_sell_symbols = jev_sell_symbols or set()
     profit_take_trade_ids = profit_take_trade_ids or set()
     loss_cut_trade_ids = loss_cut_trade_ids or set()
+    breakeven_trade_ids = breakeven_trade_ids or set()
 
     for trade in list(risk_manager.open_trades):
         if trade.execution_mode != "ibkr":
@@ -370,11 +372,20 @@ def close_ibkr_signal_exits(
         jev_exit = trade.symbol in jev_sell_symbols
         profit_take_exit = trade.id in profit_take_trade_ids
         loss_cut_exit = trade.id in loss_cut_trade_ids
-        if not time_exit and not jev_exit and not profit_take_exit and not loss_cut_exit:
+        breakeven_exit = trade.id in breakeven_trade_ids
+        if (
+            not time_exit
+            and not jev_exit
+            and not profit_take_exit
+            and not loss_cut_exit
+            and not breakeven_exit
+        ):
             continue
 
         if profit_take_exit:
             reason = "profit_take"
+        elif breakeven_exit:
+            reason = "breakeven"
         elif loss_cut_exit:
             reason = "loss_cut"
         elif time_exit:
