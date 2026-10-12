@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from postgrest.types import ReturnMethod
+
 from database.supabase_support import *  # noqa: F403
 
 DEFAULT_INTRADAY_LOOKBACK_DAYS = 8
@@ -87,6 +89,7 @@ class SupabaseBarsMixin:
             self.client.table("symbol_bars").upsert(
                 chunk,
                 on_conflict="symbol,bar_size,ts",
+                returning=ReturnMethod.minimal,
             ).execute()
 
     @_db_synchronized
@@ -185,6 +188,7 @@ class SupabaseBarsMixin:
         self.client.table("symbol_bars_meta").upsert(
             payload,
             on_conflict="symbol,bar_size",
+            returning=ReturnMethod.minimal,
         ).execute()
 
     @_db_synchronized

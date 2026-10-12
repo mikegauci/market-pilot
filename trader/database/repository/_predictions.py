@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from postgrest.types import ReturnMethod
+
 from database.supabase_support import *  # noqa: F403
 
 class SupabasePredictionsMixin:
@@ -11,7 +13,7 @@ class SupabasePredictionsMixin:
     ) -> None:
         if not rows:
             return
-        self.client.table("predictions").insert(rows).execute()
+        self.client.table("predictions").insert(rows, returning=ReturnMethod.minimal).execute()
 
     @_db_synchronized
     def upsert_market_news(self, rows: List[dict], *, keep: int = 100) -> int:
@@ -20,7 +22,9 @@ class SupabasePredictionsMixin:
         deduped = dedupe_market_news_rows(rows)
         if not deduped:
             return 0
-        self.client.table("market_news").upsert(deduped, on_conflict="id").execute()
+        self.client.table("market_news").upsert(
+            deduped, on_conflict="id", returning=ReturnMethod.minimal
+        ).execute()
         overflow = (
             self.client.table("market_news")
             .select("id")

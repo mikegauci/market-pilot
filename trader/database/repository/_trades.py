@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from postgrest.types import ReturnMethod
+
 from database.supabase_support import *  # noqa: F403
 from database.trade_account_scope import apply_trade_account_filter
 
@@ -172,7 +174,7 @@ class SupabaseTradesMixin:
         if trade.ibkr_account_id:
             payload["ibkr_account_id"] = trade.ibkr_account_id
         try:
-            self.client.table("trades").insert(payload).execute()
+            self.client.table("trades").insert(payload, returning=ReturnMethod.minimal).execute()
         except Exception as exc:
             if self._trade_exists(trade.id):
                 logger.warning(
@@ -431,4 +433,4 @@ class SupabaseTradesMixin:
             "total_pnl": portfolio.total_pnl,
             "currency": portfolio.currency,
         }
-        self.client.table("portfolio_history").insert(payload).execute()
+        self.client.table("portfolio_history").insert(payload, returning=ReturnMethod.minimal).execute()

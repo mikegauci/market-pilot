@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from postgrest.types import ReturnMethod
+
 from database.supabase_support import *  # noqa: F403
 
 class SupabasePortfolioMixin:
@@ -19,7 +21,7 @@ class SupabasePortfolioMixin:
             "ibkr_account_id": account.account_id,
             "ibkr_accrued_cash": account.ibkr_accrued_cash,
         }
-        self.client.table("portfolio_history").insert(payload).execute()
+        self.client.table("portfolio_history").insert(payload, returning=ReturnMethod.minimal).execute()
 
     @_db_synchronized
     def _replace_positions(self, rows: List[dict], current_symbols: set[str]) -> None:
@@ -35,7 +37,9 @@ class SupabasePortfolioMixin:
         if stale:
             self.client.table("positions").delete().in_("symbol", list(stale)).execute()
         if rows:
-            self.client.table("positions").upsert(rows, on_conflict="symbol").execute()
+            self.client.table("positions").upsert(
+                rows, on_conflict="symbol", returning=ReturnMethod.minimal
+            ).execute()
         self._known_position_symbols = current_symbols
 
     @_db_synchronized
@@ -74,4 +78,4 @@ class SupabasePortfolioMixin:
             }
             for quote in quotes
         ]
-        self.client.table("market_snapshots").insert(rows).execute()
+        self.client.table("market_snapshots").insert(rows, returning=ReturnMethod.minimal).execute()
