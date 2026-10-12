@@ -8,7 +8,7 @@ alwaysApply: true
 For this project, every database/schema change is two steps, done together:
 
 1. Write the SQL as a new timestamped file under `supabase/migrations/`.
-2. Apply that same SQL through the Supabase MCP (`plugin-supabase-supabase` or `project-0-market-pilot-supabase`) on project `gbprapqifrvhylfazjvs`.
+2. Apply that same SQL through the Supabase MCP (`plugin-supabase-supabase` or `project-0-market-pilot-supabase`) on project `hyexagfdnqxklzsinjjj`.
 
 The files in `supabase/migrations/` are the record friends' databases are built and updated from. The live project stays the database you trade against.
 

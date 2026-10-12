@@ -5,7 +5,7 @@ description: Review a market-pilot paper-trading session from Supabase and recom
 
 # Review a trading session
 
-Read-only. Use Supabase MCP `execute_sql` on project `gbprapqifrvhylfazjvs` (Cursor namespace `project-0-market-pilot-supabase`). If that namespace is `needsAuth`, call `mcp_auth` first. Do not restart, stop, or kill `python main.py`.
+Read-only. Use Supabase MCP `execute_sql` on project `hyexagfdnqxklzsinjjj` (Cursor namespace `project-0-market-pilot-supabase`). If that namespace is `needsAuth`, call `mcp_auth` first. Do not restart, stop, or kill `python main.py`.
 
 This is not a symbol lookup. For "why didn't SYMBOL trade?" use **diagnose-trader**. This skill answers: did today's pipeline behave as the current code intends, and what is worth changing?
 

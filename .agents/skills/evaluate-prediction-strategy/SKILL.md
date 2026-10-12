@@ -5,7 +5,7 @@ description: Compares market-pilot Jev predictions to trades over the last 24 ho
 
 # Evaluate prediction vs trade strategy (24h)
 
-Read-only. Use Supabase MCP `execute_sql` on project `gbprapqifrvhylfazjvs` (namespace `project-0-market-pilot-supabase`). Load [supabase](../supabase/SKILL.md) if MCP auth fails. Do not restart `python main.py`.
+Read-only. Use Supabase MCP `execute_sql` on project `hyexagfdnqxklzsinjjj` (namespace `project-0-market-pilot-supabase`). Load [supabase](../supabase/SKILL.md) if MCP auth fails. Do not restart `python main.py`.
 
 This skill answers: **given current gates, did Jev’s BUY/HOLD/SELL signals and the trades we took (or skipped) look like a sensible strategy in the last ~24 hours?**
 

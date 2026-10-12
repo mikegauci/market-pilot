@@ -1,13 +1,13 @@
 ---
 name: diagnose-trader
-description: Read-only investigation of market-pilot trader health and missed trades using Supabase MCP execute_sql on project gbprapqifrvhylfazjvs. Use when the user asks why a symbol did not trade, bot offline, heartbeat stale, skip reasons, or risk rejections — without restarting the trader.
+description: Read-only investigation of market-pilot trader health and missed trades using Supabase MCP execute_sql on project hyexagfdnqxklzsinjjj. Use when the user asks why a symbol did not trade, bot offline, heartbeat stale, skip reasons, or risk rejections — without restarting the trader.
 ---
 
 # Diagnose trader (read-only)
 
 Answer “is the bot alive?” and “why no trade on SYMBOL?” using Supabase data and log context. **Never** restart, stop, or kill `python main.py` in `trader/`.
 
-Load [supabase](../supabase/SKILL.md) for MCP usage. Project ref: `gbprapqifrvhylfazjvs`.
+Load [supabase](../supabase/SKILL.md) for MCP usage. Project ref: `hyexagfdnqxklzsinjjj`.
 
 ## 1. Is the trader online?
 

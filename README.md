@@ -61,15 +61,15 @@ market-pilot/
 | | |
 |---|---|
 | **Name** | market-pilot |
-| **Project ref** | `gbprapqifrvhylfazjvs` |
+| **Project ref** | `hyexagfdnqxklzsinjjj` |
 | **Name** | market-pilot |
 | **Region** | eu-central-1 |
-| **Dashboard** | [Project settings](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs) |
-| **API URL** | `https://gbprapqifrvhylfazjvs.supabase.co` |
+| **Dashboard** | [Project settings](https://supabase.com/dashboard/project/hyexagfdnqxklzsinjjj) |
+| **API URL** | `https://hyexagfdnqxklzsinjjj.supabase.co` |
 
 The Phase 1 schema is already applied. Add your **service role key** to `trader/.env`:
 
-1. Open [API settings](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/settings/api)
+1. Open [API settings](https://supabase.com/dashboard/project/hyexagfdnqxklzsinjjj/settings/api)
 2. Copy the **service_role** key (never commit or expose in the dashboard client)
 3. Set `SUPABASE_SERVICE_ROLE_KEY=` in `trader/.env`
 
@@ -94,7 +94,7 @@ git checkout main
 ## Changing the database
 
 1. Add a new file `supabase/migrations/YYYYMMDDHHMMSS_short_name.sql`. Do not edit a file after it has been released.
-2. Apply that same SQL to project `gbprapqifrvhylfazjvs` with the Supabase MCP.
+2. Apply that same SQL to project `hyexagfdnqxklzsinjjj` with the Supabase MCP.
 3. If a fresh database needs a new default row, update `supabase/seed.sql` with `ON CONFLICT DO NOTHING`.
 
 `supabase/migrations-archive/` is the old partial history and is not applied. The current structure starts at `supabase/migrations/20261008000000_baseline.sql`.
@@ -425,7 +425,7 @@ cp dashboard/.env.example dashboard/.env.local
 # Add NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (anon/publishable — NOT service_role)
 ```
 
-Create a user in [Supabase Auth](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/auth/users), then:
+Create a user in [Supabase Auth](https://supabase.com/dashboard/project/hyexagfdnqxklzsinjjj/auth/users), then:
 
 ```bash
 cd dashboard && npm install && npm run dev

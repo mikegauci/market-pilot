@@ -12,9 +12,9 @@ The dashboard reads from Supabase with the **publishable (anon) key** and Supaba
 cp .env.example .env.local
 ```
 
-2. Fill in `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from [Supabase API settings](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/settings/api) (publishable or anon key — **not** service_role). For **Analytics → Session brief**, add server-only `OPENAI_API_KEY` (see `.env.example`).
+2. Fill in `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from [Supabase API settings](https://supabase.com/dashboard/project/hyexagfdnqxklzsinjjj/settings/api) (publishable or anon key — **not** service_role). For **Analytics → Session brief**, add server-only `OPENAI_API_KEY` (see `.env.example`).
 
-3. Create a user in [Supabase Auth](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/auth/users) (email + password).
+3. Create a user in [Supabase Auth](https://supabase.com/dashboard/project/hyexagfdnqxklzsinjjj/auth/users) (email + password).
 
 4. Install and run (Node **22+** required for the OpenAI SDK):
 
@@ -61,7 +61,7 @@ If setting up a new Supabase project (or before this repo change), apply migrati
 - Default `bot_status.execution_mode` and `trades.execution_mode` to `ibkr`
 - Restrict dashboard updates so `execution_mode` cannot revert to `simulated`
 
-Production project `gbprapqifrvhylfazjvs` already has this migration applied via Supabase MCP.
+Production project `hyexagfdnqxklzsinjjj` already has this migration applied via Supabase MCP.
 
 ## Deploy to Vercel
 
@@ -74,7 +74,7 @@ Production: [market-pilot-dashboard on Vercel](https://vercel.com/mikegaucis-pro
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
    - `OPENAI_API_KEY` (server-only, for Session brief on Analytics)
    - `OPENAI_BRIEF_MODEL` (optional)
-4. In [Supabase Auth URL config](https://supabase.com/dashboard/project/gbprapqifrvhylfazjvs/auth/url-configuration), add:
+4. In [Supabase Auth URL config](https://supabase.com/dashboard/project/hyexagfdnqxklzsinjjj/auth/url-configuration), add:
    - Site URL: `https://market-pilot-dashboard.vercel.app`
    - Redirect URL: `https://market-pilot-dashboard.vercel.app/auth/callback`
 
@@ -93,7 +93,7 @@ Your owner account must have `app_metadata.dashboard_role = "owner"` (Supabase A
 
 Set `DASHBOARD_VIEWER_LOGIN_ENABLED=false` to hide the login button without removing credentials.
 
-**Runbook (production project `gbprapqifrvhylfazjvs`):**
+**Runbook (production project `hyexagfdnqxklzsinjjj`):**
 
 1. Confirm migration `dashboard_viewer_readonly_rls` is applied (`dashboard_can_write()` exists; write RLS policies reference it).
 2. Set **owner** raw app metadata: `{ "dashboard_role": "owner" }` on your login user; create **viewer** user with `{ "dashboard_role": "viewer" }`.

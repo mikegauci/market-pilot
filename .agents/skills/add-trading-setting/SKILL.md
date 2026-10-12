@@ -10,7 +10,7 @@ A new `settings` column touches Supabase, trader, dashboard, and often README. M
 ## Before you start
 
 1. Load [supabase](../supabase/SKILL.md) and [supabase-postgres-best-practices](../supabase-postgres-best-practices/SKILL.md) for schema work.
-2. Read `.cursor/rules/supabase-mcp.mdc`: write the SQL as a new file under `supabase/migrations/`, then apply that same SQL on project `gbprapqifrvhylfazjvs` via Supabase MCP (`apply_migration` or `execute_sql`). Never edit a migration after it has shipped.
+2. Read `.cursor/rules/supabase-mcp.mdc`: write the SQL as a new file under `supabase/migrations/`, then apply that same SQL on project `hyexagfdnqxklzsinjjj` via Supabase MCP (`apply_migration` or `execute_sql`). Never edit a migration after it has shipped.
 3. Choose column type, `NOT NULL` + `DEFAULT`, and whether the value is risk-only, strategy-only, or both.
 
 ## Checklist
